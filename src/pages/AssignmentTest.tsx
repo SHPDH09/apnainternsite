@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, AlertTriangle, Clock, Camera, CheckCircle2, Link2, Plus, Trash2, Paperclip } from "lucide-react";
+import { SiteLoader } from "@/components/SiteLoader";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const MAX_WARNINGS = 3;
@@ -359,7 +360,7 @@ export default function AssignmentTest() {
 
   const previewLinks = workLinks.map((l) => l.trim()).filter(Boolean);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><Loader2 className="size-10 animate-spin text-primary" /></div>;
+  if (loading) return <SiteLoader className="bg-slate-900" />;
 
   if (isMobile && requiresProctoring) {
     return (

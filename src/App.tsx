@@ -120,6 +120,22 @@ const App = () => (
             }
           />
           <Route
+            path="/admin/contact-details"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
+                <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/whatsapp-links"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
+                <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin/engineering-management"
             element={
               <ProtectedRoute allowedRoles={["admin", "super_admin"]}>

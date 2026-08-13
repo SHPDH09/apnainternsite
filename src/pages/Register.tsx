@@ -9,7 +9,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Card } from "@/components/ui/card";
 import { captureReferralFromUrl, logReferralClickFromUrl } from "@/lib/referral";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2 } from "lucide-react";
+import { SiteLoader } from "@/components/SiteLoader";
 
 const Register = () => {
   const [searchParams] = useSearchParams();
@@ -78,9 +78,7 @@ const Register = () => {
               </p>
             </div>
             {checking ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="size-8 animate-spin text-primary" />
-              </div>
+              <SiteLoader variant="inline" message="Loading..." />
             ) : showPayPanel ? (
               <UnpaidStudentPaymentPanel />
             ) : (

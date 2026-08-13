@@ -62,6 +62,9 @@ import { GalleryManagementPanel } from "@/components/admin/GalleryManagementPane
 import { HomeCmsManagementPanel } from "@/components/admin/HomeCmsManagementPanel";
 import { ConsultLetterManagementPanel } from "@/components/admin/ConsultLetterManagementPanel";
 import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
+import { ContactDetailsManagementPanel } from "@/components/admin/ContactDetailsManagementPanel";
+import { WhatsAppLinksManagementPanel } from "@/components/admin/WhatsAppLinksManagementPanel";
+import { SiteLoader } from "@/components/SiteLoader";
 import { LeadAssignmentPanel } from "@/components/admin/LeadAssignmentPanel";
 import { BulkUploadStudentBadge } from "@/components/BulkUploadStudentBadge";
 import { ADMIN_LOGIN_PATH, buildCollegeLoginLink, buildStudentCredentialLoginLink } from "@/lib/authRoutes";
@@ -224,7 +227,11 @@ export default function Admin() {
   const tabFromUrl =
     location.pathname.replace(/\/+$/, "") === "/admin/popups"
       ? "popups"
-      : queryParams.get("tab") || "dashboard";
+      : location.pathname.replace(/\/+$/, "") === "/admin/contact-details"
+        ? "contact-details"
+        : location.pathname.replace(/\/+$/, "") === "/admin/whatsapp-links"
+          ? "whatsapp-links"
+          : queryParams.get("tab") || "dashboard";
   const [activeTab, setActiveTab] = useState(tabFromUrl);
   useEffect(() => {
     setActiveTab(tabFromUrl);
@@ -235,6 +242,12 @@ export default function Admin() {
     const tab = new URLSearchParams(location.search).get("tab");
     if (path === "/admin" && tab === "popups") {
       navigate("/admin/popups", { replace: true });
+    }
+    if (path === "/admin" && tab === "contact-details") {
+      navigate("/admin/contact-details", { replace: true });
+    }
+    if (path === "/admin" && tab === "whatsapp-links") {
+      navigate("/admin/whatsapp-links", { replace: true });
     }
   }, [location.pathname, location.search, navigate]);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -3225,7 +3238,7 @@ Apna Intern Team`;
       </div>
     ) : null;
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="size-8 animate-spin text-primary" /></div>;
+  if (loading) return <SiteLoader />;
   if (!allowed) return <div className="p-10 text-center">Access Denied</div>;
 
   return (
@@ -3243,6 +3256,8 @@ Apna Intern Team`;
         setActiveTab(value);
         setMobileNavOpen(false);
         if (value === "popups") navigate("/admin/popups", { replace: true });
+        else if (value === "contact-details") navigate("/admin/contact-details", { replace: true });
+        else if (value === "whatsapp-links") navigate("/admin/whatsapp-links", { replace: true });
         else navigate(`/admin?tab=${encodeURIComponent(value)}`, { replace: true });
       }}
       className="flex min-h-screen bg-slate-50"
@@ -3300,6 +3315,10 @@ Apna Intern Team`;
           <div className="mx-auto w-full max-w-[1400px] rounded-[1.75rem] border border-white bg-white/70 p-5 shadow-xl backdrop-blur-3xl md:p-8">
               {activeTab === "popups" ? (
                 <PopupManagementPanel client={supabase} currentUserId={currentUserId} />
+              ) : activeTab === "contact-details" ? (
+                <ContactDetailsManagementPanel client={supabase} />
+              ) : activeTab === "whatsapp-links" ? (
+                <WhatsAppLinksManagementPanel client={supabase} />
               ) : (
               <>
               <TabsContent value="dashboard" className="animate-fade-in space-y-8 mt-0">
