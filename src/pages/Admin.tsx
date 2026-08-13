@@ -229,6 +229,14 @@ export default function Admin() {
   useEffect(() => {
     setActiveTab(tabFromUrl);
   }, [tabFromUrl]);
+  // Legacy bookmark: /admin?tab=popups → dedicated route (avoids blank tab pane).
+  useEffect(() => {
+    const path = location.pathname.replace(/\/+$/, "");
+    const tab = new URLSearchParams(location.search).get("tab");
+    if (path === "/admin" && tab === "popups") {
+      navigate("/admin/popups", { replace: true });
+    }
+  }, [location.pathname, location.search, navigate]);
   const [showSidebar, setShowSidebar] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -3292,7 +3300,8 @@ Apna Intern Team`;
           <div className="mx-auto w-full max-w-[1400px] rounded-[1.75rem] border border-white bg-white/70 p-5 shadow-xl backdrop-blur-3xl md:p-8">
               {activeTab === "popups" ? (
                 <PopupManagementPanel client={supabase} currentUserId={currentUserId} />
-              ) : null}
+              ) : (
+              <>
               <TabsContent value="dashboard" className="animate-fade-in space-y-8 mt-0">
               {/* Visual Analytics Hub */}
               <div className="grid lg:grid-cols-3 gap-6">
@@ -4933,6 +4942,8 @@ Apna Intern Team`;
             <TabsContent value="consult-letter" className="mt-0">
               <ConsultLetterManagementPanel client={supabase} currentUserId={currentUserId} />
             </TabsContent>
+              </>
+              )}
           </div>
         </main>
       </div>
