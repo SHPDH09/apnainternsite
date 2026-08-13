@@ -702,7 +702,14 @@ export function NotificationManagementPanel({
         }}
       >
         <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
-          {audienceModalRow ? (
+          {!audienceModalRow ? (
+            <>
+              <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
+                <DialogTitle>Audience</DialogTitle>
+                <DialogDescription>Loading audience details…</DialogDescription>
+              </DialogHeader>
+            </>
+          ) : (
             <>
               <DialogHeader className="px-6 pt-6 pb-3 shrink-0 border-b bg-muted/20">
                 <DialogTitle className="text-base leading-snug">
@@ -727,7 +734,7 @@ export function NotificationManagementPanel({
                 </Button>
               </DialogFooter>
             </>
-          ) : null}
+          )}
         </DialogContent>
       </Dialog>
 

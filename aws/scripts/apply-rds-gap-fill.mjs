@@ -28,6 +28,8 @@ const files = [
   "aws/scripts/09-rds-admin-data-fixes.sql",
   "supabase/hotfix_internship_mode_filtering.sql",
   "supabase/migrations/20260605120000_notification_management.sql",
+  "supabase/site_popups.sql",
+  "supabase/site_contacts.sql",
 ];
 
 async function main() {
