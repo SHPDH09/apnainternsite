@@ -53,12 +53,12 @@ export const IdCard = forwardRef<HTMLDivElement, IdCardProps>(({ data }, ref) =>
       style={cardStyle}
       className="flex flex-col bg-white text-slate-800 justify-between select-none"
     >
-      {/* Background Watermark (Light EI Logo) */}
+      {/* Background Watermark */}
       <div 
         className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none"
-        style={{ opacity: 0.025 }}
+        style={{ opacity: 0.04 }}
       >
-        <img src="/logo-icon.png" alt="Watermark" className="w-[450px] h-[450px] object-contain" crossOrigin="anonymous" />
+        <img src="/certificate/logo.png" alt="" className="max-h-[70%] max-w-[85%] w-auto h-auto object-contain" crossOrigin="anonymous" />
       </div>
 
       {/* Header Background Decoration */}
@@ -69,9 +69,9 @@ export const IdCard = forwardRef<HTMLDivElement, IdCardProps>(({ data }, ref) =>
 
       {/* Main Content Area */}
       <div className="relative z-10 flex flex-col items-center pt-8 px-8 flex-grow">
-        {/* Logo Section */}
-        <div className="bg-white p-3 rounded-2xl shadow-md mb-6 border border-slate-100 flex items-center justify-center w-40 h-14">
-          <img src="/logo-icon.png" alt="Apna Intern" className="h-full w-full object-contain" crossOrigin="anonymous" />
+        {/* Logo — full Apna Intern lockup, fitted */}
+        <div className="bg-white px-4 py-2 rounded-2xl shadow-md mb-6 border border-slate-100 flex items-center justify-center w-[min(100%,220px)]">
+          <img src="/logo.png" alt="Apna Intern" className="h-10 w-full max-w-[200px] object-contain object-center" crossOrigin="anonymous" />
         </div>
 
         {/* Profile Image */}

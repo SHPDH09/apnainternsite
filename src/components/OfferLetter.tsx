@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import { DocumentBrandLogo } from "@/components/brand/DocumentBrandLogo";
 import {
   resolveOfferLetterFields,
 } from "@/lib/offerLetterProfile";
@@ -68,14 +69,8 @@ export const OfferLetter = forwardRef<HTMLDivElement, OfferLetterProps>(({ profi
           className="flex items-start justify-between gap-3 py-4"
           style={{ paddingLeft: pad, paddingRight: pad }}
         >
-          <div className="flex items-center gap-3 min-w-0 shrink">
-            <img
-              src="/certificate/header-logo.png"
-              alt="Apna Intern"
-              className="h-14 w-auto max-w-[220px] shrink-0 object-contain"
-              crossOrigin="anonymous"
-              decoding="sync"
-            />
+          <div className="flex items-center min-w-0 shrink">
+            <DocumentBrandLogo heightMm={16} />
           </div>
 
           <div className="text-right text-[10px] leading-[1.4] text-slate-700 shrink-0 max-w-[240px]">

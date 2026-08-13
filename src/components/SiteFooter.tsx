@@ -9,7 +9,7 @@ export const SiteFooter = () => (
         <div className="space-y-6">
           <div className="flex flex-col gap-4">
             <Link to="/" className="inline-flex w-fit rounded-xl bg-white px-3 py-2">
-              <BrandLogo size="md" className="max-w-[220px]" />
+              <BrandLogo size="md" />
             </Link>
           </div>
           <p className="text-sm leading-relaxed text-slate-400">

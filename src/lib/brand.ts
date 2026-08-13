@@ -15,6 +15,8 @@ export const BRAND_COLOR_ORANGE_DARK = "#E87800";
 
 export const BRAND_LOGO_FULL = "/logo.png";
 export const BRAND_LOGO_ICON = "/logo-icon.png";
+/** Shield watermark (certificates, ID cards) — not the old EI square */
+export const BRAND_LOGO_WATERMARK = "/certificate/logo.png";
 
 export const BRAND_CONTACT_EMAIL = "contact@apnaintern.in";
 export const BRAND_SUPPORT_EMAIL = "support@apnaintern.in";

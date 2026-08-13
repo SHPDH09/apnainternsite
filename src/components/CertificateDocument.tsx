@@ -1,5 +1,6 @@
 import { forwardRef } from "react";
 import { Globe, Mail, MapPin, Phone } from "lucide-react";
+import { DocumentBrandLogo } from "@/components/brand/DocumentBrandLogo";
 import {
   CERTIFICATE_FOOTER_LEFT_LOGOS,
   CERTIFICATE_FOOTER_RIGHT_LOGOS,
@@ -101,15 +102,8 @@ function CertificateHeader() {
   return (
     <header className="relative z-10 shrink-0">
       <div className="flex justify-between items-center gap-3 pt-0.5">
-        <div className="flex items-center shrink-0 pl-0.5">
-          <img
-            src="/certificate/header-logo.png"
-            alt="Apna Intern"
-            className="block shrink-0"
-            style={{ height: "14mm", width: "auto", objectFit: "contain" }}
-            crossOrigin="anonymous"
-            decoding="sync"
-          />
+        <div className="flex items-center shrink-0 pl-0.5 min-w-0">
+          <DocumentBrandLogo heightMm={13} />
         </div>
 
         <div className="flex flex-col items-end gap-0.5 text-[9px] font-medium text-slate-800 leading-normal max-w-[52%] shrink pb-2">
