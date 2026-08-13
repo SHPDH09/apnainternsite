@@ -6,7 +6,6 @@ import { UnpaidStudentPaymentPanel } from "@/components/UnpaidStudentPaymentPane
 import { SiteNav } from "@/components/SiteNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Card } from "@/components/ui/card";
-import { NoticePopup } from "@/components/NoticePopup";
 import { captureReferralFromUrl, logReferralClickFromUrl } from "@/lib/referral";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
@@ -61,7 +60,6 @@ const Register = () => {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <SiteNav />
-      <NoticePopup page="registration" />
       <main className="flex-1 gradient-soft py-10 md:py-16">
         <div className="container mx-auto px-4">
           <Card className="max-w-3xl mx-auto p-6 md:p-10 shadow-elegant animate-fade-in-up">
