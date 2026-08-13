@@ -221,6 +221,9 @@ function AdminNavItems({
       <TabsTrigger value="consult-letter" className={navItemClass}>
         <FileText className="size-4 shrink-0" /> Consent Form
       </TabsTrigger>
+      <TabsTrigger value="popups" className={navItemClass}>
+        <Bell className="size-4 shrink-0" /> Popups
+      </TabsTrigger>
 
       <div className={sectionClass}>System</div>
       <TabsTrigger value="settings" className={cn(navItemClass, "data-[state=active]:bg-blue-600")}>

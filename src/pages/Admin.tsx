@@ -226,6 +226,9 @@ export default function Admin() {
       ? "popups"
       : queryParams.get("tab") || "dashboard";
   const [activeTab, setActiveTab] = useState(tabFromUrl);
+  useEffect(() => {
+    setActiveTab(tabFromUrl);
+  }, [tabFromUrl]);
   const [showSidebar, setShowSidebar] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [loading, setLoading] = useState(true);
