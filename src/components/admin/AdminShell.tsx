@@ -64,7 +64,7 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   gallery: "Gallery Management",
   "home-cms": "Home Page Content",
   "consult-letter": "Consent Form Template",
-  popups: "Popup Management",
+  popups: "Popup Message Management",
   settings: "System Settings",
 };
 
@@ -209,6 +209,9 @@ function AdminNavItems({
       </TabsTrigger>
 
       <div className={sectionClass}>Website</div>
+      <TabsTrigger value="popups" className={navItemClass}>
+        <Bell className="size-4 shrink-0" /> Popup Messages
+      </TabsTrigger>
       <TabsTrigger value="gallery" className={navItemClass}>
         <Image className="size-4 shrink-0" /> Gallery
       </TabsTrigger>
@@ -217,9 +220,6 @@ function AdminNavItems({
       </TabsTrigger>
       <TabsTrigger value="consult-letter" className={navItemClass}>
         <FileText className="size-4 shrink-0" /> Consent Form
-      </TabsTrigger>
-      <TabsTrigger value="popups" className={navItemClass}>
-        <Bell className="size-4 shrink-0" /> Popups
       </TabsTrigger>
 
       <div className={sectionClass}>System</div>

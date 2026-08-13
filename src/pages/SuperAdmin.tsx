@@ -18,7 +18,7 @@ import {
   Loader2, Plus, Trash2, Award, Users, Building2, Edit, Eye, MoreHorizontal, 
   Shield, Mail, Phone, User, BookOpen, Heart, LogIn, Ban, CheckCircle2, 
   Download, Briefcase, UserPlus, Filter, Search, Calendar, ToggleLeft, 
-  ToggleRight, TrendingUp, Activity, DollarSign, Clock, GraduationCap, CheckSquare, FileText
+  ToggleRight, TrendingUp, Activity, DollarSign,   Clock, GraduationCap, CheckSquare, FileText, Bell
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
@@ -57,6 +57,7 @@ import {
   sendBulkCustomMail,
 } from "@/lib/bulkCustomMailSend";
 import { FeesManagementPanel } from "@/components/admin/FeesManagementPanel";
+import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
 import { BulkUploadStudentBadge } from "@/components/BulkUploadStudentBadge";
 import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
 import {
@@ -172,6 +173,7 @@ const SuperAdmin = () => {
   const [attendanceSaving, setAttendanceSaving] = useState(false);
   const [attendanceOpsLoading, setAttendanceOpsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("students");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Password Reset States
   const [isResetPassOpen, setIsResetPassOpen] = useState(false);
@@ -964,6 +966,7 @@ const SuperAdmin = () => {
       const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id);
       const isSuper = (roles || []).some((r: any) => r.role === "super_admin");
       setAllowed(isSuper);
+      setCurrentUserId(session.user.id);
       if (isSuper) {
         persistAdminAuthSession();
         await loadAll();
@@ -1692,6 +1695,15 @@ const SuperAdmin = () => {
               <Button 
                 variant="ghost" 
                 size="sm"
+                onClick={() => setActiveTab("popups")}
+                className={`gap-2 rounded-xl font-bold text-[10px] uppercase tracking-wider px-3 h-8 border transition-all ${activeTab === 'popups' ? 'bg-primary text-white border-primary shadow-glow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200'}`}
+              >
+                <Bell className="size-3.5" />
+                Popup Messages
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm"
                 onClick={() => setActiveTab("settings")}
                 className={`gap-2 rounded-xl font-bold text-[10px] uppercase tracking-wider px-3 h-8 border transition-all ${activeTab === 'settings' ? 'bg-blue-600 text-white border-blue-600 shadow-glow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200'}`}
               >
@@ -1894,6 +1906,7 @@ const SuperAdmin = () => {
                 <TabsTrigger value="leads" className="gap-2"><UserPlus className="size-4" /> Leads</TabsTrigger>
                 <TabsTrigger value="old-leads" className="gap-2"><Clock className="size-4" /> Old Failed Payments</TabsTrigger>
                 <TabsTrigger value="staff" className="gap-2"><Shield className="size-4" /> Staff</TabsTrigger>
+                <TabsTrigger value="popups" className="gap-2"><Bell className="size-4" /> Popup Messages</TabsTrigger>
                 <TabsTrigger value="logs" className="gap-2"><Clock className="size-4" /> Activity Logs</TabsTrigger>
               </TabsList>
             </div>
@@ -3506,6 +3519,10 @@ const SuperAdmin = () => {
               </div>
             </TabsContent>
 
+            <TabsContent value="popups" className="mt-0">
+              <PopupManagementPanel client={supabase} currentUserId={currentUserId} />
+            </TabsContent>
+
             <TabsContent value="logs" className="animate-fade-in space-y-6">
               <Card className="p-6 border-none shadow-elegant bg-card/50 backdrop-blur-sm">
                 <div className="flex items-center justify-between mb-6">
@@ -3648,6 +3665,12 @@ const SuperAdmin = () => {
 
                 <Card className="p-6 border-none shadow-elegant bg-white md:col-span-2 lg:col-span-1">
                   <h3 className="font-bold mb-4 flex items-center gap-2"><Activity className="size-5 text-primary" /> Global Notice Popup</h3>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Homepage and login notices are now managed in <b>Popup Message Management</b>.
+                  </p>
+                  <Button className="w-full font-black mb-4" onClick={() => setActiveTab("popups")}>
+                    Open Popup Message Management
+                  </Button>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
                       <div>

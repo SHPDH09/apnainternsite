@@ -245,7 +245,7 @@ export function PopupManagementPanel({ client, currentUserId }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-            <Megaphone className="size-5 text-primary" /> Popup Management
+            <Megaphone className="size-5 text-primary" /> Popup Message Management
           </h2>
           <p className="text-sm text-slate-600 mt-1 max-w-2xl">
             Create image or text popups, schedule start/end times, and choose which pages they appear on.
