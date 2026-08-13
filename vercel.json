@@ -18,6 +18,12 @@
       "source": "/cyber-cafe/login",
       "destination": "/cybercafe/login",
       "permanent": true
+    },
+    {
+      "source": "/admin",
+      "has": [{ "type": "query", "key": "tab", "value": "popups" }],
+      "destination": "/admin/popups",
+      "permanent": false
     }
   ],
   "rewrites": [
