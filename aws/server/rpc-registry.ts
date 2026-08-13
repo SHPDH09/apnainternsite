@@ -114,6 +114,22 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
   admin_site_visit_stats: { args: [], auth: "admin" },
   admin_list_notifications: { args: ["p_limit"], auth: "admin" },
   list_notifications_for_student: { args: [], auth: "auth" },
+  admin_count_notification_targets: {
+    args: [
+      "p_target_type",
+      "p_target_user_id",
+      "p_universities",
+      "p_colleges",
+      "p_domains",
+      "p_modes",
+    ],
+    auth: "admin",
+  },
+  admin_publish_notification: { args: ["p_row"], auth: "admin" },
+  admin_update_notification_draft: { args: ["p_id", "p_row"], auth: "admin" },
+  admin_publish_notification_draft: { args: ["p_id"], auth: "admin" },
+  admin_notify_class_published: { args: ["p_class_id"], auth: "admin" },
+  student_mark_notification_read: { args: ["p_notification_id"], auth: "auth" },
   admin_save_payment_config: { args: ["p_config"], auth: "admin" },
   admin_reset_user_password: { args: ["target_user_id", "new_pass"], auth: "admin" },
   admin_referral_overview: { args: [], auth: "admin" },
@@ -240,6 +256,7 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
   ensure_payment_success_log: { args: ["p_row"], auth: "auth" },
 
   admin_ensure_lead_crm: { args: ["p_rows"], auth: "admin" },
+  admin_ensure_site_cms_tables: { args: [], auth: "admin" },
   admin_assign_leads: { args: ["p_staff_ids", "p_lead_crm_ids", "p_mode"], auth: "admin" },
   admin_unassign_leads: { args: ["p_lead_crm_ids"], auth: "admin" },
   mark_lead_crm_converted_by_email: {

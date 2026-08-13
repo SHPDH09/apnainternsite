@@ -10,6 +10,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { callRpc, callRpcAuto, type JwtClaims } from "../aws/server/db";
 import { getRpcDef, type RpcAuth } from "../aws/server/rpc-registry";
+import { isTsRpc, runTsRpc } from "../aws/server/ts-rpc-handlers";
 import { verifyToken } from "../aws/server/local-jwt";
 
 function jwtFromRequest(req: VercelRequest): JwtClaims | null {
@@ -125,6 +126,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const jwt = jwtFromRequest(req);
+    if (isTsRpc(name)) {
+      const data = await runTsRpc(name);
+      res.status(200).json({ data, error: null });
+      return;
+    }
     const data = def
       ? await callRpc(name, def.args, body, jwt)
       : await callRpcAuto(name, body, jwt);

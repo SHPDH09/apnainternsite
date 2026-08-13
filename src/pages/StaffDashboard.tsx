@@ -81,6 +81,7 @@ import {
   CalendarDays,
   SlidersHorizontal,
 } from "lucide-react";
+import { SiteLoader } from "@/components/SiteLoader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1277,7 +1278,7 @@ const StaffDashboard = () => {
     [leadsUnified, leadsSafePage]
   );
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="size-8 animate-spin text-primary" /></div>;
+  if (loading) return <SiteLoader />;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex">

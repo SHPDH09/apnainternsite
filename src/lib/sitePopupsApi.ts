@@ -9,6 +9,53 @@ import {
 const POPUP_BUCKET = "logos";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
+function popupErrorText(error: unknown): string {
+  if (error && typeof error === "object") {
+    const e = error as { message?: string; details?: string; code?: string };
+    return [e.message, e.details, e.code].filter(Boolean).join(" — ");
+  }
+  return error instanceof Error ? error.message : String(error ?? "");
+}
+
+export function isSitePopupsTableMissing(error: unknown): boolean {
+  const msg = popupErrorText(error);
+  return (
+    /42P01|undefined_table/i.test(msg) ||
+    /relation ["']?public\.site_popups["']? does not exist/i.test(msg) ||
+    /Could not find the table ['"]public\.site_popups['"]/i.test(msg)
+  );
+}
+
+export function formatSitePopupError(error: unknown): string {
+  if (isSitePopupsTableMissing(error)) {
+    return "Popup storage is initializing. Wait a moment and try Save again.";
+  }
+  const msg = popupErrorText(error);
+  return msg || "Popup action failed.";
+}
+
+async function ensureSiteCmsTables(client: SupabaseClient): Promise<void> {
+  try {
+    await client.rpc("admin_ensure_site_cms_tables");
+  } catch {
+    // Older API builds may not expose this RPC yet; withCmsRetry on REST still applies.
+  }
+}
+
+async function withPopupStorageRetry<T>(
+  client: SupabaseClient,
+  run: () => Promise<T>
+): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (!isSitePopupsTableMissing(err)) throw err;
+    await ensureSiteCmsTables(client);
+    await new Promise((r) => setTimeout(r, 600));
+    return await run();
+  }
+}
+
 function mapRow(row: SitePopup): SitePopup {
   const fromPath =
     row.image_path != null && String(row.image_path).trim() !== ""
@@ -40,24 +87,32 @@ export type SitePopupWrite = {
 };
 
 export async function fetchPublicSitePopups(client: SupabaseClient): Promise<SitePopup[]> {
-  const { data, error } = await client
-    .from("site_popups")
-    .select(
-      "id, title, popup_type, message, image_url, image_path, cta_label, cta_url, pages, start_at, end_at, is_active, sort_order, created_at, updated_at"
-    )
-    .eq("is_active", true)
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: false });
-  if (error) throw error;
+  const { data, error } = await withPopupStorageRetry(client, () =>
+    client
+      .from("site_popups")
+      .select(
+        "id, title, popup_type, message, image_url, image_path, cta_label, cta_url, pages, start_at, end_at, is_active, sort_order, created_at, updated_at"
+      )
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false })
+  );
+  if (error) {
+    if (isSitePopupsTableMissing(error)) return [];
+    throw error;
+  }
   return ((data || []) as SitePopup[]).map(mapRow);
 }
 
 export async function fetchAdminSitePopups(client: SupabaseClient): Promise<SitePopup[]> {
-  const { data, error } = await client
-    .from("site_popups")
-    .select("*")
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: false });
+  await ensureSiteCmsTables(client);
+  const { data, error } = await withPopupStorageRetry(client, () =>
+    client
+      .from("site_popups")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false })
+  );
   if (error) throw error;
   return ((data || []) as SitePopup[]).map(mapRow);
 }
@@ -67,15 +122,18 @@ export async function createSitePopup(
   payload: SitePopupWrite,
   createdBy?: string | null
 ): Promise<SitePopup> {
-  const { data, error } = await client
-    .from("site_popups")
-    .insert({
-      ...payload,
-      created_by: createdBy && /^[0-9a-f-]{36}$/i.test(createdBy) ? createdBy : null,
-      updated_at: new Date().toISOString(),
-    })
-    .select("*")
-    .single();
+  await ensureSiteCmsTables(client);
+  const { data, error } = await withPopupStorageRetry(client, () =>
+    client
+      .from("site_popups")
+      .insert({
+        ...payload,
+        created_by: createdBy && /^[0-9a-f-]{36}$/i.test(createdBy) ? createdBy : null,
+        updated_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single()
+  );
   if (error) throw error;
   return mapRow(data as SitePopup);
 }

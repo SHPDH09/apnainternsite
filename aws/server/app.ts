@@ -18,6 +18,7 @@ import sendMail from "../../api/send-mail";
 import rpcByName from "../../api/rpc-call";
 import dataSelect from "../../api/data-select";
 import { loadRootEnv } from "./load-env";
+import { ensureAllCmsTables } from "./cms-bootstrap";
 import {
   authLogout,
   authSettings,
@@ -110,6 +111,15 @@ async function buildApp(): Promise<Express> {
   const localSupabase =
     Boolean(process.env.DATABASE_URL) &&
     String(process.env.LOCAL_SUPABASE || "true").toLowerCase() !== "false";
+
+  if (localSupabase && process.env.DATABASE_URL) {
+    try {
+      await ensureAllCmsTables();
+      console.log("[cms-bootstrap] site CMS tables ready");
+    } catch (err) {
+      console.warn("[cms-bootstrap] startup ensure failed:", err);
+    }
+  }
 
   app.get("/api/health", (_req, res) => {
     res.json({

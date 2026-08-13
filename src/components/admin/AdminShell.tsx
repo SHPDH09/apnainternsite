@@ -18,6 +18,7 @@ import {
   LogOut,
   Mail,
   Menu,
+  Phone,
   Settings,
   Share2,
   Store,
@@ -66,6 +67,8 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   "home-cms": "Home Page Content",
   "consult-letter": "Consent Form Template",
   popups: "Popup Message Management",
+  "contact-details": "Contact Details Management",
+  "whatsapp-links": "WhatsApp Groups & Channels",
   settings: "System Settings",
 };
 
@@ -224,6 +227,12 @@ function AdminNavItems({
       </TabsTrigger>
       <TabsTrigger value="popups" className={navItemClass}>
         <Bell className="size-4 shrink-0" /> Popups
+      </TabsTrigger>
+      <TabsTrigger value="contact-details" className={navItemClass}>
+        <Phone className="size-4 shrink-0" /> Contact Details
+      </TabsTrigger>
+      <TabsTrigger value="whatsapp-links" className={navItemClass}>
+        <Share2 className="size-4 shrink-0" /> WhatsApp Links
       </TabsTrigger>
 
       <div className={sectionClass}>System</div>

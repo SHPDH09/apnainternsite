@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Papa from "papaparse";
 import { SiteNav } from "@/components/SiteNav";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { SiteLoader } from "@/components/SiteLoader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1661,7 +1662,7 @@ const SuperAdmin = () => {
   };
 
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="size-8 animate-spin text-primary" /></div>;
+  if (loading) return <SiteLoader />;
   if (!allowed) return <div className="p-10 text-center">Access Denied</div>;
 
   return (

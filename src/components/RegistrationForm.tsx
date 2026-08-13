@@ -91,7 +91,7 @@ import {
   isAllowedConsentLetterFile,
   uploadConsentLetterToStorage,
 } from "@/lib/studentDocuments";
-import { Eye, EyeOff, Loader2, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Info, Upload, FileText } from "lucide-react";
+import { Eye, EyeOff, Loader2, CheckCircle2, MessageSquare, Info, Upload, FileText } from "lucide-react";
 import { z } from "zod";
 import {
   Dialog,
@@ -101,12 +101,8 @@ import {
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog";
-
-const REGISTRATION_HELP_WHATSAPP_URL = "https://whatsapp.com/channel/0029VbC9lvi3bbV8TS7TbB00";
-const REGISTRATION_HELP_PHONE_E164 = "+917050936593";
-const REGISTRATION_HELP_PHONE_DISPLAY = "+91 70509 36593";
-
-type Step = 1 | 2 | 3 | 4 | 5;
+import { usePublicSiteContacts } from "@/hooks/usePublicSiteContacts";
+import { cn } from "@/lib/utils";
 
 const CONSENT_MAX_BYTES = 10 * 1024 * 1024;
 
@@ -135,7 +131,9 @@ export const RegistrationForm = ({
   const navigate = useNavigate();
   const isAdminVariant = variant === "admin";
   const isCyberCafeVariant = variant === "cybercafe";
-  const [step, setStep] = useState<Step>(1);
+  const { contacts: registrationContacts, whatsappLinks: registrationWhatsApp } =
+    usePublicSiteContacts("registration");
+  const sectionRefs = useRef<(HTMLElement | null)[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [paymentSettings, setPaymentSettings] = useState<any>(null);
@@ -243,6 +241,121 @@ export const RegistrationForm = ({
     }
   };
 
+  const selectedCollege = useMemo(
+    () => colleges.find((c) => c.id === collegeId),
+    [colleges, collegeId]
+  );
+
+  useEffect(() => {
+    const def = defaultPasswordForCollege(selectedUni?.name, selectedCollege?.name);
+    if (def) {
+      setPassword(def);
+      setConfirmPw(def);
+    }
+  }, [selectedUni?.name, selectedCollege?.name]);
+
+  useEffect(() => {
+    if (!showConsentStep) {
+      setConsentLetterFile(null);
+      consentFormUrlRef.current = null;
+    }
+  }, [showConsentStep]);
+
+  // College roster auto-fill state
+  const [rosterStatus, setRosterStatus] = useState<
+    "idle" | "checking" | "matched" | "claimed" | "none" | "ambiguous"
+  >("idle");
+  const [rosterMatchedName, setRosterMatchedName] = useState<string>("");
+  const [rosterAlreadyRegisteredOpen, setRosterAlreadyRegisteredOpen] = useState(false);
+
+  const personalFieldsSchema = z.object({
+    fullName: z.string().trim().min(2).max(100),
+    gender: z.string().min(1),
+    parentName: z.string().trim().min(2).max(100),
+    contact: z.string().regex(/^[6-9]\d{9}$/),
+    email: z.string().email().max(255),
+  });
+
+  const isSectionComplete = (section: number): boolean => {
+    if (section === 1) {
+      return personalFieldsSchema.safeParse({ fullName, gender, parentName, contact, email }).success;
+    }
+    if (section === 2) {
+      if (isBeuFlow) return Boolean(universityId && collegeId && beuDetailsCompleted);
+      return Boolean(universityId && collegeId && degree && classSem && session && rollNo && course);
+    }
+    if (section === 3) {
+      if (rosterStatus === "matched" && !isAdminVariant) return true;
+      const hasAny = emName.trim() || emPhone.trim() || emRel;
+      if (!hasAny) return true;
+      return z
+        .object({
+          emName: z.string().trim().min(2).max(100),
+          emPhone: z.string().regex(/^[6-9]\d{9}$/),
+          emRel: z.string().min(1),
+        })
+        .safeParse({ emName, emPhone, emRel }).success;
+    }
+    if (section === 4) {
+      return !validateRegistrationPassword(password, confirmPw) && agree;
+    }
+    if (section === 5) {
+      if (!showConsentStep) return true;
+      if (!consentLetterFile) return true;
+      return (
+        consentLetterFile.size <= CONSENT_MAX_BYTES && isAllowedConsentLetterFile(consentLetterFile)
+      );
+    }
+    return false;
+  };
+
+  const sectionNumbers = useMemo(
+    () => (showConsentStep ? [1, 2, 3, 4, 5] : [1, 2, 3, 4]),
+    [showConsentStep]
+  );
+
+  const effectiveStep = useMemo(() => {
+    let highest = 1;
+    for (const n of sectionNumbers) {
+      if (isSectionComplete(n)) highest = Math.min(n + 1, sectionNumbers[sectionNumbers.length - 1]);
+      else break;
+    }
+    return highest;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sectionNumbers,
+    fullName,
+    gender,
+    parentName,
+    contact,
+    email,
+    universityId,
+    collegeId,
+    degree,
+    classSem,
+    session,
+    rollNo,
+    course,
+    beuDetailsCompleted,
+    isBeuFlow,
+    emName,
+    emPhone,
+    emRel,
+    rosterStatus,
+    isAdminVariant,
+    password,
+    confirmPw,
+    agree,
+    consentLetterFile,
+    showConsentStep,
+  ]);
+
+  const completedSectionCount = useMemo(
+    () => sectionNumbers.filter((n) => isSectionComplete(n)).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sectionNumbers, effectiveStep, fullName, gender, parentName, contact, email, universityId, collegeId, degree, classSem, session, rollNo, course, beuDetailsCompleted, emName, emPhone, emRel, password, confirmPw, agree, consentLetterFile]
+  );
+
   const saveRegistrationLeadDraft = async (extraPayload: Record<string, unknown> = {}) => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail.includes("@") || isAdminVariant || skipRegistrationLeadsRef.current) return;
@@ -273,44 +386,16 @@ export const RegistrationForm = ({
     await upsertRegistrationLead(supabase, {
       email: normalizedEmail,
       phone: contact,
-      step,
+      step: effectiveStep,
       payload,
       cybercafe_shop_name: cyberData.shop_name || null,
       cybercafe_email: cyberData.email || null,
     });
   };
 
-  const selectedCollege = useMemo(
-    () => colleges.find((c) => c.id === collegeId),
-    [colleges, collegeId]
-  );
-
-  useEffect(() => {
-    const def = defaultPasswordForCollege(selectedUni?.name, selectedCollege?.name);
-    if (def) {
-      setPassword(def);
-      setConfirmPw(def);
-    }
-  }, [selectedUni?.name, selectedCollege?.name]);
-
-  useEffect(() => {
-    if (!showConsentStep) {
-      setConsentLetterFile(null);
-      consentFormUrlRef.current = null;
-      setStep((s) => (s === 5 ? 4 : s));
-    }
-  }, [showConsentStep]);
-
-  // College roster auto-fill state
-  const [rosterStatus, setRosterStatus] = useState<
-    "idle" | "checking" | "matched" | "claimed" | "none" | "ambiguous"
-  >("idle");
-  const [rosterMatchedName, setRosterMatchedName] = useState<string>("");
-  const [rosterAlreadyRegisteredOpen, setRosterAlreadyRegisteredOpen] = useState(false);
-
   // Save incomplete registrations as leads (public flow only; step ≥ 2).
   useEffect(() => {
-    if (isAdminVariant || step < 2 || skipRegistrationLeadsRef.current) return;
+    if (isAdminVariant || effectiveStep < 2 || skipRegistrationLeadsRef.current) return;
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail.includes("@")) return;
 
@@ -344,7 +429,7 @@ export const RegistrationForm = ({
         const { ok, error } = await upsertRegistrationLead(supabase, {
           email: normalizedEmail,
           phone: contact,
-          step,
+          step: effectiveStep,
           payload,
           cybercafe_shop_name: cyberData.shop_name || null,
           cybercafe_email: cyberData.email || null,
@@ -370,7 +455,7 @@ export const RegistrationForm = ({
     return () => window.clearTimeout(t);
   }, [
     isAdminVariant,
-    step,
+    effectiveStep,
     fullName,
     gender,
     parentName,
@@ -416,10 +501,10 @@ export const RegistrationForm = ({
   }, [isAdminVariant]);
 
   useEffect(() => {
-    if (!isAdminVariant && step >= 3) {
+    if (!isAdminVariant && effectiveStep >= 3) {
       prefetchRegistrationCheckout();
     }
-  }, [step, isAdminVariant]);
+  }, [effectiveStep, isAdminVariant]);
 
   useEffect(() => {
     if (!isBeuFlow) {
@@ -542,8 +627,12 @@ export const RegistrationForm = ({
     }
   };
 
-  const validateStep = (): boolean => {
-    if (step === 1) {
+  const scrollToSection = (index: number) => {
+    sectionRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const validateSection = (section: number, showToast = true): boolean => {
+    if (section === 1) {
       const s = z.object({
         fullName: z.string().trim().min(2, "Full name is required").max(100),
         gender: z.string().min(1, "Select gender"),
@@ -551,19 +640,27 @@ export const RegistrationForm = ({
         contact: z.string().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
         email: z.string().email("Enter a valid email").max(255),
       }).safeParse({ fullName, gender, parentName, contact, email });
-      if (!s.success) { toast.error(s.error.issues[0].message); return false; }
+      if (!s.success) {
+        if (showToast) toast.error(s.error.issues[0].message);
+        return false;
+      }
     }
-    if (step === 2) {
+    if (section === 2) {
       if (isBeuFlow) {
         if (!universityId || !collegeId) {
-          toast.error("Select university and college for engineering registration");
+          if (showToast) toast.error("Select university and college for engineering registration");
+          return false;
+        }
+        if (!beuDetailsCompleted) {
+          if (showToast) toast.error("Complete the engineering form before continuing");
           return false;
         }
       } else if (!universityId || !collegeId || !degree || !classSem || !session || !rollNo || !course) {
-        toast.error("Please fill all required academic fields"); return false;
+        if (showToast) toast.error("Please fill all required academic fields");
+        return false;
       }
     }
-    if (step === 3) {
+    if (section === 3) {
       const hasAny = emName.trim() || emPhone.trim() || emRel;
       if (hasAny) {
         const s = z.object({
@@ -572,34 +669,55 @@ export const RegistrationForm = ({
           emRel: z.string().min(1, "Select relationship"),
         }).safeParse({ emName, emPhone, emRel });
         if (!s.success) {
-          toast.error(s.error.issues[0].message);
+          if (showToast) toast.error(s.error.issues[0].message);
           return false;
         }
       }
     }
-    if (step === 4) {
+    if (section === 4) {
       const pwErr = validateRegistrationPassword(password, confirmPw);
       if (pwErr) {
-        toast.error(pwErr);
+        if (showToast) toast.error(pwErr);
         return false;
       }
-      if (!agree) { toast.error("Please accept the Terms & Privacy Policy"); return false; }
+      if (!agree) {
+        if (showToast) toast.error("Please accept the Terms & Privacy Policy");
+        return false;
+      }
     }
-    if (step === 5 && consentLetterFile) {
+    if (section === 5 && consentLetterFile) {
       if (consentLetterFile.size > CONSENT_MAX_BYTES) {
-        toast.error(
-          isEngineeringFlow
-            ? "NoC document must be 10 MB or smaller."
-            : "Consent letter must be 10 MB or smaller."
-        );
+        if (showToast) {
+          toast.error(
+            isEngineeringFlow
+              ? "NoC document must be 10 MB or smaller."
+              : "Consent letter must be 10 MB or smaller."
+          );
+        }
         return false;
       }
       if (!isAllowedConsentLetterFile(consentLetterFile)) {
-        toast.error("Use a PDF or image file (PNG, JPEG, WebP, GIF).");
+        if (showToast) toast.error("Use a PDF or image file (PNG, JPEG, WebP, GIF).");
         return false;
       }
     }
     return true;
+  };
+
+  const validateAllSections = (): boolean => {
+    for (const n of sectionNumbers) {
+      if (!validateSection(n)) return false;
+    }
+    return true;
+  };
+
+  const openEngineeringForm = async () => {
+    if (!universityId || !collegeId) {
+      toast.error("Select university and college first");
+      return;
+    }
+    await saveRegistrationLeadDraft();
+    setBeuModalOpen(true);
   };
 
   const handleBeuModalSubmit = async (data: BeuFormData) => {
@@ -624,13 +742,7 @@ export const RegistrationForm = ({
       });
       setBeuModalOpen(false);
       toast.success("Engineering details saved successfully");
-      setStep((s) => {
-        const candidate = Math.min(showConsentStep ? 5 : 4, s + 1) as Step;
-        if (candidate === 3 && rosterStatus === "matched" && !isAdminVariant) {
-          return 4;
-        }
-        return candidate;
-      });
+      scrollToSection(2);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Could not save engineering details");
     } finally {
@@ -638,47 +750,21 @@ export const RegistrationForm = ({
     }
   };
 
-  const next = async () => {
-    if (!validateStep()) return;
-    if (step === 1) {
-      const ok = await ensureRegistrationIdentityAvailable();
-      if (!ok) return;
-    }
-    if (step === 2 && isBeuFlow && !beuDetailsCompleted) {
-      await saveRegistrationLeadDraft();
+  const submit = async () => {
+    if (isBeuFlow && !beuDetailsCompleted) {
+      toast.error("Complete the engineering form before submitting");
       setBeuModalOpen(true);
       return;
     }
-    if (step === 2 && isBeuFlow && beuDetailsCompleted) {
-      setStep((s) => {
-        const candidate = Math.min(showConsentStep ? 5 : 4, s + 1) as Step;
-        if (candidate === 3 && rosterStatus === "matched" && !isAdminVariant) {
-          return 4;
-        }
-        return candidate;
-      });
+    if (!validateAllSections()) return;
+    const identityOk = await ensureRegistrationIdentityAvailable();
+    if (!identityOk) return;
+    if (isAdminVariant) {
+      await performAdminSubmit();
       return;
     }
-    setStep((s) => {
-      const cap = showConsentStep ? 5 : 4;
-      const candidate = Math.min(cap, s + 1) as Step;
-      // Roster-matched students skip Step 3 (emergency contacts, which are
-      // optional anyway) and land straight on the payment step.
-      if (candidate === 3 && rosterStatus === "matched" && !isAdminVariant) {
-        return 4;
-      }
-      return candidate;
-    });
+    await performSubmit();
   };
-  const back = () =>
-    setStep((s) => {
-      const candidate = Math.max(1, s - 1) as Step;
-      // Mirror the skip on the way back too, so they don't see Step 3.
-      if (candidate === 3 && rosterStatus === "matched" && !isAdminVariant) {
-        return 2;
-      }
-      return candidate;
-    });
 
   const handlePayment = async (
     settings: NonNullable<typeof paymentSettings>
@@ -758,20 +844,6 @@ export const RegistrationForm = ({
     }
 
     return payResult;
-  };
-
-  const submit = async () => {
-    if (isBeuFlow && !beuDetailsCompleted) {
-      toast.error("Complete the engineering form before submitting");
-      setBeuModalOpen(true);
-      return;
-    }
-    if (!validateStep()) return;
-    if (isAdminVariant) {
-      await performAdminSubmit();
-      return;
-    }
-    await performSubmit();
   };
 
   const performAdminSubmit = async () => {
@@ -917,7 +989,7 @@ export const RegistrationForm = ({
     let paymentCaptured = false;
     let consentUpload: Promise<string | null> | null = null;
 
-    if (showConsentStep && step === 5 && consentLetterFile) {
+    if (showConsentStep && consentLetterFile) {
       const docKind = isEngineeringFlow ? "noc" : "consent";
       const docLabel = isEngineeringFlow ? "NoC" : "Consent letter";
       consentUpload = uploadConsentLetterToStorage(
@@ -1420,30 +1492,60 @@ export const RegistrationForm = ({
     );
   }
 
-  const maxProgressStep = showConsentStep ? 5 : 4;
-  const progress = (step / maxProgressStep) * 100;
+  const maxProgressStep = sectionNumbers.length;
+  const progress = (completedSectionCount / maxProgressStep) * 100;
   const stepLabels = showConsentStep
     ? isEngineeringFlow
       ? (["Personal", "Academic", "Emergency", "Security", "NoC"] as const)
       : (["Personal", "Academic", "Emergency", "Security", "Consent letter"] as const)
     : (["Personal", "Academic", "Emergency", "Security"] as const);
 
+  const registrationPhones = registrationContacts.filter((c) => c.contact_type === "phone");
+
   return (
     <div className="max-w-2xl mx-auto p-2">
-      <div className="mb-6">
+      <div className="mb-6 sticky top-0 z-10 bg-background/95 backdrop-blur-sm py-2 -mx-2 px-2">
         <Progress value={progress} className="h-2 mb-3" />
-        <div className="flex justify-between text-[10px] sm:text-xs">
-          {stepLabels.map((l, i) => (
-            <div key={l} className={`flex items-center gap-1 ${step >= i + 1 ? "text-primary font-semibold" : "text-muted-foreground"}`}>
-              <span className={`flex size-4 items-center justify-center rounded-full text-[9px] ${step > i + 1 ? "bg-primary text-primary-foreground" : step === i + 1 ? "bg-primary/15 border border-primary text-primary" : "bg-muted text-muted-foreground"}`}>{step > i + 1 ? "✓" : i + 1}</span>
-              <span>{l}</span>
-            </div>
-          ))}
+        <div className="flex justify-between text-[10px] sm:text-xs gap-1">
+          {stepLabels.map((l, i) => {
+            const sectionNum = i + 1;
+            const complete = isSectionComplete(sectionNum);
+            return (
+              <button
+                key={l}
+                type="button"
+                onClick={() => scrollToSection(i)}
+                className={cn(
+                  "flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1 transition-colors",
+                  complete ? "text-primary font-semibold" : "text-muted-foreground"
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex size-4 items-center justify-center rounded-full text-[9px]",
+                    complete
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground border border-transparent"
+                  )}
+                >
+                  {complete ? "✓" : sectionNum}
+                </span>
+                <span className="hidden xs:inline sm:inline">{l}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {step === 1 && (
-        <div className="space-y-4 animate-fade-in">
+      <section
+        ref={(el) => { sectionRefs.current[0] = el; }}
+        className="mb-8 scroll-mt-24 rounded-xl border p-4 sm:p-5 space-y-4"
+      >
+        <h3 className="text-sm font-black text-primary flex items-center gap-2">
+          <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-xs">1</span>
+          Personal details
+          {isSectionComplete(1) && <CheckCircle2 className="size-4 text-emerald-600" />}
+        </h3>
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5"><Label className="text-xs">Full Name *</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="h-8 text-sm" /></div>
             <div className="space-y-1.5">
@@ -1487,10 +1589,17 @@ export const RegistrationForm = ({
               )}
             </div>
           </div>
-        </div>
-      )}
+      </section>
 
-      {step === 2 && (
+      <section
+        ref={(el) => { sectionRefs.current[1] = el; }}
+        className="mb-8 scroll-mt-24 rounded-xl border p-4 sm:p-5 space-y-4"
+      >
+        <h3 className="text-sm font-black text-primary flex items-center gap-2">
+          <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-xs">2</span>
+          Academic details
+          {isSectionComplete(2) && <CheckCircle2 className="size-4 text-emerald-600" />}
+        </h3>
         <div className="space-y-4 animate-fade-in">
           {isEngineeringFlow && (
             <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 text-sm">
@@ -1498,7 +1607,7 @@ export const RegistrationForm = ({
                 {selectedUni?.name || "Engineering university"} registration
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Select your university and college, then click Next to open the engineering form for course,
+                Select your university and college, then open the engineering form for course,
                 branch, specialization, and internship details configured for your institution.
               </p>
               {beuDetailsCompleted && beuFormData ? (
@@ -1506,7 +1615,11 @@ export const RegistrationForm = ({
                   Engineering details saved: {beuFormData.course} · {beuFormData.branchSubject} ·{" "}
                   {beuFormData.sectionDuration}
                 </p>
-              ) : null}
+              ) : (
+                <Button type="button" size="sm" className="mt-3" onClick={() => void openEngineeringForm()}>
+                  Open engineering form
+                </Button>
+              )}
             </div>
           )}
           {rosterStatus === "checking" && (
@@ -1637,9 +1750,17 @@ export const RegistrationForm = ({
             )}
           </div>
         </div>
-      )}
+      </section>
 
-      {step === 3 && (
+      <section
+        ref={(el) => { sectionRefs.current[2] = el; }}
+        className="mb-8 scroll-mt-24 rounded-xl border p-4 sm:p-5 space-y-4"
+      >
+        <h3 className="text-sm font-black text-primary flex items-center gap-2">
+          <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-xs">3</span>
+          Emergency contact
+          {isSectionComplete(3) && <CheckCircle2 className="size-4 text-emerald-600" />}
+        </h3>
         <div className="space-y-4 animate-fade-in">
           <p className="text-[11px] text-muted-foreground">Emergency details are optional. If you fill any field, complete all three.</p>
           <div className="grid sm:grid-cols-2 gap-4">
@@ -1648,51 +1769,17 @@ export const RegistrationForm = ({
             <div className="sm:col-span-2 space-y-1.5"><Label className="text-xs">Relationship</Label><Select value={emRel} onValueChange={setEmRel}><SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Optional" /></SelectTrigger><SelectContent>{["Father", "Mother", "Guardian", "Other"].map((r) => (<SelectItem key={r} value={r}>{r}</SelectItem>))}</SelectContent></Select></div>
           </div>
         </div>
-      )}
+      </section>
 
-      {step === 5 && showConsentStep && (
-        <div className="space-y-4 animate-fade-in">
-          <div className="rounded-xl border-2 border-primary/20 bg-muted/30 p-4 space-y-3">
-            <div className="flex items-start gap-2">
-              <FileText className="size-5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-bold text-foreground">
-                  {isEngineeringFlow ? "NoC upload" : "Consent letter"}{" "}
-                  <span className="font-normal text-muted-foreground">(optional)</span>
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-                  {isEngineeringFlow
-                    ? "Upload your No Objection Certificate (NoC) if available. Accepted formats: PDF, PNG, JPEG, WebP, or GIF (max 10 MB)."
-                    : "Not required. Accepted formats: PDF, PNG, JPEG, WebP, or GIF (max 10 MB)."}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">{isEngineeringFlow ? "NoC document" : "Consent letter"}</Label>
-              <label className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer">
-                <Input
-                  type="file"
-                  accept=".pdf,application/pdf,image/png,image/jpeg,image/webp,image/gif"
-                  className="h-9 text-xs cursor-pointer"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    setConsentLetterFile(f ?? null);
-                  }}
-                />
-                {consentLetterFile && (
-                  <span className="text-[10px] text-muted-foreground truncate">{consentLetterFile.name}</span>
-                )}
-              </label>
-            </div>
-            <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
-              <Upload className="size-3.5 shrink-0" />
-              You can skip this upload and continue to payment.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {step === 4 && (
+      <section
+        ref={(el) => { sectionRefs.current[3] = el; }}
+        className="mb-8 scroll-mt-24 rounded-xl border p-4 sm:p-5 space-y-4"
+      >
+        <h3 className="text-sm font-black text-primary flex items-center gap-2">
+          <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-xs">4</span>
+          Account &amp; payment
+          {isSectionComplete(4) && <CheckCircle2 className="size-4 text-emerald-600" />}
+        </h3>
         <div className="space-y-4 animate-fade-in">
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -1770,55 +1857,101 @@ export const RegistrationForm = ({
             <span className="text-[10px] text-muted-foreground leading-tight">I agree to the Terms & Privacy Policy and internship terms.</span>
           </label>
         </div>
+      </section>
+
+      {showConsentStep && (
+        <section
+          ref={(el) => { sectionRefs.current[4] = el; }}
+          className="mb-8 scroll-mt-24 rounded-xl border p-4 sm:p-5 space-y-4"
+        >
+          <h3 className="text-sm font-black text-primary flex items-center gap-2">
+            <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-xs">5</span>
+            {isEngineeringFlow ? "NoC upload" : "Consent letter"}
+            {isSectionComplete(5) && <CheckCircle2 className="size-4 text-emerald-600" />}
+          </h3>
+          <div className="space-y-4 animate-fade-in">
+            <div className="rounded-xl border-2 border-primary/20 bg-muted/30 p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <FileText className="size-5 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-foreground">
+                    {isEngineeringFlow ? "NoC upload" : "Consent letter"}{" "}
+                    <span className="font-normal text-muted-foreground">(optional)</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                    {isEngineeringFlow
+                      ? "Upload your No Objection Certificate (NoC) if available. Accepted formats: PDF, PNG, JPEG, WebP, or GIF (max 10 MB)."
+                      : "Not required. Accepted formats: PDF, PNG, JPEG, WebP, or GIF (max 10 MB)."}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">{isEngineeringFlow ? "NoC document" : "Consent letter"}</Label>
+                <label className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer">
+                  <Input
+                    type="file"
+                    accept=".pdf,application/pdf,image/png,image/jpeg,image/webp,image/gif"
+                    className="h-9 text-xs cursor-pointer"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      setConsentLetterFile(f ?? null);
+                    }}
+                  />
+                  {consentLetterFile && (
+                    <span className="text-[10px] text-muted-foreground truncate">{consentLetterFile.name}</span>
+                  )}
+                </label>
+              </div>
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                <Upload className="size-3.5 shrink-0" />
+                You can skip this upload and submit when ready.
+              </p>
+            </div>
+          </div>
+        </section>
       )}
 
-      <div className="flex items-center justify-between mt-8 pt-4 border-t">
-        <Button variant="ghost" size="sm" onClick={back} disabled={step === 1}><ChevronLeft className="size-4 mr-1" /> Back</Button>
-        {step < 4 || (step === 4 && showConsentStep) ? (
-          <Button size="sm" onClick={() => void next()} disabled={checkingRegistration}>
-            {checkingRegistration ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <>
-                Next <ChevronRight className="size-4 ml-1" />
-              </>
-            )}
-          </Button>
-        ) : (
-          <Button size="sm" variant="hero" onClick={() => void submit()} disabled={submitting}>
-            {submitting && <Loader2 className="size-4 animate-spin mr-2" />}
-            {isAdminVariant ? "Create student (no payment)" : "Complete Registration"}
-          </Button>
-        )}
+      <div className="flex items-center justify-end mt-8 pt-4 border-t">
+        <Button size="lg" variant="hero" className="w-full sm:w-auto" onClick={() => void submit()} disabled={submitting || checkingRegistration}>
+          {submitting || checkingRegistration ? (
+            <Loader2 className="size-4 animate-spin mr-2" />
+          ) : null}
+          {isAdminVariant ? "Create student (no payment)" : "Complete Registration"}
+        </Button>
       </div>
 
-      {!isAdminVariant && (
+      {!isAdminVariant && (registrationPhones.length > 0 || registrationWhatsApp.length > 0) && (
         <div className="mt-5 rounded-lg border-2 border-emerald-600/30 bg-emerald-50/95 dark:bg-emerald-950/40 dark:border-emerald-700/50 p-3 sm:p-4 space-y-3 shadow-sm">
-          <p className="text-xs sm:text-sm font-bold text-emerald-950 dark:text-emerald-50 text-center sm:text-left leading-snug">
-            Call us:{" "}
-            <a
-              href={`tel:${REGISTRATION_HELP_PHONE_E164.replace(/\s/g, "")}`}
-              className="underline decoration-emerald-700 underline-offset-2 font-bold text-emerald-900 dark:text-emerald-100 hover:text-emerald-700"
-            >
-              {REGISTRATION_HELP_PHONE_DISPLAY}
-            </a>
-          </p>
-          <p className="text-[11px] text-emerald-900/90 dark:text-emerald-200/90 font-semibold text-center sm:text-left leading-snug">
-            Updates, deadlines & certificate info — join our WhatsApp channel for alerts.
-          </p>
-          <Button
-            asChild
-            size="lg"
-            className="w-full font-bold bg-[#25D366] hover:bg-[#20bd5a] text-white border-0 shadow-md h-11 text-sm sm:text-base"
-          >
-            <a href={REGISTRATION_HELP_WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
-              <MessageSquare className="size-4 mr-2 shrink-0" aria-hidden />
-              Join WhatsApp channel
-            </a>
-          </Button>
-          <p className="text-[10px] text-emerald-900/85 dark:text-emerald-200/90 font-semibold text-center border-t border-emerald-600/20 pt-3">
-            Instant support & important alerts — internship से जुड़ी मदद और updates के लिए।
-          </p>
+          {registrationPhones.map((phone) => (
+            <p key={phone.id} className="text-xs sm:text-sm font-bold text-emerald-950 dark:text-emerald-50 text-center sm:text-left leading-snug">
+              {phone.label ? `${phone.label}: ` : "Call us: "}
+              <a
+                href={phone.href || `tel:${phone.value.replace(/\s/g, "")}`}
+                className="underline decoration-emerald-700 underline-offset-2 font-bold text-emerald-900 dark:text-emerald-100 hover:text-emerald-700"
+              >
+                {phone.value}
+              </a>
+            </p>
+          ))}
+          {registrationWhatsApp.map((link) => (
+            <div key={link.id} className="space-y-2">
+              {link.description && (
+                <p className="text-[11px] text-emerald-900/90 dark:text-emerald-200/90 font-semibold text-center sm:text-left leading-snug">
+                  {link.description}
+                </p>
+              )}
+              <Button
+                asChild
+                size="lg"
+                className="w-full font-bold bg-[#25D366] hover:bg-[#20bd5a] text-white border-0 shadow-md h-11 text-sm sm:text-base"
+              >
+                <a href={link.url} target="_blank" rel="noopener noreferrer">
+                  <MessageSquare className="size-4 mr-2 shrink-0" aria-hidden />
+                  {link.title || "Join WhatsApp"}
+                </a>
+              </Button>
+            </div>
+          ))}
         </div>
       )}
 
