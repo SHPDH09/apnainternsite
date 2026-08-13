@@ -29,6 +29,7 @@ import PaymentStatus from "./pages/PaymentStatus.tsx";
 import CyberCafeRegister from "./pages/CyberCafeRegister.tsx";
 import CyberCafeDashboard from "./pages/CyberCafeDashboard.tsx";
 import { VisitorTracker } from "./components/VisitorTracker";
+import { SitePopupsHost } from "./components/NoticePopup";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { StudentDashboardGate } from "./components/StudentDashboardGate";
 import CollegeDashboard from "./pages/CollegeDashboard.tsx";
@@ -79,6 +80,7 @@ const App = () => (
         <AdminSessionRefresh />
         <StudentSessionRefresh />
         <VisitorTracker />
+        <SitePopupsHost />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />

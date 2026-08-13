@@ -61,6 +61,7 @@ import { StudentDataUploadPanel } from "@/components/admin/StudentDataUploadPane
 import { GalleryManagementPanel } from "@/components/admin/GalleryManagementPanel";
 import { HomeCmsManagementPanel } from "@/components/admin/HomeCmsManagementPanel";
 import { ConsultLetterManagementPanel } from "@/components/admin/ConsultLetterManagementPanel";
+import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
 import { LeadAssignmentPanel } from "@/components/admin/LeadAssignmentPanel";
 import { BulkUploadStudentBadge } from "@/components/BulkUploadStudentBadge";
 import { ADMIN_LOGIN_PATH, buildCollegeLoginLink, buildStudentCredentialLoginLink } from "@/lib/authRoutes";
@@ -4900,6 +4901,10 @@ Apna Intern Team`;
 
             <TabsContent value="consult-letter" className="mt-0">
               <ConsultLetterManagementPanel client={supabase} currentUserId={currentUserId} />
+            </TabsContent>
+
+            <TabsContent value="popups" className="mt-0">
+              <PopupManagementPanel client={supabase} currentUserId={currentUserId} />
             </TabsContent>
           </div>
         </main>

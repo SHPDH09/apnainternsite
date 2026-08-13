@@ -5,7 +5,6 @@ import { SiteNav } from "@/components/SiteNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { NoticePopup } from "@/components/NoticePopup";
 import {
   Dialog,
   DialogContent,
@@ -398,7 +397,6 @@ const Index = () => {
       </div>
 
       <SiteNav />
-      <NoticePopup page="home" />
 
       <HomeHeroSection onRegister={goRegister} onVerify={goVerify} />
 

@@ -44,7 +44,6 @@ import {
 import { PASSWORD_RESETS_SCHEMA_HINT, passwordResetInsertRow } from "@/lib/passwordResetRow";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, KeyRound } from "lucide-react";
-import { NoticePopup } from "@/components/NoticePopup";
 import {
   Dialog,
   DialogContent,
@@ -830,7 +829,6 @@ const Login = () => {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <SiteNav />
-      <NoticePopup page="login" />
       <main className="flex-1 gradient-soft py-12 md:py-20">
         <div className="container mx-auto px-4">
           <Card

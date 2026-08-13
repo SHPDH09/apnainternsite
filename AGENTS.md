@@ -2,37 +2,44 @@
 
 Guidance for AI agents working in this repository.
 
-## Repository status
+## Product
 
-**As of initial setup (2026-07-31):** This repository contains only `README.md` (`# apnainternsite`). There is no application source code, dependency manifests, Docker configuration, CI workflows, or runnable services.
+Apna Intern (also referred to as EzyIntern in AWS/RDS code) is an internship management portal:
 
-## Cursor Cloud specific instructions
+- Public site: registration, certificate verification, courses, universities
+- Student dashboard
+- Admin panel (directory, attendance, certificates, ID cards, live classes, payments, fees, notifications, assignments, and related tools)
+- Staff dashboard (separate permission model from Admin)
 
-### What exists today
+Default local stack is **Express API + Vite frontend + local Postgres** (no `*.supabase.co`).
 
-- Single file: `README.md`
-- No `package.json`, `requirements.txt`, `Dockerfile`, `docker-compose.yml`, `Makefile`, or `.devcontainer/` configuration
-- No lint, test, or build scripts
+## Commands
 
-### Services
+| Task | Command |
+| --- | --- |
+| Install | `npm ci` |
+| Dev (API `:3000` + Vite `:8080`) | `npm run dev` |
+| Frontend only | `npm run dev:frontend` |
+| Tests | `npm test` (`vitest run`; currently needs `jsdom`, which is not in `package.json`) |
+| Lint | `npm run lint` |
+| Production frontend build | `npm run build` |
 
-| Service | Status |
-|---------|--------|
-| *(none)* | No services are defined in this repository |
+`npm run dev` requires `.env.awsrds.local` (gitignored). Copy `.env.awsrds.example` and set `DATABASE_URL`. Cloud Agent VMs use a local Postgres URL instead of AWS RDS.
 
-### Development workflow (when code is added)
+## Local ports
 
-Once application code and dependency manifests are committed, future agents should:
+| Service | Port |
+| --- | --- |
+| Vite frontend | 8080 |
+| Express API / auth / rest / storage shim | 3000 |
+| Local Postgres | 5432 |
 
-1. **Install dependencies** using the project's lockfile and package manager (e.g. `npm ci`, `pnpm install`, `pip install -r requirements.txt`).
-2. **Start required backing services** (database, Redis, etc.) per `README.md` or `docker-compose.yml` if present.
-3. **Run the dev server** using the script documented in `package.json` or the README (e.g. `npm run dev`), not production build commands.
-4. **Lint and test** using project scripts (e.g. `npm run lint`, `npm test`).
+Health: `GET http://127.0.0.1:3000/api/health`
 
-### Update script
+## Cloud Agent notes
 
-The VM update script is a no-op (`true`) until dependency manifests exist. After manifests are added, replace it with the appropriate install command (e.g. `npm ci`).
-
-### End-to-end verification
-
-E2E testing is not possible until an application is implemented. The minimum hello-world flow will depend on the chosen stack (e.g. load the homepage in a browser, hit a health endpoint).
+- Install is `npm ci` plus creating `.env.awsrds.local` when missing.
+- Start brings up local Postgres (`pg_ctlcluster`) then `npm run dev`.
+- Do not point Cloud Agents at production AWS RDS, S3, Razorpay, or SMTP unless the user explicitly provides those secrets.
+- Do not remove Admin sidebar items; see `.cursor/rules/admin-sidebar-stability.mdc`.
+- When pushing at the user’s request, follow `.cursor/rules/git-push-main.mdc`.
