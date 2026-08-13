@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -20,6 +21,8 @@ import {
   createSitePopup,
   deleteSitePopup,
   fetchAdminSitePopups,
+  formatSitePopupError,
+  isSitePopupsTableMissing,
   updateSitePopup,
   uploadPopupImage,
   type SitePopupWrite,
@@ -131,9 +134,9 @@ export function PopupManagementPanel({ client, currentUserId }: Props) {
     try {
       setRows(await fetchAdminSitePopups(client));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load popups.";
-      if (/relation .*site_popups.* does not exist|Could not find the table/i.test(msg)) {
-        toast.error("Run the site_popups SQL migration, then reload.");
+      const msg = formatSitePopupError(err);
+      if (isSitePopupsTableMissing(err)) {
+        toast.message("Setting up popup storage… refresh in a few seconds.");
       } else {
         toast.error(msg);
       }
@@ -209,7 +212,7 @@ export function PopupManagementPanel({ client, currentUserId }: Props) {
       setDialogOpen(false);
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Save failed.");
+      toast.error(formatSitePopupError(err));
     } finally {
       setSaving(false);
     }
@@ -309,6 +312,9 @@ export function PopupManagementPanel({ client, currentUserId }: Props) {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit popup" : "New popup"}</DialogTitle>
+            <DialogDescription>
+              Create a text or image popup, choose which pages it appears on, and set an optional schedule.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">

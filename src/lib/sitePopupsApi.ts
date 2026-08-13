@@ -9,6 +9,18 @@ import {
 const POPUP_BUCKET = "logos";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
+export function isSitePopupsTableMissing(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error ?? "");
+  return /relation .*site_popups.* does not exist|Could not find the table|site_popups/i.test(msg);
+}
+
+export function formatSitePopupError(error: unknown): string {
+  if (isSitePopupsTableMissing(error)) {
+    return "Popup storage is initializing. Wait a moment and try Save again.";
+  }
+  return error instanceof Error ? error.message : "Popup action failed.";
+}
+
 function mapRow(row: SitePopup): SitePopup {
   const fromPath =
     row.image_path != null && String(row.image_path).trim() !== ""
@@ -48,7 +60,10 @@ export async function fetchPublicSitePopups(client: SupabaseClient): Promise<Sit
     .eq("is_active", true)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) {
+    if (isSitePopupsTableMissing(error)) return [];
+    throw error;
+  }
   return ((data || []) as SitePopup[]).map(mapRow);
 }
 
