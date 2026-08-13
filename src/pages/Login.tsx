@@ -841,7 +841,7 @@ const Login = () => {
           >
             <div className="flex justify-center mb-8">
               <Link to="/" className="inline-flex">
-                <BrandLogo size="lg" className="max-w-[280px]" />
+                <BrandLogo size="lg" />
               </Link>
             </div>
             <div className="text-center mb-8">

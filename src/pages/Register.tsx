@@ -66,7 +66,7 @@ const Register = () => {
           <Card className="max-w-3xl mx-auto p-6 md:p-10 shadow-elegant animate-fade-in-up">
             <div className="text-center mb-6">
               <div className="mb-4 flex justify-center">
-                <BrandLogo size="lg" className="max-w-[260px]" />
+                <BrandLogo size="lg" />
               </div>
               <h1 className="text-3xl md:text-4xl font-bold mb-1">
                 {showPayPanel ? payTitle : "Student Registration"}

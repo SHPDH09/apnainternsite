@@ -48,16 +48,18 @@ export const PrintableIDCard = forwardRef<HTMLDivElement, IdCardProps>(({ data }
     >
       {/* Background Watermark */}
       <img
-        src="/logo-icon.png"
+        src="/certificate/logo.png"
         alt=""
         crossOrigin="anonymous"
         style={{
           position: "absolute",
           top: "130px",
-          left: "25px",
-          width: "300px",
-          height: "300px",
-          opacity: 0.025,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: "280px",
+          height: "auto",
+          maxHeight: "320px",
+          opacity: 0.04,
           objectFit: "contain",
           zIndex: 0,
         }}
@@ -94,10 +96,11 @@ export const PrintableIDCard = forwardRef<HTMLDivElement, IdCardProps>(({ data }
         <div
           style={{
             position: "absolute",
-            top: "20px",
-            left: "130px", // (350 - 90)/2
-            width: "90px",
-            height: "34px",
+            top: "18px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "200px",
+            minHeight: "36px",
             backgroundColor: "#ffffff",
             borderRadius: "10px",
             boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
@@ -106,14 +109,14 @@ export const PrintableIDCard = forwardRef<HTMLDivElement, IdCardProps>(({ data }
             alignItems: "center",
             justifyContent: "center",
             boxSizing: "border-box",
-            padding: "6px",
+            padding: "6px 10px",
           }}
         >
           <img
-            src="/logo-icon.png"
-            alt="Logo"
+            src="/logo.png"
+            alt="Apna Intern"
             crossOrigin="anonymous"
-            style={{ width: "100%", height: "100%", objectFit: "contain" }}
+            style={{ width: "100%", height: "auto", maxHeight: "28px", objectFit: "contain" }}
           />
         </div>
 

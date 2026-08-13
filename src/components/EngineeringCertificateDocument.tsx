@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import { DocumentBrandLogo } from "@/components/brand/DocumentBrandLogo";
 import {
   CERTIFICATE_CEO,
   CERTIFICATE_CEO_TITLE,
@@ -25,7 +26,7 @@ const PAGE = {
 const SIGNATURE_SRC = "/certificate/signature.png?v=8";
 const STAMP_SRC = "/certificate/stamp.png";
 const BORDER_SRC = "/certificate/engineering-border.png";
-const WATERMARK_SRC = "/certificate/ei-icon.png";
+const WATERMARK_SRC = "/certificate/logo.png";
 
 const TEAL = "#2F9ED8";
 const TITLE_BLUE = "#0084FF";
@@ -94,7 +95,7 @@ function EngineeringCertificatePage({
         decoding="sync"
       />
 
-      {/* EI watermark */}
+      {/* Apna Intern shield watermark */}
       <img
         src={WATERMARK_SRC}
         alt=""
@@ -106,14 +107,7 @@ function EngineeringCertificatePage({
 
       {/* Header */}
       <header className="relative z-10 flex items-start justify-between gap-4 shrink-0">
-        <img
-          src="/certificate/header-logo.png"
-          alt="Apna Intern"
-          className="block shrink-0"
-          style={{ height: "13mm", width: "auto", objectFit: "contain" }}
-          crossOrigin="anonymous"
-          decoding="sync"
-        />
+        <DocumentBrandLogo heightMm={13} />
         <div className="flex items-center gap-3.5 shrink-0">
           <img
             src="/certificate/mca.png"

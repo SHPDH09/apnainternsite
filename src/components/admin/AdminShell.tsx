@@ -277,7 +277,7 @@ export function AdminSidebar({
     >
       <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
         <div className="flex items-center gap-3 min-w-0">
-          <BrandLogo variant="icon" size="sm" className="size-9" />
+          <BrandLogo size="sm" />
           <div className="min-w-0">
             <p className="truncate text-sm font-black text-slate-900">Admin Portal</p>
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
