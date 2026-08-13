@@ -16,7 +16,15 @@ const SUPABASE_PUBLISHABLE_KEY = resolveSupabaseAnonKey();
 
 assertSupabaseConfig(SUPABASE_URL);
 
-if (typeof window !== "undefined" && SUPABASE_URL.includes("supabase.co")) {
+if (typeof window !== "undefined") {
+  const configured = String(import.meta.env.VITE_SUPABASE_URL || "").trim();
+  if (configured.includes("execute-api") && SUPABASE_URL === window.location.origin.replace(/\/$/, "")) {
+    console.info(
+      "[apnaintern] API calls proxied via same-origin (Vercel → Lambda).",
+      "Configured:",
+      configured.replace(/\/$/, "")
+    );
+  } else if (SUPABASE_URL.includes("supabase.co")) {
   const usingDefaults = !import.meta.env.VITE_SUPABASE_URL;
   if (usingDefaults) {
     console.info(
@@ -29,6 +37,7 @@ if (typeof window !== "undefined" && SUPABASE_URL.includes("supabase.co")) {
       SUPABASE_URL,
       "— for local AWS use npm run dev:frontend:awsrds (URL forced to http://localhost:8080)"
     );
+  }
   }
 }
 

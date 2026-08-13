@@ -27,6 +27,22 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/auth/:path*",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/:path*"
+    },
+    {
+      "source": "/rest/:path*",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/:path*"
+    },
+    {
+      "source": "/storage/:path*",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/storage/:path*"
+    },
+    {
+      "source": "/functions/:path*",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/functions/:path*"
+    },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
