@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 const navItemClass =
   "justify-start gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-semibold transition-all data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm hover:bg-slate-50";
@@ -276,9 +277,7 @@ export function AdminSidebar({
     >
       <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="size-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
-            <img src="/logo.png" alt="Apna Intern" className="h-full w-full object-cover" />
-          </div>
+          <BrandLogo variant="icon" size="sm" className="size-9" />
           <div className="min-w-0">
             <p className="truncate text-sm font-black text-slate-900">Admin Portal</p>
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">

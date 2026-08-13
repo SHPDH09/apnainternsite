@@ -1,4 +1,5 @@
 import { SiteNav } from "@/components/SiteNav";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -58,7 +59,7 @@ const Privacy = () => {
             {/* Document Header */}
             <div className="border-b-2 border-slate-900 pb-6 mb-10 text-center relative z-10">
               <div className="flex justify-center items-center gap-3 mb-3">
-                <img src="/logo.png" alt="Apna Intern Logo" className="h-10 w-auto object-contain" />
+                <BrandLogo size="md" className="max-w-[240px]" />
               </div>
               <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight uppercase">
                 Apna Intern

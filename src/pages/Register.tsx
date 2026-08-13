@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { RegistrationForm } from "@/components/RegistrationForm";
 import { UnpaidStudentPaymentPanel } from "@/components/UnpaidStudentPaymentPanel";
 import { SiteNav } from "@/components/SiteNav";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Card } from "@/components/ui/card";
 import { captureReferralFromUrl, logReferralClickFromUrl } from "@/lib/referral";
@@ -64,8 +65,8 @@ const Register = () => {
         <div className="container mx-auto px-4">
           <Card className="max-w-3xl mx-auto p-6 md:p-10 shadow-elegant animate-fade-in-up">
             <div className="text-center mb-6">
-              <div className="inline-flex size-14 items-center justify-center rounded-xl overflow-hidden mb-3 shadow-soft">
-                <img src="/logo.png" alt="Apna Intern" className="w-full h-full object-cover" />
+              <div className="mb-4 flex justify-center">
+                <BrandLogo size="lg" className="max-w-[260px]" />
               </div>
               <h1 className="text-3xl md:text-4xl font-bold mb-1">
                 {showPayPanel ? payTitle : "Student Registration"}

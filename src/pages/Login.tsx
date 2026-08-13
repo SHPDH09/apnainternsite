@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SiteNav } from "@/components/SiteNav";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveDashboardPath } from "@/lib/resolveDashboardPath";
@@ -839,11 +840,8 @@ const Login = () => {
             }
           >
             <div className="flex justify-center mb-8">
-              <Link to="/" className="flex items-center gap-3">
-                <div className="size-12 rounded-xl overflow-hidden shadow-elegant">
-                  <img src="/logo.png" alt="Apna Intern" className="w-full h-full object-cover" />
-                </div>
-                <span className="text-2xl font-bold tracking-tighter text-slate-900">Apna Intern</span>
+              <Link to="/" className="inline-flex">
+                <BrandLogo size="lg" className="max-w-[280px]" />
               </Link>
             </div>
             <div className="text-center mb-8">
@@ -1167,7 +1165,7 @@ const Login = () => {
                     {verifyingCaptcha ? "Verifying..." : captchaVerified ? "Success!" : "Verify you are human"}
                   </span>
                   <div className="ml-auto opacity-30 flex items-center gap-1">
-                    <img src="/logo.png" alt="Security" className="w-5 h-5 grayscale object-contain" />
+                    <BrandLogo variant="icon" size="xs" className="w-5 h-5 grayscale" />
                     <span className="text-[10px] font-bold uppercase">Protected</span>
                   </div>
                 </div>
