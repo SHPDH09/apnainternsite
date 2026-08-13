@@ -70,17 +70,12 @@ export const OfferLetter = forwardRef<HTMLDivElement, OfferLetterProps>(({ profi
         >
           <div className="flex items-center gap-3 min-w-0 shrink">
             <img
-              src="/logo.png"
+              src="/certificate/header-logo.png"
               alt="Apna Intern"
-              width={56}
-              height={56}
-              className="h-14 w-14 shrink-0 rounded-md object-contain bg-white"
+              className="h-14 w-auto max-w-[220px] shrink-0 object-contain"
               crossOrigin="anonymous"
               decoding="sync"
             />
-            <span className="text-[20px] font-bold text-sky-600 tracking-tight whitespace-nowrap">
-              Apna <span className="text-slate-700">Intern</span>
-            </span>
           </div>
 
           <div className="text-right text-[10px] leading-[1.4] text-slate-700 shrink-0 max-w-[240px]">

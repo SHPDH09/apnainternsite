@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Papa from "papaparse";
 import { SiteNav } from "@/components/SiteNav";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1669,9 +1670,7 @@ const SuperAdmin = () => {
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="size-8 rounded-lg overflow-hidden bg-white border border-slate-100">
-              <img src="/logo.png" alt="Apna Intern" className="w-full h-full object-cover" />
-            </div>
+            <BrandLogo size="sm" className="max-w-[160px]" />
             <span className="font-bold text-slate-900 hidden sm:block">Super Portal</span>
           </div>
 

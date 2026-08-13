@@ -1,29 +1,16 @@
 import { Phone, Mail, MapPin, Instagram, Youtube, Linkedin, Facebook } from "lucide-react";
 import { Link } from "react-router-dom";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 export const SiteFooter = () => (
   <footer id="footer" className="border-t border-slate-800 bg-slate-950 text-slate-400">
     <div className="mx-auto max-w-[1200px] px-8 py-16">
       <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-6">
-          <div className="flex flex-col gap-0.5">
-            <div className="flex items-center gap-2.5">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg overflow-hidden bg-white">
-                <img src="/logo.png" alt="Apna Intern" className="w-full h-full object-cover" />
-              </div>
-              <div className="leading-none">
-                <div className="font-display font-bold text-2xl tracking-tighter text-white">
-                  <span className="text-[#5ea4e8]">Apna</span>
-                  <span> Intern</span>
-                </div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mt-0.5">
-                  Internship Provider
-                </div>
-              </div>
-            </div>
-            <div className="text-[9px] uppercase tracking-wide text-slate-500 leading-snug max-w-[17.5rem]">
-              Apna Intern
-            </div>
+          <div className="flex flex-col gap-4">
+            <Link to="/" className="inline-flex w-fit rounded-xl bg-white px-3 py-2">
+              <BrandLogo size="md" className="max-w-[220px]" />
+            </Link>
           </div>
           <p className="text-sm leading-relaxed text-slate-400">
             India&apos;s trusted platform for UGC-compliant internship programmes, digital certification, and academic credit tracking.
