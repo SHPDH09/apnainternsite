@@ -136,7 +136,7 @@ export function PopupManagementPanel({ client, currentUserId }: Props) {
     } catch (err) {
       const msg = formatSitePopupError(err);
       if (isSitePopupsTableMissing(err)) {
-        toast.message("Setting up popup storage… refresh in a few seconds.");
+        toast.message("Popup storage is syncing… try again in a moment.");
       } else {
         toast.error(msg);
       }

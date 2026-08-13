@@ -5,6 +5,15 @@ import {
   type SitePopup,
   type SitePopupType,
 } from "@/lib/sitePopups";
+import {
+  createFallbackPopup,
+  deleteFallbackPopup,
+  fallbackWriteToPopup,
+  fetchFallbackAdminPopups,
+  fetchFallbackPublicPopups,
+  sitePopupsTableAvailable,
+  updateFallbackPopup,
+} from "@/lib/sitePopupsFallbackStorage";
 
 const POPUP_BUCKET = "logos";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -87,6 +96,9 @@ export type SitePopupWrite = {
 };
 
 export async function fetchPublicSitePopups(client: SupabaseClient): Promise<SitePopup[]> {
+  if (!(await sitePopupsTableAvailable(client))) {
+    return (await fetchFallbackPublicPopups(client)).map(mapRow);
+  }
   const { data, error } = await withPopupStorageRetry(client, () =>
     client
       .from("site_popups")
@@ -98,13 +110,18 @@ export async function fetchPublicSitePopups(client: SupabaseClient): Promise<Sit
       .order("created_at", { ascending: false })
   );
   if (error) {
-    if (isSitePopupsTableMissing(error)) return [];
+    if (isSitePopupsTableMissing(error)) {
+      return (await fetchFallbackPublicPopups(client)).map(mapRow);
+    }
     throw error;
   }
   return ((data || []) as SitePopup[]).map(mapRow);
 }
 
 export async function fetchAdminSitePopups(client: SupabaseClient): Promise<SitePopup[]> {
+  if (!(await sitePopupsTableAvailable(client))) {
+    return (await fetchFallbackAdminPopups(client)).map(mapRow);
+  }
   await ensureSiteCmsTables(client);
   const { data, error } = await withPopupStorageRetry(client, () =>
     client
@@ -113,7 +130,12 @@ export async function fetchAdminSitePopups(client: SupabaseClient): Promise<Site
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false })
   );
-  if (error) throw error;
+  if (error) {
+    if (isSitePopupsTableMissing(error)) {
+      return (await fetchFallbackAdminPopups(client)).map(mapRow);
+    }
+    throw error;
+  }
   return ((data || []) as SitePopup[]).map(mapRow);
 }
 
@@ -122,6 +144,10 @@ export async function createSitePopup(
   payload: SitePopupWrite,
   createdBy?: string | null
 ): Promise<SitePopup> {
+  if (!(await sitePopupsTableAvailable(client))) {
+    const row = await createFallbackPopup(client, fallbackWriteToPopup(payload));
+    return mapRow(row);
+  }
   await ensureSiteCmsTables(client);
   const { data, error } = await withPopupStorageRetry(client, () =>
     client
@@ -134,7 +160,13 @@ export async function createSitePopup(
       .select("*")
       .single()
   );
-  if (error) throw error;
+  if (error) {
+    if (isSitePopupsTableMissing(error)) {
+      const row = await createFallbackPopup(client, fallbackWriteToPopup(payload));
+      return mapRow(row);
+    }
+    throw error;
+  }
   return mapRow(data as SitePopup);
 }
 
@@ -143,19 +175,39 @@ export async function updateSitePopup(
   id: string,
   payload: Partial<SitePopupWrite>
 ): Promise<void> {
+  if (!(await sitePopupsTableAvailable(client))) {
+    await updateFallbackPopup(client, id, payload);
+    return;
+  }
   const { error } = await client
     .from("site_popups")
     .update({ ...payload, updated_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) throw error;
+  if (error) {
+    if (isSitePopupsTableMissing(error)) {
+      await updateFallbackPopup(client, id, payload);
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function deleteSitePopup(client: SupabaseClient, row: SitePopup): Promise<void> {
   if (row.image_path) {
     await client.storage.from(POPUP_BUCKET).remove([row.image_path]);
   }
+  if (!(await sitePopupsTableAvailable(client))) {
+    await deleteFallbackPopup(client, row.id);
+    return;
+  }
   const { error } = await client.from("site_popups").delete().eq("id", row.id);
-  if (error) throw error;
+  if (error) {
+    if (isSitePopupsTableMissing(error)) {
+      await deleteFallbackPopup(client, row.id);
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function uploadPopupImage(
