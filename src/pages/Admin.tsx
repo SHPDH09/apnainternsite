@@ -3227,6 +3227,7 @@ Apna Intern Team`;
       onValueChange={(value) => {
         setActiveTab(value);
         setMobileNavOpen(false);
+        navigate(`/admin?tab=${encodeURIComponent(value)}`, { replace: true });
       }}
       className="flex min-h-screen bg-slate-50"
     >
@@ -3255,6 +3256,11 @@ Apna Intern Team`;
           showSidebar={showSidebar}
           onOpenMenu={() => setMobileNavOpen(true)}
           onShowSidebar={() => setShowSidebar(true)}
+          onOpenPopups={() => {
+            setActiveTab("popups");
+            setMobileNavOpen(false);
+            navigate("/admin?tab=popups", { replace: true });
+          }}
           visitorCount={visitorCount}
           uniqueVisitorCount={uniqueVisitorCount}
           toolbar={dashboardToolbar}
