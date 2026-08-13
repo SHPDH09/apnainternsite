@@ -241,6 +241,121 @@ export const RegistrationForm = ({
     }
   };
 
+  const selectedCollege = useMemo(
+    () => colleges.find((c) => c.id === collegeId),
+    [colleges, collegeId]
+  );
+
+  useEffect(() => {
+    const def = defaultPasswordForCollege(selectedUni?.name, selectedCollege?.name);
+    if (def) {
+      setPassword(def);
+      setConfirmPw(def);
+    }
+  }, [selectedUni?.name, selectedCollege?.name]);
+
+  useEffect(() => {
+    if (!showConsentStep) {
+      setConsentLetterFile(null);
+      consentFormUrlRef.current = null;
+    }
+  }, [showConsentStep]);
+
+  // College roster auto-fill state
+  const [rosterStatus, setRosterStatus] = useState<
+    "idle" | "checking" | "matched" | "claimed" | "none" | "ambiguous"
+  >("idle");
+  const [rosterMatchedName, setRosterMatchedName] = useState<string>("");
+  const [rosterAlreadyRegisteredOpen, setRosterAlreadyRegisteredOpen] = useState(false);
+
+  const personalFieldsSchema = z.object({
+    fullName: z.string().trim().min(2).max(100),
+    gender: z.string().min(1),
+    parentName: z.string().trim().min(2).max(100),
+    contact: z.string().regex(/^[6-9]\d{9}$/),
+    email: z.string().email().max(255),
+  });
+
+  const isSectionComplete = (section: number): boolean => {
+    if (section === 1) {
+      return personalFieldsSchema.safeParse({ fullName, gender, parentName, contact, email }).success;
+    }
+    if (section === 2) {
+      if (isBeuFlow) return Boolean(universityId && collegeId && beuDetailsCompleted);
+      return Boolean(universityId && collegeId && degree && classSem && session && rollNo && course);
+    }
+    if (section === 3) {
+      if (rosterStatus === "matched" && !isAdminVariant) return true;
+      const hasAny = emName.trim() || emPhone.trim() || emRel;
+      if (!hasAny) return true;
+      return z
+        .object({
+          emName: z.string().trim().min(2).max(100),
+          emPhone: z.string().regex(/^[6-9]\d{9}$/),
+          emRel: z.string().min(1),
+        })
+        .safeParse({ emName, emPhone, emRel }).success;
+    }
+    if (section === 4) {
+      return !validateRegistrationPassword(password, confirmPw) && agree;
+    }
+    if (section === 5) {
+      if (!showConsentStep) return true;
+      if (!consentLetterFile) return true;
+      return (
+        consentLetterFile.size <= CONSENT_MAX_BYTES && isAllowedConsentLetterFile(consentLetterFile)
+      );
+    }
+    return false;
+  };
+
+  const sectionNumbers = useMemo(
+    () => (showConsentStep ? [1, 2, 3, 4, 5] : [1, 2, 3, 4]),
+    [showConsentStep]
+  );
+
+  const effectiveStep = useMemo(() => {
+    let highest = 1;
+    for (const n of sectionNumbers) {
+      if (isSectionComplete(n)) highest = Math.min(n + 1, sectionNumbers[sectionNumbers.length - 1]);
+      else break;
+    }
+    return highest;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sectionNumbers,
+    fullName,
+    gender,
+    parentName,
+    contact,
+    email,
+    universityId,
+    collegeId,
+    degree,
+    classSem,
+    session,
+    rollNo,
+    course,
+    beuDetailsCompleted,
+    isBeuFlow,
+    emName,
+    emPhone,
+    emRel,
+    rosterStatus,
+    isAdminVariant,
+    password,
+    confirmPw,
+    agree,
+    consentLetterFile,
+    showConsentStep,
+  ]);
+
+  const completedSectionCount = useMemo(
+    () => sectionNumbers.filter((n) => isSectionComplete(n)).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sectionNumbers, effectiveStep, fullName, gender, parentName, contact, email, universityId, collegeId, degree, classSem, session, rollNo, course, beuDetailsCompleted, emName, emPhone, emRel, password, confirmPw, agree, consentLetterFile]
+  );
+
   const saveRegistrationLeadDraft = async (extraPayload: Record<string, unknown> = {}) => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail.includes("@") || isAdminVariant || skipRegistrationLeadsRef.current) return;
@@ -277,33 +392,6 @@ export const RegistrationForm = ({
       cybercafe_email: cyberData.email || null,
     });
   };
-
-  const selectedCollege = useMemo(
-    () => colleges.find((c) => c.id === collegeId),
-    [colleges, collegeId]
-  );
-
-  useEffect(() => {
-    const def = defaultPasswordForCollege(selectedUni?.name, selectedCollege?.name);
-    if (def) {
-      setPassword(def);
-      setConfirmPw(def);
-    }
-  }, [selectedUni?.name, selectedCollege?.name]);
-
-  useEffect(() => {
-    if (!showConsentStep) {
-      setConsentLetterFile(null);
-      consentFormUrlRef.current = null;
-    }
-  }, [showConsentStep]);
-
-  // College roster auto-fill state
-  const [rosterStatus, setRosterStatus] = useState<
-    "idle" | "checking" | "matched" | "claimed" | "none" | "ambiguous"
-  >("idle");
-  const [rosterMatchedName, setRosterMatchedName] = useState<string>("");
-  const [rosterAlreadyRegisteredOpen, setRosterAlreadyRegisteredOpen] = useState(false);
 
   // Save incomplete registrations as leads (public flow only; step ≥ 2).
   useEffect(() => {
@@ -538,94 +626,6 @@ export const RegistrationForm = ({
       setCheckingRegistration(false);
     }
   };
-
-  const personalFieldsSchema = z.object({
-    fullName: z.string().trim().min(2).max(100),
-    gender: z.string().min(1),
-    parentName: z.string().trim().min(2).max(100),
-    contact: z.string().regex(/^[6-9]\d{9}$/),
-    email: z.string().email().max(255),
-  });
-
-  const isSectionComplete = (section: number): boolean => {
-    if (section === 1) {
-      return personalFieldsSchema.safeParse({ fullName, gender, parentName, contact, email }).success;
-    }
-    if (section === 2) {
-      if (isBeuFlow) return Boolean(universityId && collegeId && beuDetailsCompleted);
-      return Boolean(universityId && collegeId && degree && classSem && session && rollNo && course);
-    }
-    if (section === 3) {
-      if (rosterStatus === "matched" && !isAdminVariant) return true;
-      const hasAny = emName.trim() || emPhone.trim() || emRel;
-      if (!hasAny) return true;
-      return z
-        .object({
-          emName: z.string().trim().min(2).max(100),
-          emPhone: z.string().regex(/^[6-9]\d{9}$/),
-          emRel: z.string().min(1),
-        })
-        .safeParse({ emName, emPhone, emRel }).success;
-    }
-    if (section === 4) {
-      return !validateRegistrationPassword(password, confirmPw) && agree;
-    }
-    if (section === 5) {
-      if (!showConsentStep) return true;
-      if (!consentLetterFile) return true;
-      return (
-        consentLetterFile.size <= CONSENT_MAX_BYTES && isAllowedConsentLetterFile(consentLetterFile)
-      );
-    }
-    return false;
-  };
-
-  const sectionNumbers = useMemo(
-    () => (showConsentStep ? [1, 2, 3, 4, 5] : [1, 2, 3, 4]),
-    [showConsentStep]
-  );
-
-  const effectiveStep = useMemo(() => {
-    let highest = 1;
-    for (const n of sectionNumbers) {
-      if (isSectionComplete(n)) highest = Math.min(n + 1, sectionNumbers[sectionNumbers.length - 1]);
-      else break;
-    }
-    return highest;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    sectionNumbers,
-    fullName,
-    gender,
-    parentName,
-    contact,
-    email,
-    universityId,
-    collegeId,
-    degree,
-    classSem,
-    session,
-    rollNo,
-    course,
-    beuDetailsCompleted,
-    isBeuFlow,
-    emName,
-    emPhone,
-    emRel,
-    rosterStatus,
-    isAdminVariant,
-    password,
-    confirmPw,
-    agree,
-    consentLetterFile,
-    showConsentStep,
-  ]);
-
-  const completedSectionCount = useMemo(
-    () => sectionNumbers.filter((n) => isSectionComplete(n)).length,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sectionNumbers, effectiveStep, fullName, gender, parentName, contact, email, universityId, collegeId, degree, classSem, session, rollNo, course, beuDetailsCompleted, emName, emPhone, emRel, password, confirmPw, agree, consentLetterFile]
-  );
 
   const scrollToSection = (index: number) => {
     sectionRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "start" });
