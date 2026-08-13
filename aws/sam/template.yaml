@@ -53,9 +53,37 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: !Ref StageName
-      # CORS is handled in Express (aws/server/app.ts) so we can reflect the
-      # request Origin. API Gateway "*" CORS overwrites Lambda headers and breaks
-      # credentialed browser calls from Vercel.
+      # Fallback CORS for OPTIONS when Lambda is cold/unavailable.
+      # Express (app.ts) still sets credentialed Origin on actual responses.
+      CorsConfiguration:
+        AllowOrigins:
+          - https://apnaintern.in
+          - https://www.apnaintern.in
+          - https://ezyintern.in
+          - https://www.ezyintern.in
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+          - HEAD
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+          - apikey
+          - Prefer
+          - X-Client-Info
+          - X-Supabase-Api-Version
+          - X-Requested-With
+          - Accept
+          - X-CSRF-Token
+          - x-razorpay-signature
+          - accept-profile
+          - content-profile
+        AllowCredentials: true
+        MaxAge: 86400
 
   ApiFunction:
     Type: AWS::Serverless::Function

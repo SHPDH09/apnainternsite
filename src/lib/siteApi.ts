@@ -10,12 +10,14 @@
  * Set `VITE_SITE_API_ORIGIN` to your Lambda URL (no trailing slash), e.g.
  * `https://abc.execute-api.ap-south-1.amazonaws.com/staging`
  */
+import { resolveBrowserApiOrigin } from "@/lib/supabaseEnv";
+
 export function getSiteApiOrigin(): string {
   if (typeof window === "undefined") return "";
   const fromEnv = import.meta.env.VITE_SITE_API_ORIGIN as string | undefined;
-  if (fromEnv?.trim()) return fromEnv.trim().replace(/\/$/, "");
+  if (fromEnv?.trim()) return resolveBrowserApiOrigin(fromEnv.trim());
   const appUrl = import.meta.env.VITE_PUBLIC_APP_URL as string | undefined;
-  if (appUrl?.trim()) return appUrl.trim().replace(/\/$/, "");
+  if (appUrl?.trim()) return resolveBrowserApiOrigin(appUrl.trim());
   return "";
 }
 
