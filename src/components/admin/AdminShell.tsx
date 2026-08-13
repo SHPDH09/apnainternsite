@@ -64,7 +64,7 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   gallery: "Gallery Management",
   "home-cms": "Home Page Content",
   "consult-letter": "Consent Form Template",
-  popups: "Popup Management",
+  popups: "Popup Message Management",
   settings: "System Settings",
 };
 
@@ -84,6 +84,9 @@ function AdminNavItems({
       <div className={sectionClass}>Overview</div>
       <TabsTrigger value="dashboard" className={navItemClass}>
         <LayoutDashboard className="size-4 shrink-0" /> Dashboard
+      </TabsTrigger>
+      <TabsTrigger value="popups" className={cn(navItemClass, "data-[state=active]:bg-violet-600")}>
+        <Bell className="size-4 shrink-0" /> Popup Msg Manage
       </TabsTrigger>
 
       {isServiceEnabled("students") && (
@@ -352,6 +355,7 @@ type AdminTopBarProps = {
   showSidebar: boolean;
   onOpenMenu: () => void;
   onShowSidebar: () => void;
+  onOpenPopups?: () => void;
   visitorCount: number;
   uniqueVisitorCount: number;
   toolbar?: ReactNode;
@@ -362,6 +366,7 @@ export function AdminTopBar({
   showSidebar,
   onOpenMenu,
   onShowSidebar,
+  onOpenPopups,
   visitorCount,
   uniqueVisitorCount,
   toolbar,
@@ -401,6 +406,19 @@ export function AdminTopBar({
       </div>
 
       <div className="flex shrink-0 items-center gap-3">
+        {onOpenPopups ? (
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 shrink-0 font-black gap-1.5 px-3"
+            variant={activeTab === "popups" ? "default" : "outline"}
+            onClick={onOpenPopups}
+          >
+            <Bell className="size-3.5" />
+            <span className="hidden sm:inline">Popup Msg Manage</span>
+            <span className="sm:hidden">Popups</span>
+          </Button>
+        ) : null}
         <div className="hidden items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-1.5 sm:flex">
           <div className="text-center">
             <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">

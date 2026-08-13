@@ -112,6 +112,14 @@ const App = () => (
             }
           />
           <Route
+            path="/admin/popups"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
+                <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin/engineering-management"
             element={
               <ProtectedRoute allowedRoles={["admin", "super_admin"]}>

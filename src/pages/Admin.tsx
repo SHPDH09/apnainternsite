@@ -221,7 +221,14 @@ export default function Admin() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  const [activeTab, setActiveTab] = useState(queryParams.get("tab") || "dashboard");
+  const tabFromUrl =
+    location.pathname.replace(/\/+$/, "") === "/admin/popups"
+      ? "popups"
+      : queryParams.get("tab") || "dashboard";
+  const [activeTab, setActiveTab] = useState(tabFromUrl);
+  useEffect(() => {
+    setActiveTab(tabFromUrl);
+  }, [tabFromUrl]);
   const [showSidebar, setShowSidebar] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -3227,6 +3234,8 @@ Apna Intern Team`;
       onValueChange={(value) => {
         setActiveTab(value);
         setMobileNavOpen(false);
+        if (value === "popups") navigate("/admin/popups", { replace: true });
+        else navigate(`/admin?tab=${encodeURIComponent(value)}`, { replace: true });
       }}
       className="flex min-h-screen bg-slate-50"
     >
@@ -3255,13 +3264,35 @@ Apna Intern Team`;
           showSidebar={showSidebar}
           onOpenMenu={() => setMobileNavOpen(true)}
           onShowSidebar={() => setShowSidebar(true)}
+          onOpenPopups={() => {
+            setActiveTab("popups");
+            setMobileNavOpen(false);
+            navigate("/admin/popups", { replace: true });
+          }}
           visitorCount={visitorCount}
           uniqueVisitorCount={uniqueVisitorCount}
           toolbar={dashboardToolbar}
         />
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("popups");
+              setMobileNavOpen(false);
+              navigate("/admin/popups", { replace: true });
+            }}
+            className="mb-4 flex w-full items-center justify-between rounded-2xl bg-violet-600 px-4 py-3 text-left text-white shadow-lg hover:bg-violet-700"
+          >
+            <span className="text-sm font-black tracking-tight">Popup Msg Manage</span>
+            <span className="text-xs font-bold uppercase tracking-widest opacity-90">
+              Open popup messages →
+            </span>
+          </button>
           <div className="mx-auto w-full max-w-[1400px] rounded-[1.75rem] border border-white bg-white/70 p-5 shadow-xl backdrop-blur-3xl md:p-8">
+              {activeTab === "popups" ? (
+                <PopupManagementPanel client={supabase} currentUserId={currentUserId} />
+              ) : null}
               <TabsContent value="dashboard" className="animate-fade-in space-y-8 mt-0">
               {/* Visual Analytics Hub */}
               <div className="grid lg:grid-cols-3 gap-6">
@@ -4901,10 +4932,6 @@ Apna Intern Team`;
 
             <TabsContent value="consult-letter" className="mt-0">
               <ConsultLetterManagementPanel client={supabase} currentUserId={currentUserId} />
-            </TabsContent>
-
-            <TabsContent value="popups" className="mt-0">
-              <PopupManagementPanel client={supabase} currentUserId={currentUserId} />
             </TabsContent>
           </div>
         </main>
