@@ -256,6 +256,7 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
   ensure_payment_success_log: { args: ["p_row"], auth: "auth" },
 
   admin_ensure_lead_crm: { args: ["p_rows"], auth: "admin" },
+  admin_ensure_site_cms_tables: { args: [], auth: "admin" },
   admin_assign_leads: { args: ["p_staff_ids", "p_lead_crm_ids", "p_mode"], auth: "admin" },
   admin_unassign_leads: { args: ["p_lead_crm_ids"], auth: "admin" },
   mark_lead_crm_converted_by_email: {

@@ -2,10 +2,11 @@ import { query } from "./db";
 
 const BOOTSTRAPPED = new Set<string>();
 
-const CMS_TABLES = new Set(["site_popups", "site_contact_details", "site_whatsapp_links"]);
+const CMS_TABLES = ["site_popups", "site_contact_details", "site_whatsapp_links"] as const;
+const CMS_TABLE_SET = new Set<string>(CMS_TABLES);
 
 export function isCmsTable(table: string): boolean {
-  return CMS_TABLES.has(table);
+  return CMS_TABLE_SET.has(table);
 }
 
 export function isMissingRelationError(err: unknown, table?: string): boolean {
@@ -173,4 +174,12 @@ export async function ensureCmsTable(table: string): Promise<void> {
   else if (table === "site_contact_details") await bootstrapSiteContacts();
   else if (table === "site_whatsapp_links") await bootstrapSiteWhatsApp();
   BOOTSTRAPPED.add(table);
+}
+
+/** Ensure all site CMS tables exist (popups, contacts, WhatsApp links). */
+export async function ensureAllCmsTables(): Promise<{ ok: true; tables: string[] }> {
+  for (const table of CMS_TABLES) {
+    await ensureCmsTable(table);
+  }
+  return { ok: true, tables: [...CMS_TABLES] };
 }

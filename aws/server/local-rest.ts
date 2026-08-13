@@ -9,6 +9,7 @@ import { getRpcDef } from "./rpc-registry";
 import { callRpc } from "./db";
 import { verifyToken } from "./local-jwt";
 import { ensureCmsTable, isCmsTable, isMissingRelationError } from "./cms-bootstrap";
+import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
 
 function jwtFromRequest(req: Request) {
   const h = String(req.headers.authorization || "");
@@ -570,6 +571,11 @@ export async function restRpc(req: Request, res: Response) {
       unknown
     >;
     const jwt = jwtFromRequest(req);
+    if (isTsRpc(name)) {
+      const data = await runTsRpc(name);
+      res.json(data);
+      return;
+    }
     const def = getRpcDef(name);
     // Admin/student RPCs require a valid session JWT (sets auth.uid() on RDS).
     if (name.startsWith("admin_") || name.startsWith("student_")) {
