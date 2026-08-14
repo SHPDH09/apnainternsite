@@ -15,6 +15,7 @@ import { loadAwsRdsDatabaseUrl, pgClientConfig } from "./aws-rds-url.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 const files = [
+  "aws/scripts/54-rds-notifications-columns.sql",
   "aws/scripts/53-rds-notifications-setup.sql",
   "supabase/hotfix_internship_mode_filtering.sql",
 ];
