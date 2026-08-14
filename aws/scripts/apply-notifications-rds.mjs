@@ -10,23 +10,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { loadAwsRdsDatabaseUrl, pgClientConfig } from "./aws-rds-url.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-
-function loadDatabaseUrl() {
-  const fromEnv = process.env.DATABASE_URL?.trim();
-  if (fromEnv) return fromEnv.replace(/^["']|["']$/g, "");
-  for (const file of [".env.awsrds.local", ".env.awsrds", ".env"]) {
-    const p = path.join(root, file);
-    if (!fs.existsSync(p)) continue;
-    const m = fs.readFileSync(p, "utf8").match(/^DATABASE_URL=(.+)$/m);
-    if (m) return m[1].trim().replace(/^["']|["']$/g, "");
-  }
-  throw new Error(
-    "Set DATABASE_URL to your RDS connection string, e.g.\n" +
-      "postgresql://USER:PASSWORD@database-1-instance-1.cgve8kwacke8.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=require"
-  );
-}
 
 const files = [
   "aws/scripts/53-rds-notifications-setup.sql",
@@ -34,16 +20,8 @@ const files = [
 ];
 
 async function main() {
-  const raw = loadDatabaseUrl();
-  if (/127\.0\.0\.1|localhost/.test(raw) && !process.env.FORCE_LOCAL_RDS) {
-    console.warn("⚠️  DATABASE_URL points to localhost. Set production RDS URL or FORCE_LOCAL_RDS=1");
-  }
-
-  const useSsl = /sslmode=require/i.test(raw) || /rds\.amazonaws\.com/i.test(raw);
-  const client = new pg.Client({
-    connectionString: raw.replace(/([?&])sslmode=[^&]*/gi, "$1").replace(/[?&]$/, ""),
-    ssl: useSsl ? { rejectUnauthorized: false } : undefined,
-  });
+  const raw = loadAwsRdsDatabaseUrl();
+  const client = new pg.Client(pgClientConfig(raw));
 
   await client.connect();
   const info = await client.query(

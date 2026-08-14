@@ -8,20 +8,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { loadAwsRdsDatabaseUrl, pgClientConfig } from "./aws-rds-url.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-
-function loadDatabaseUrl() {
-  const fromEnv = process.env.DATABASE_URL?.trim();
-  if (fromEnv) return fromEnv.replace(/^["']|["']$/g, "");
-  for (const file of [".env.awsrds.local", ".env.awsrds", ".env"]) {
-    const p = path.join(root, file);
-    if (!fs.existsSync(p)) continue;
-    const m = fs.readFileSync(p, "utf8").match(/^DATABASE_URL=(.+)$/m);
-    if (m) return m[1].trim().replace(/^["']|["']$/g, "");
-  }
-  throw new Error("Set DATABASE_URL or add it to .env.awsrds.local");
-}
 
 const files = [
   "aws/scripts/50-rds-site-popups.sql",
@@ -29,12 +18,8 @@ const files = [
 ];
 
 async function main() {
-  const raw = loadDatabaseUrl();
-  const useSsl = /sslmode=require/i.test(raw) || /rds\.amazonaws\.com/i.test(raw);
-  const client = new pg.Client({
-    connectionString: raw.replace(/([?&])sslmode=[^&]*/gi, "$1").replace(/[?&]$/, ""),
-    ssl: useSsl ? { rejectUnauthorized: false } : undefined,
-  });
+  const raw = loadAwsRdsDatabaseUrl();
+  const client = new pg.Client(pgClientConfig(raw));
 
   await client.connect();
   const info = await client.query("SELECT current_database() AS db, current_user AS usr");
