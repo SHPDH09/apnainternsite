@@ -126,6 +126,14 @@
     opacity: 1;
     transform: translateY(0);
   }
+
+  .admin-shell {
+    --admin-sidebar-width: 16.5rem;
+  }
+
+  .admin-shell .admin-sidebar [data-state="active"] svg {
+    opacity: 1;
+  }
 }
 
 @keyframes progress {

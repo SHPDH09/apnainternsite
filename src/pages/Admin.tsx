@@ -22,7 +22,7 @@ import {
   isAdminIntentionalLogout,
 } from "@/lib/adminAuthSession";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Award, Users, Building2, Edit, Eye, MoreHorizontal, Shield, Mail, Phone, User, BookOpen, Heart, LogIn, Ban, CheckCircle2, Download, Briefcase, UserPlus, Filter, Search, Calendar, ToggleLeft, ToggleRight, DollarSign, GraduationCap, Bell, FileText, Clock, Activity, TrendingUp, CheckSquare, XCircle } from "lucide-react";
+import { Loader2, Plus, Trash2, Award, Users, Building2, Edit, Eye, MoreHorizontal, Shield, Mail, Phone, User, BookOpen, Heart, LogIn, Ban, CheckCircle2, Download, Briefcase, UserPlus, Filter, Search, Calendar, ToggleLeft, ToggleRight, DollarSign, GraduationCap, Bell, FileText, Clock, CheckSquare, XCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -37,12 +37,10 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { 
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, LineChart, Line
-} from 'recharts';
 import AIAssignmentBuilder from "@/components/AIAssignmentBuilder";
+import { AdminDashboardPanel } from "@/components/admin/AdminDashboardPanel";
 import { AdminMobileNav, AdminSidebar, AdminTopBar } from "@/components/admin/AdminShell";
+import { adminPageClass } from "@/components/admin/ui";
 import { ChangePinModal } from "@/components/ChangePinModal";
 import { Sparkles, KeyRound, Store, Share2, FileSpreadsheet, IndianRupee, Settings, Wrench, Cog } from "lucide-react";
 import { OfferLetter } from "@/components/OfferLetter";
@@ -275,6 +273,7 @@ export default function Admin() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [cyberCafes, setCyberCafes] = useState<any[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
   const consentUploadInputRef = useRef<HTMLInputElement>(null);
   const consentUploadStudentRef = useRef<StudentDirectoryStudent | null>(null);
   const [isAIBuilderOpen, setIsAIBuilderOpen] = useState(false);
@@ -901,71 +900,6 @@ export default function Admin() {
     setAllLeadsComms(leads);
   };
 
-  // Dashboard Visual Logic
-  const getRevenueData = () => {
-    const daily: any = {};
-    payments.forEach(p => {
-      const date = new Date(p.created_at).toLocaleDateString();
-      daily[date] = (daily[date] || 0) + (p.amount_paise / 100);
-    });
-    return Object.entries(daily).map(([date, amount]) => ({ date, amount })).slice(-7);
-  };
-
-  const [dashStartDate, setDashStartDate] = useState("");
-  const [dashEndDate, setDashEndDate] = useState("");
-  const [livePulse, setLivePulse] = useState<{name: string, value: number}[]>(
-    Array.from({length: 12}, (_, i) => ({name: i.toString(), value: 40 + Math.random() * 20}))
-  );
-  const [liveTraffic, setLiveTraffic] = useState(86);
-  const [monitoringStatus, setMonitoringStatus] = useState("SCANNING...");
-
-  useEffect(() => {
-    if (activeTab !== "dashboard") return;
-    const interval = setInterval(() => {
-      setLivePulse(prev => {
-        const newVal = 35 + Math.random() * 35;
-        return [...prev.slice(1), {name: Date.now().toString(), value: newVal}];
-      });
-      setLiveTraffic(prev => prev + (Math.random() > 0.5 ? 1 : -1));
-      
-      const statuses = ["MONITORING...", "NODE ACTIVE", "TRAFFIC STABLE", "SYSTEM OPTIMIZED"];
-      setMonitoringStatus(statuses[Math.floor(Math.random() * statuses.length)]);
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [activeTab]);
-
-  const getFilteredRevenueData = () => {
-    let filtered = payments;
-    if (dashStartDate) filtered = filtered.filter(p => p.created_at >= `${dashStartDate}T00:00:00`);
-    if (dashEndDate) filtered = filtered.filter(p => p.created_at <= `${dashEndDate}T23:59:59`);
-    
-    const daily: any = {};
-    filtered.forEach(p => {
-      const date = new Date(p.created_at).toLocaleDateString();
-      daily[date] = (daily[date] || 0) + (p.amount_paise / 100);
-    });
-    return Object.entries(daily).map(([date, amount]) => ({ date, amount }));
-  };
-
-  const getDashboardStats = () => {
-    const today = new Date().toLocaleDateString();
-    const yesterday = new Date(Date.now() - 86400000).toLocaleDateString();
-    
-    const todayRevenue = payments.filter(p => new Date(p.created_at).toLocaleDateString() === today)
-      .reduce((acc, curr) => acc + (curr.amount_paise / 100), 0);
-    const yesterdayRevenue = payments.filter(p => new Date(p.created_at).toLocaleDateString() === yesterday)
-      .reduce((acc, curr) => acc + (curr.amount_paise / 100), 0);
-    
-    const todayEnrolledCount = payments.filter(p => new Date(p.created_at).toLocaleDateString() === today).length;
-    const todayLeadsCount = cancelledPayments.filter(p => new Date(p.created_at).toLocaleDateString() === today).length;
-    
-    const growth = yesterdayRevenue === 0 ? 100 : ((todayRevenue - yesterdayRevenue) / yesterdayRevenue * 100);
-
-    return { todayRevenue, yesterdayRevenue, growth, todayEnrolledCount, todayLeadsCount, today };
-  };
-
-  const stats = getDashboardStats();
-
   const logAdminAction = async (action_type: string, entity_type: string, description: string, metadata: any = {}) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -1354,6 +1288,7 @@ export default function Admin() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return false;
     setCurrentUserId(session.user.id);
+    setCurrentUserEmail(session.user.email || "");
 
     const [u, c, ce, dm, cl, ss, ap, notifs, asgnResult, cyber, customStaff] =
       await Promise.all([
@@ -3212,31 +3147,17 @@ Apna Intern Team`;
     navigate(ADMIN_LOGIN_PATH);
   };
 
-  const dashboardToolbar =
-    activeTab === "dashboard" ? (
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          type="date"
-          value={dashStartDate}
-          onChange={(e) => setDashStartDate(e.target.value)}
-          className="h-8 w-[8.5rem] rounded-lg border-slate-200 text-[11px] font-bold"
-        />
-        <Input
-          type="date"
-          value={dashEndDate}
-          onChange={(e) => setDashEndDate(e.target.value)}
-          className="h-8 w-[8.5rem] rounded-lg border-slate-200 text-[11px] font-bold"
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2 rounded-xl border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
-          onClick={exportToCSV}
-        >
-          <Download className="size-3.5" /> Export
-        </Button>
-      </div>
-    ) : null;
+  const navigateAdminTab = useCallback(
+    (value: string) => {
+      setActiveTab(value);
+      setMobileNavOpen(false);
+      if (value === "popups") navigate("/admin/popups", { replace: true });
+      else if (value === "contact-details") navigate("/admin/contact-details", { replace: true });
+      else if (value === "whatsapp-links") navigate("/admin/whatsapp-links", { replace: true });
+      else navigate(`/admin?tab=${encodeURIComponent(value)}`, { replace: true });
+    },
+    [navigate]
+  );
 
   if (loading) return <SiteLoader />;
   if (!allowed) return <div className="p-10 text-center">Access Denied</div>;
@@ -3260,7 +3181,7 @@ Apna Intern Team`;
         else if (value === "whatsapp-links") navigate("/admin/whatsapp-links", { replace: true });
         else navigate(`/admin?tab=${encodeURIComponent(value)}`, { replace: true });
       }}
-      className="flex min-h-screen bg-slate-50"
+      className="admin-shell flex min-h-screen bg-muted/30"
     >
       {showSidebar && (
         <AdminSidebar
@@ -3269,6 +3190,7 @@ Apna Intern Team`;
           onNavigateNonEngineering={() => navigate("/admin/non-engineering-management")}
           onCollapse={() => setShowSidebar(false)}
           onLogout={() => void handleAdminLogout()}
+          userEmail={currentUserEmail}
         />
       )}
 
@@ -3279,6 +3201,7 @@ Apna Intern Team`;
         onNavigateEngineering={() => navigate("/admin/engineering-management")}
         onNavigateNonEngineering={() => navigate("/admin/non-engineering-management")}
         onLogout={() => void handleAdminLogout()}
+        userEmail={currentUserEmail}
       />
 
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
@@ -3287,32 +3210,18 @@ Apna Intern Team`;
           showSidebar={showSidebar}
           onOpenMenu={() => setMobileNavOpen(true)}
           onShowSidebar={() => setShowSidebar(true)}
-          onOpenPopups={() => {
-            setActiveTab("popups");
-            setMobileNavOpen(false);
-            navigate("/admin/popups", { replace: true });
-          }}
+          onOpenPopups={() => navigateAdminTab("popups")}
+          onNavigateTab={navigateAdminTab}
+          onOpenNotifications={() => navigateAdminTab("notifications")}
           visitorCount={visitorCount}
           uniqueVisitorCount={uniqueVisitorCount}
-          toolbar={dashboardToolbar}
+          notificationCount={notifications.length}
+          userEmail={currentUserEmail}
+          onLogout={() => void handleAdminLogout()}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("popups");
-              setMobileNavOpen(false);
-              navigate("/admin/popups", { replace: true });
-            }}
-            className="mb-4 flex w-full items-center justify-between rounded-2xl bg-violet-600 px-4 py-3 text-left text-white shadow-lg hover:bg-violet-700"
-          >
-            <span className="text-sm font-black tracking-tight">Popup Msg Manage</span>
-            <span className="text-xs font-bold uppercase tracking-widest opacity-90">
-              Open popup messages →
-            </span>
-          </button>
-          <div className="mx-auto w-full max-w-[1400px] rounded-[1.75rem] border border-white bg-white/70 p-5 shadow-xl backdrop-blur-3xl md:p-8">
+        <main className={adminPageClass}>
+          <div className="mx-auto w-full max-w-[1440px]">
               {activeTab === "popups" ? (
                 <PopupManagementPanel client={supabase} currentUserId={currentUserId} />
               ) : activeTab === "contact-details" ? (
@@ -3321,140 +3230,15 @@ Apna Intern Team`;
                 <WhatsAppLinksManagementPanel client={supabase} />
               ) : (
               <>
-              <TabsContent value="dashboard" className="animate-fade-in space-y-8 mt-0">
-              {/* Visual Analytics Hub */}
-              <div className="grid lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-2 p-6 border-none shadow-soft bg-white group overflow-hidden relative">
-                  <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <TrendingUp className="size-32 text-primary -mr-8 -mt-8" />
-                  </div>
-                  <div className="flex items-center justify-between mb-8 relative z-10">
-                    <div>
-                      <h2 className="text-xl font-bold flex items-center gap-2">
-                        <DollarSign className="size-5 text-emerald-600" /> 
-                        Revenue Statistics
-                        {isPaymentsLoading && payments.length === 0 && (
-                          <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                        )}
-                      </h2>
-                      <div className="flex gap-4 mt-2">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase">Start Date</span>
-                          <Input type="date" value={dashStartDate} onChange={e => setDashStartDate(e.target.value)} className="h-7 w-28 text-[10px] border-none bg-slate-50 font-bold" />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase">End Date</span>
-                          <Input type="date" value={dashEndDate} onChange={e => setDashEndDate(e.target.value)} className="h-7 w-28 text-[10px] border-none bg-slate-50 font-bold" />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <div className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">Students</div>
-                        <div className="text-xl font-black text-blue-600">{stats.todayEnrolledCount}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">Leads</div>
-                        <div className="text-xl font-black text-orange-500">{stats.todayLeadsCount}</div>
-                      </div>
-                      <div className="text-right pl-4 border-l border-slate-100">
-                        <div className="text-2xl font-black text-emerald-600">₹{stats.todayRevenue.toLocaleString()}</div>
-                        <div className="text-[10px] text-muted-foreground mb-1 font-bold">Today's Revenue</div>
-                        <Badge variant="outline" className={`${stats.growth >= 0 ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-red-50 text-red-600 border-red-100"} text-[8px] font-black`}>
-                          {stats.growth >= 0 ? "+" : ""}{stats.growth.toFixed(1)}% vs Yesterday
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="h-[220px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={getFilteredRevenueData()}>
-                        <defs>
-                          <linearGradient id="adminRev" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
-                        <YAxis hide />
-                        <Tooltip 
-                          contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
-                        />
-                        <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={3} fill="url(#adminRev)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-
-                <Card className="p-6 border-none shadow-soft bg-slate-900 text-white relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-4">
-                    <div className="flex items-center gap-1.5 bg-primary/20 px-2 py-1 rounded-full border border-primary/30">
-                      <div className="size-1 bg-primary rounded-full animate-pulse" />
-                      <span className="text-[7px] font-black text-primary tracking-widest">{monitoringStatus}</span>
-                    </div>
-                  </div>
-                  <div className="relative z-10">
-                    <div className="size-12 rounded-xl bg-primary/20 flex items-center justify-center text-primary mb-6 shadow-glow">
-                      <Activity className="size-6" />
-                    </div>
-                    <h3 className="text-lg font-bold mb-1">Infrastructure</h3>
-                    <p className="text-xs text-slate-400 font-medium mb-4">Traffic: {liveTraffic} pkts/s</p>
-                    
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">API Speed</span>
-                        <span className="text-lg font-bold text-emerald-400">Stable</span>
-                      </div>
-                      <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 w-[92%] rounded-full shadow-glow" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="h-[100px] w-full mt-6">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={livePulse}>
-                        <defs>
-                          <linearGradient id="pulseGradientAdmin" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
-                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <Area 
-                          type="monotone" 
-                          dataKey="value" 
-                          stroke="#3b82f6" 
-                          strokeWidth={2} 
-                          fill="url(#pulseGradientAdmin)" 
-                          isAnimationActive={true}
-                          animationDuration={800}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <Card className="p-6 border-none shadow-soft bg-white border-l-4 border-l-primary">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Enrolled Students</div>
-                  <div className="text-3xl font-black">{studentTotalCount}</div>
-                  <p className="text-[10px] text-muted-foreground mt-2">Active internship period</p>
-                </Card>
-                <Card className="p-6 border-none shadow-soft bg-white border-l-4 border-l-orange-500">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Abandoned Carts</div>
-                  <div className="text-3xl font-black text-orange-600">{cancelledPayments.length}</div>
-                  <p className="text-[10px] text-muted-foreground mt-2">Requires follow-up</p>
-                </Card>
-                <Card className="p-6 border-none shadow-soft bg-white border-l-4 border-l-blue-500">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Today's Revenue</div>
-                  <div className="text-3xl font-black text-blue-600">₹{stats.todayRevenue.toLocaleString()}</div>
-                  <Badge variant="hero" className="mt-2 text-[8px] bg-blue-50 text-blue-700 border-blue-100">
-                    {stats.growth >= 0 ? "+" : ""}{stats.growth.toFixed(1)}% vs Yesterday
-                  </Badge>
-                </Card>
-              </div>
-            </TabsContent>
+              <TabsContent value="dashboard" className="mt-0">
+                <AdminDashboardPanel
+                  payments={payments}
+                  cancelledPayments={cancelledPayments}
+                  studentTotalCount={studentTotalCount}
+                  isPaymentsLoading={isPaymentsLoading}
+                  onExportCsv={exportToCSV}
+                />
+              </TabsContent>
 
             <TabsContent value="id-cards">
               <IdCardManagementPanel />
