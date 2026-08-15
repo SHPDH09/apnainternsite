@@ -1,15 +1,15 @@
-import type { ServerDbLike } from './rdsAdapter';
+import type { ServerDbLike } from './rdsAdapter.js';
 import Razorpay from 'razorpay';
-import { assertStudentRegistrationAvailableServer } from './registrationAvailability';
+import { assertStudentRegistrationAvailableServer } from './registrationAvailability.js';
 import {
   applyStudentRegistrationPassword,
   createStudentAuthWithChosenPassword,
-} from './registrationPassword';
-import { ensurePaymentSuccessLog } from './recordPaymentSuccess';
+} from './registrationPassword.js';
+import { ensurePaymentSuccessLog } from './recordPaymentSuccess.js';
 import {
   bumpRegistrationId,
   nextRegistrationIdFromRows,
-} from './registrationId';
+} from './registrationId.js';
 
 export type PaymentOrderRow = {
   order_id: string;

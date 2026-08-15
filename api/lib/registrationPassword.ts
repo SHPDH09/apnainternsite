@@ -1,4 +1,4 @@
-import type { ServerDbLike } from './rdsAdapter';
+import type { ServerDbLike } from './rdsAdapter.js';
 import crypto from 'crypto';
 
 export const REGISTRATION_PASSWORD_MIN_LENGTH = 5;

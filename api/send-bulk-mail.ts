@@ -3,7 +3,7 @@ import {
   createSmtpTransporter,
   getSmtpCredentials,
   sesMailHeaders,
-} from './lib/smtpTransport';
+} from './lib/smtpTransport.js';
 
 /** Max recipients per request (one SMTP connection, ~45s on Vercel 60s limit). */
 const MAX_BATCH_SIZE = 15;

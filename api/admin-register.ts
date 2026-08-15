@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
-import { assertStudentRegistrationAvailableServer } from './lib/registrationAvailability';
-import { createStudentAuthWithChosenPassword } from './lib/registrationPassword';
-import { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } from './lib/smtpTransport';
-import { getServerDb } from './lib/getServerDb';
+import { assertStudentRegistrationAvailableServer } from './lib/registrationAvailability.js';
+import { createStudentAuthWithChosenPassword } from './lib/registrationPassword.js';
+import { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } from './lib/smtpTransport.js';
+import { getServerDb } from './lib/getServerDb.js';
 import {
   bumpRegistrationId,
   nextRegistrationIdFromRows,
-} from './lib/registrationId';
+} from './lib/registrationId.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Setup

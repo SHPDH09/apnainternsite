@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomUUID } from 'node:crypto';
-import { query } from '../../aws/server/db';
-import { useRds } from '../lib/useRds';
+import { query } from '../../aws/server/db.js';
+import { useRds } from '../lib/useRds.js';
 
 type Action = 'request_otp' | 'reset_password';
 
@@ -21,7 +21,7 @@ function getJsonBody(req: VercelRequest): Record<string, unknown> {
 }
 
 async function sendOtpEmail(normalizedEmail: string, generatedOtp: string): Promise<void> {
-  const { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } = await import('../lib/smtpTransport');
+  const { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } = await import('../lib/smtpTransport.js');
   const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
   if (!SMTP_USER || !SMTP_PASS) {
     throw new Error('SMTP Credentials missing');

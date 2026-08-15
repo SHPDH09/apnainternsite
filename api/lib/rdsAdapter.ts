@@ -4,8 +4,8 @@
  */
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { callRpcAuto, query } from "../../aws/server/db";
-import { verifyToken } from "../../aws/server/local-jwt";
+import { callRpcAuto, query } from "../../aws/server/db.js";
+import { verifyToken } from "../../aws/server/local-jwt.js";
 
 const IDENT = /^[a-z_][a-z0-9_]*$/i;
 
