@@ -150,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       insertPayload.registration_id = regId;
       const { error: insertError } = await db.from("students").insert(insertPayload);
       if (insertError) {
-        if (insertError.code === '23505' && insertError.message.includes('registration_id')) {
+        if (insertError.code === '23505' && String(insertError.message || '').includes('registration_id')) {
           regId = bumpRegistrationId(regId);
           retryCount++;
           continue;

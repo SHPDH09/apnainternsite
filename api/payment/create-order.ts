@@ -88,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       amount: amountPaise,
       currency: 'INR',
       receipt,
-      payment_capture: 1,
+      payment: { capture: 'automatic' },
     });
 
     const { error: insertError } = await db.from('payment_orders').insert({
