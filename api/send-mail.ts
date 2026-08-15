@@ -255,10 +255,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           sent++;
           continue;
         }
-        failed++;
-        lastError = o.error;
-        if (o.rateLimited) {
-          rateLimited = true;
+        if (o.ok === false) {
+          failed++;
+          lastError = o.error;
+          if (o.rateLimited) {
+            rateLimited = true;
+          }
         }
       }
 

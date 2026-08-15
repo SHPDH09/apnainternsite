@@ -117,8 +117,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (result.ok) {
           return res.status(200).json({ success: true, text: result.text, model });
         }
-        lastError = result.message;
-        if (!shouldRetryGemini(result.status, result.message)) break;
+        if (result.ok === false) {
+          lastError = result.message;
+          if (!shouldRetryGemini(result.status, result.message)) break;
+        }
       } catch (err: unknown) {
         lastError = err instanceof Error ? err.message : String(err);
       }

@@ -1,15 +1,15 @@
-import type { ServerDbLike } from './rdsAdapter';
+import { readRowString, type ServerDbLike } from './rdsAdapter.js';
 import Razorpay from 'razorpay';
-import { assertStudentRegistrationAvailableServer } from './registrationAvailability';
+import { assertStudentRegistrationAvailableServer } from './registrationAvailability.js';
 import {
   applyStudentRegistrationPassword,
   createStudentAuthWithChosenPassword,
-} from './registrationPassword';
-import { ensurePaymentSuccessLog } from './recordPaymentSuccess';
+} from './registrationPassword.js';
+import { ensurePaymentSuccessLog } from './recordPaymentSuccess.js';
 import {
   bumpRegistrationId,
   nextRegistrationIdFromRows,
-} from './registrationId';
+} from './registrationId.js';
 
 export type PaymentOrderRow = {
   order_id: string;
@@ -94,9 +94,13 @@ export async function fulfillPaidOrder(
     .order('created_at', { ascending: false })
     .limit(1);
 
-  const existingStudentByEmail = profileByEmail?.id
-    ? { id: profileByEmail.id }
-    : studentRowsByEmail?.[0];
+  const profileId = readRowString(profileByEmail, 'id');
+  const studentId = readRowString(studentRowsByEmail?.[0], 'id');
+  const existingStudentByEmail = profileId
+    ? { id: profileId }
+    : studentId
+      ? { id: studentId }
+      : undefined;
 
   const orderAlreadySuccess = existingOrder.status === 'success';
 
@@ -192,7 +196,7 @@ export async function fulfillPaidOrder(
           .ilike('referral_code', rawRef)
           .eq('active', true)
           .maybeSingle();
-        validatedReferral = rp?.referral_code ?? null;
+        validatedReferral = readRowString(rp, 'referral_code') ?? null;
       }
     } else {
       validatedReferral = null;

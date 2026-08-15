@@ -6,7 +6,7 @@
  * body: { table, columns?, filters?, order?, limit?, single? }
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { query } from "../aws/server/db";
+import { query } from "../aws/server/db.js";
 
 const ALLOWED_TABLES = new Set([
   "user_roles",

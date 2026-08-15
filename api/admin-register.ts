@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
-import { assertStudentRegistrationAvailableServer } from './lib/registrationAvailability';
-import { createStudentAuthWithChosenPassword } from './lib/registrationPassword';
-import { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } from './lib/smtpTransport';
-import { getServerDb } from './lib/getServerDb';
+import { assertStudentRegistrationAvailableServer } from './lib/registrationAvailability.js';
+import { createStudentAuthWithChosenPassword } from './lib/registrationPassword.js';
+import { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } from './lib/smtpTransport.js';
+import { getServerDb } from './lib/getServerDb.js';
 import {
   bumpRegistrationId,
   nextRegistrationIdFromRows,
-} from './lib/registrationId';
+} from './lib/registrationId.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Setup
@@ -150,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       insertPayload.registration_id = regId;
       const { error: insertError } = await db.from("students").insert(insertPayload);
       if (insertError) {
-        if (insertError.code === '23505' && insertError.message.includes('registration_id')) {
+        if (insertError.code === '23505' && String(insertError.message || '').includes('registration_id')) {
           regId = bumpRegistrationId(regId);
           retryCount++;
           continue;
