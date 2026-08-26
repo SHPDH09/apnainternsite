@@ -126,6 +126,37 @@
     opacity: 1;
     transform: translateY(0);
   }
+
+  .login-step-enter {
+    animation: loginStepEnter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .login-step-pulse {
+    animation: loginStepPulse 2s ease-in-out infinite;
+  }
+
+  .critical-verify-shell {
+    isolation: isolate;
+  }
+
+  .critical-verify-grid {
+    background-image:
+      linear-gradient(rgba(56, 189, 248, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56, 189, 248, 0.05) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .critical-verify-scan {
+    animation: criticalScan 3.2s ease-in-out infinite;
+  }
+
+  .critical-shield-ring {
+    animation: criticalShieldRing 2.4s ease-out infinite;
+  }
+
+  .critical-dot {
+    animation: criticalDot 1.2s ease-in-out infinite;
+  }
 }
 
 @keyframes progress {
@@ -140,4 +171,69 @@
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes loginStepEnter {
+  from {
+    opacity: 0;
+    transform: translateX(28px) scale(0.98);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes loginStepPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(90, 163, 230, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(90, 163, 230, 0);
+  }
+}
+
+@keyframes criticalScan {
+  0% {
+    top: -20%;
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.85;
+  }
+  85% {
+    opacity: 0.85;
+  }
+  100% {
+    top: 110%;
+    opacity: 0;
+  }
+}
+
+@keyframes criticalShieldRing {
+  0% {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  70% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+@keyframes criticalDot {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
 }
