@@ -24,6 +24,7 @@ const PRIMARY_LINKS: NavItem[] = [
   { to: "/courses", label: "Courses" },
   { to: "/#universities", label: "Universities" },
   { to: "/#gallery", label: "Gallery" },
+  { to: "/blog", label: "Blog" },
   { to: "/#expert-team", label: "Team" },
   { to: "/#mous", label: "MOUs" },
   { to: "/verify", label: "Verify" },

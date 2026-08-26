@@ -38,6 +38,8 @@ import ResetPassword from "./pages/ResetPassword.tsx";
 import AuthConfirm from "./pages/AuthConfirm.tsx";
 import Terms from "./pages/Terms.tsx";
 import Privacy from "./pages/Privacy.tsx";
+import Blog from "./pages/Blog.tsx";
+import BlogPost from "./pages/BlogPost.tsx";
 import { AuthRedirectGuard } from "./components/AuthRedirectGuard";
 import { AdminSessionRefresh } from "./components/AdminSessionRefresh";
 import { StudentSessionRefresh } from "./components/StudentSessionRefresh";
@@ -193,6 +195,8 @@ const App = () => (
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/blog" element={<Blog />} />
+          <Route path="/blog/:slug" element={<BlogPost />} />
           <Route path="/assignment/:id" element={<AssignmentTest />} />
           <Route path="/assignment/:id/result" element={<AssignmentResult />} />
           <Route path="/payment-status" element={<PaymentStatus />} />

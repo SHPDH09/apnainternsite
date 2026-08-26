@@ -21,6 +21,7 @@ import {
   fetchPublicGalleryImages,
   type SiteGalleryImage,
 } from "@/lib/siteContentApi";
+import { fetchPublicBlogPosts, type SiteBlogPost } from "@/lib/siteBlogApi";
 import {
   fetchPublicExpertTeam,
   fetchPublicMous,
@@ -40,6 +41,7 @@ import {
   HomeSampleCertificatesSection,
   HomeTestimonialsSection,
 } from "@/components/home/HomeCmsSections";
+import { HomeBlogSection } from "@/components/home/HomeBlogSection";
 import { HomeHeroSection } from "@/components/home/HomeHeroSection";
 import { HomeMarqueeStrip } from "@/components/home/HomeMarqueeStrip";
 import { HomeStatsSection, HomeBentoFeatures } from "@/components/home/HomeFeaturesAndStats";
@@ -83,6 +85,8 @@ const Index = () => {
   const [mous, setMous] = useState<SiteMou[]>([]);
   const [offlinePrograms, setOfflinePrograms] = useState<SiteOfflineProgram[]>([]);
   const [testimonials, setTestimonials] = useState<SiteTestimonial[]>([]);
+  const [blogPosts, setBlogPosts] = useState<SiteBlogPost[]>([]);
+  const [blogLoading, setBlogLoading] = useState(true);
   const [consentFormUrl, setConsentFormUrl] = useState<string | null>(null);
   const [consentFormName, setConsentFormName] = useState<string | null>(null);
   const [domainsStream, setDomainsStream] = useState<UgStreamKey | null>(null);
@@ -124,6 +128,14 @@ const Index = () => {
       setOfflinePrograms(offline);
       setTestimonials(reviews);
     });
+    setBlogLoading(true);
+    fetchPublicBlogPosts(supabase, { limit: 3 })
+      .then(setBlogPosts)
+      .catch((err) => {
+        console.warn("[blog] public fetch failed:", err);
+        setBlogPosts([]);
+      })
+      .finally(() => setBlogLoading(false));
   }, []);
 
   // Scroll to hash targets (e.g. /#gallery) after nav or refresh
@@ -144,6 +156,8 @@ const Index = () => {
     mous.length,
     offlinePrograms.length,
     testimonials.length,
+    blogPosts.length,
+    blogLoading,
   ]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -420,6 +434,8 @@ const Index = () => {
         galleryLoading={galleryLoading}
         offlinePrograms={offlinePrograms}
       />
+
+      <HomeBlogSection posts={blogPosts} loading={blogLoading} />
 
       {/* Consent form template */}
       <section id="consent-form" className="scroll-mt-24 py-16 md:py-20">
