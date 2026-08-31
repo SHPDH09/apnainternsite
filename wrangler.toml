@@ -1,7 +1,7 @@
 # Cloudflare Pages — connect repo with:
 #   Build command:  npm ci && npm run build
 #   Build output:   dist
-#   Node.js:        20
+#   Node.js:        22
 #
 # Required Production environment variables (build-time):
 #   VITE_SUPABASE_URL=https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging

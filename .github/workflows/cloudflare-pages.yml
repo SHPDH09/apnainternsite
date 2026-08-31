@@ -1,9 +1,7 @@
-# Deploy to Cloudflare Pages from GitHub (normal git source — Retry works in dashboard).
-# Setup once in GitHub repo → Settings → Secrets:
-#   CLOUDFLARE_API_TOKEN  — Pages Edit permission
-#   CLOUDFLARE_ACCOUNT_ID — Cloudflare account ID
+# Cloudflare Pages — build on every push; deploy via workflow_dispatch or Cloudflare Git integration.
 #
-# Manual redeploy: Actions → Cloudflare Pages → Run workflow
+# Option A (recommended): Cloudflare dashboard → Connect GitHub repo → auto-deploy on push
+# Option B: GitHub Secrets → CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID → Run workflow manually
 
 name: Cloudflare Pages
 
@@ -17,11 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +35,28 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: local-anon-key
           VITE_SUPABASE_PROJECT_ID: apnaintern-local
           VITE_SITE_API_ORIGIN: https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
+
+      - name: Verify Cloudflare routing files in dist
+        run: test -f dist/_redirects && test -f dist/_headers && head -5 dist/_redirects
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+
+  deploy:
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
