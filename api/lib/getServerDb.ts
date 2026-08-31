@@ -1,5 +1,5 @@
-import { createRdsAdapter, type ServerDbLike } from "./rdsAdapter";
-import { useRds } from "./useRds";
+import { createRdsAdapter, type ServerDbLike } from "./rdsAdapter.js";
+import { useRds } from "./useRds.js";
 
 export type ServerDb = ServerDbLike;
 

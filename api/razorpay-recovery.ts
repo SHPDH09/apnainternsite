@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getServerDb } from './lib/getServerDb';
-import { nextRegistrationIdFromRows } from './lib/registrationId';
+import { getServerDb } from './lib/getServerDb.js';
+import { nextRegistrationIdFromRows } from './lib/registrationId.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
