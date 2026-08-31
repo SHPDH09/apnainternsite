@@ -10,6 +10,16 @@
 #   VITE_SITE_API_ORIGIN=https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
 #
 # Do not enable Pages Functions for /api — requests are proxied to Lambda via public/_redirects.
+#
+# ── "Cannot retry a build that was created with a seed_repo override" ────────
+# Cloudflare does NOT allow Retry on builds created via API/direct-upload/seed_repo.
+# Fix: trigger a NEW deployment instead of Retry:
+#   1. Merge to main (GitHub Actions workflow deploys automatically), or
+#   2. Cloudflare dashboard → Deployments → Create deployment → branch main, or
+#   3. GitHub → Actions → Cloudflare Pages → Run workflow, or
+#   4. Push empty commit: git commit --allow-empty -m "chore: redeploy" && git push
+# For Retry to work in future, connect Git in:
+#   Workers & Pages → apna-intern → Settings → Builds → Connect Git repository
 
 name = "apna-intern"
 compatibility_date = "2024-09-23"

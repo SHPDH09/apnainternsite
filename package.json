@@ -12,6 +12,8 @@
     "dev:frontend:aws": "vite --mode aws",
     "dev:frontend:awsrds": "vite --mode awsrds",
     "build": "vite build",
+    "build:cloudflare": "vite build",
+    "deploy:cloudflare": "npm run build:cloudflare && npx wrangler pages deploy dist --project-name=apna-intern",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
