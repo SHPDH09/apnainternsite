@@ -1,0 +1,49 @@
+# Deploy to Cloudflare Pages from GitHub (normal git source — Retry works in dashboard).
+# Setup once in GitHub repo → Settings → Secrets:
+#   CLOUDFLARE_API_TOKEN  — Pages Edit permission
+#   CLOUDFLARE_ACCOUNT_ID — Cloudflare account ID
+#
+# Manual redeploy: Actions → Cloudflare Pages → Run workflow
+
+name: Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
+          VITE_SUPABASE_PUBLISHABLE_KEY: local-anon-key
+          VITE_SUPABASE_PROJECT_ID: apnaintern-local
+          VITE_SITE_API_ORIGIN: https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=apna-intern --commit-dirty=true
