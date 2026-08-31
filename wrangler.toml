@@ -2,6 +2,7 @@
 #   Build command:  npm ci && npm run build
 #   Build output:   dist
 #   Node.js:        22
+#   Package mgr:    npm only (do NOT commit bun.lockb — Cloudflare auto-picks Bun if present)
 #
 # Required Production environment variables (build-time):
 #   VITE_SUPABASE_URL=https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
