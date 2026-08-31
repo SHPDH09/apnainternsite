@@ -1,0 +1,16 @@
+# Cloudflare Pages — connect repo with:
+#   Build command:  npm ci && npm run build
+#   Build output:   dist
+#   Node.js:        20
+#
+# Required Production environment variables (build-time):
+#   VITE_SUPABASE_URL=https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
+#   VITE_SUPABASE_PUBLISHABLE_KEY=local-anon-key
+#   VITE_SUPABASE_PROJECT_ID=apnaintern-local
+#   VITE_SITE_API_ORIGIN=https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
+#
+# Do not enable Pages Functions for /api — requests are proxied to Lambda via public/_redirects.
+
+name = "apna-intern"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"

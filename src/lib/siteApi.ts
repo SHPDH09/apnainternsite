@@ -5,7 +5,7 @@
  * |--------------------|-------------------------------------|
  * | `.env.local`       | Local proxy → localhost:3000        |
  * | `.env.aws.local`   | AWS Lambda (deployed)               |
- * | Production Vercel  | Same-origin `/api/*` on Vercel      |
+ * | Production (Vercel/Cloudflare) | Same-origin `/api/*` proxied to Lambda |
  *
  * Set `VITE_SITE_API_ORIGIN` to your Lambda URL (no trailing slash), e.g.
  * `https://abc.execute-api.ap-south-1.amazonaws.com/staging`

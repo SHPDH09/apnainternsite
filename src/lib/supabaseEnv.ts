@@ -19,7 +19,7 @@ export function resolveSupabaseProjectId(): string {
 
 /**
  * When VITE_SUPABASE_URL points at API Gateway (execute-api), the browser should
- * call same-origin /auth + /rest (Vercel rewrites → Lambda) to avoid CORS failures.
+ * call same-origin /auth + /rest (Vercel/Cloudflare rewrites → Lambda) to avoid CORS failures.
  */
 export function resolveBrowserApiOrigin(configuredUrl: string): string {
   const url = configuredUrl.replace(/\/$/, "");
