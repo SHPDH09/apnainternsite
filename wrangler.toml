@@ -1,20 +1,8 @@
-# Cloudflare Workers/Pages — dashboard settings:
-#   Build command:   npm run build          (NOT bun run build)
-#   Deploy command:  npx wrangler deploy    (needs [assets] below — or leave deploy empty for Git Pages)
-#   Build output:    dist
-#   Node.js:         22
-#
-# Production env vars (build-time):
-#   VITE_SUPABASE_URL=https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
-#   VITE_SUPABASE_PUBLISHABLE_KEY=local-anon-key
-#   VITE_SUPABASE_PROJECT_ID=apnaintern-local
-#   VITE_SITE_API_ORIGIN=https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
-#
-# API routes (/auth, /rest, /api, …) proxy to Lambda via public/_redirects in dist.
+# Cloudflare Workers static deploy (dashboard: build = npm run build, deploy = npx wrangler deploy)
+# Project name must match Workers service: apnainternsite
 
-name = "apna-intern"
+name = "apnainternsite"
 compatibility_date = "2024-09-23"
-pages_build_output_dir = "dist"
 
 [assets]
 directory = "./dist"

@@ -63,4 +63,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=apna-intern --commit-dirty=true
+          command: pages deploy dist --project-name=apnainternsite --commit-dirty=true
