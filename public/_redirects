@@ -1,12 +1,4 @@
-# API + Supabase-compatible paths → AWS Lambda (same as vercel.json rewrites).
-# Cloudflare has no /api serverless functions — /api/* must proxy to Lambda.
-/auth/*       https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/:splat       200
-/rest/*       https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/:splat       200
-/storage/*    https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/storage/:splat    200
-/functions/*  https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/functions/:splat  200
-/api/*        https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/:splat        200
+# Used by Cloudflare Pages (external proxy rules). Workers deploy ignores this file
+# via dist/.assetsignore — API proxy runs in cloudflare/worker.ts instead.
 
 /cyber-cafe/login  /cybercafe/login  301
-
-# SPA fallback (must be last)
-/*  /index.html  200
