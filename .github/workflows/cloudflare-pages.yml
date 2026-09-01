@@ -1,7 +1,7 @@
-# Cloudflare Pages — build on every push; deploy via workflow_dispatch or Cloudflare Git integration.
+# Cloudflare Workers — build + deploy on push to main (when secrets are set).
+# Dashboard: build command `npm run build`, deploy `npx wrangler deploy`
 #
-# Option A (recommended): Cloudflare dashboard → Connect GitHub repo → auto-deploy on push
-# Option B: GitHub Secrets → CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID → Run workflow manually
+# Required GitHub secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
 
 name: Cloudflare Pages
 
@@ -31,10 +31,9 @@ jobs:
       - name: Build frontend
         run: npm run build
         env:
-          VITE_SUPABASE_URL: https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
+          # Leave empty — browser resolves same-origin API at runtime (Worker proxy).
           VITE_SUPABASE_PUBLISHABLE_KEY: local-anon-key
           VITE_SUPABASE_PROJECT_ID: apnaintern-local
-          VITE_SITE_API_ORIGIN: https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging
 
       - name: Verify Cloudflare routing files in dist
         run: test -f dist/_redirects && test -f dist/_headers && head -5 dist/_redirects
@@ -47,20 +46,30 @@ jobs:
 
   deploy:
     needs: build
-    if: github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       deployments: write
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
 
-      - name: Deploy to Cloudflare Pages
+      - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=apnainternsite --commit-dirty=true
+          command: deploy
