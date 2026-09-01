@@ -57,6 +57,9 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
+import { LoginStepIndicator, type LoginFlowStep } from "@/components/auth/LoginStepIndicator";
+import { LoginAnimatedStep } from "@/components/auth/LoginAnimatedStep";
+import { CriticalOtpVerification } from "@/components/auth/CriticalOtpVerification";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -94,6 +97,7 @@ const Login = () => {
   const [adminOtpSending, setAdminOtpSending] = useState(false);
   const [adminOtpSent, setAdminOtpSent] = useState(false);
   const [adminDevOtp, setAdminDevOtp] = useState<string | null>(null);
+  const [loginTransitioning, setLoginTransitioning] = useState(false);
   const isLocalDev = isLocalDevEnvironment();
 
   // Captcha State
@@ -435,8 +439,10 @@ const Login = () => {
         setAdminPendingPassword(password);
         setAdminOtp("");
         setAdminOtpSent(false);
+        setLoginTransitioning(true);
         setAdminLoginStep("otp");
         await sendAdminLoginOtp(normalizedEmail);
+        setLoginTransitioning(false);
         return;
       }
 
@@ -827,6 +833,12 @@ const Login = () => {
     }
   };
 
+  const showLoginFlowSteps = isStaffPortalLogin || isStudentLoginRoute;
+  const onOtpScreen =
+    (isStaffPortalLogin && adminLoginStep === "otp") ||
+    (isStudentLoginRoute && studentLoginStep === "otp");
+  const loginFlowStep: LoginFlowStep = onOtpScreen ? "verification" : "credentials";
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <SiteNav />
@@ -875,206 +887,73 @@ const Login = () => {
               </p>
             </div>
 
+            {showLoginFlowSteps ? <LoginStepIndicator step={loginFlowStep} /> : null}
+
             {isStaffPortalLogin && adminLoginStep === "otp" ? (
-              <div className="space-y-5">
-                <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-slate-700 leading-relaxed">
-                  Password verified for{" "}
-                  <span className="font-semibold text-slate-900">{adminPendingEmail}</span>.
-                  {adminOtpSent ? (
-                    <> Enter the <strong>6-digit code</strong> sent to that inbox.</>
-                  ) : (
-                    <> Sending verification code…</>
-                  )}
-                </div>
-                {isLocalDev && adminDevOtp ? (
-                  <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                    <p className="font-bold text-xs uppercase tracking-wide text-amber-800 mb-1">
-                      Local testing only
-                    </p>
-                    <p>
-                      Your verification code:{" "}
-                      <span className="font-mono text-lg font-black tracking-[0.2em]">{adminDevOtp}</span>
-                    </p>
-                  </div>
-                ) : null}
-                <div className="flex flex-col items-center gap-4">
-                  <InputOTP
-                    maxLength={6}
-                    value={adminOtp}
-                    onChange={setAdminOtp}
-                    onComplete={() => void handleAdminOtpVerify()}
-                  >
-                    <InputOTPGroup className="gap-2">
-                      <InputOTPSlot index={0} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                      <InputOTPSlot index={1} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                      <InputOTPSlot index={2} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                      <InputOTPSlot index={3} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                      <InputOTPSlot index={4} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                      <InputOTPSlot index={5} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                    </InputOTPGroup>
-                  </InputOTP>
-                </div>
-                <div
-                  className={`flex items-center gap-4 p-4 border rounded-xl transition-all cursor-pointer select-none bg-slate-50 shadow-inner
-                    ${captchaVerified ? "border-green-400 bg-green-50/50" : "border-slate-200 hover:border-primary/50"}
-                  `}
-                  onClick={handleVerifyCaptcha}
-                >
-                  <div className={`flex items-center justify-center size-8 rounded border transition-all ${captchaVerified ? "bg-green-500 border-green-500" : verifyingCaptcha ? "border-transparent" : "bg-white border-slate-300"}`}>
-                    {verifyingCaptcha ? (
-                      <Loader2 className="size-5 text-primary animate-spin" />
-                    ) : captchaVerified ? (
-                      <svg className="size-5 text-white animate-fade-in" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    ) : null}
-                  </div>
-                  <span className={`text-sm font-bold ${captchaVerified ? "text-green-700" : "text-slate-600"}`}>
-                    {verifyingCaptcha ? "Verifying..." : captchaVerified ? "Success!" : "Verify you are human"}
-                  </span>
-                </div>
-                <Button
-                  type="button"
-                  className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-xl shadow-glow transition-all disabled:opacity-50"
-                  disabled={loginLoading || adminOtpSending || !captchaVerified || adminOtp.length !== 6}
-                  onClick={() => void handleAdminOtpVerify()}
-                >
-                  {loginLoading ? <Loader2 className="size-5 animate-spin mr-2" /> : null}
-                  Verify code & sign in
-                </Button>
-                <div className="flex flex-col items-center gap-2 text-center">
-                  <button
-                    type="button"
-                    className="text-xs font-bold text-primary hover:underline disabled:opacity-50"
-                    disabled={adminOtpSending}
-                    onClick={() => void sendAdminLoginOtp(adminPendingEmail)}
-                  >
-                    {adminOtpSending ? "Sending…" : "Resend code"}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs font-bold text-slate-500 hover:underline"
-                    onClick={() => {
-                      setAdminLoginStep("password");
-                      setAdminPendingPassword("");
-                      setAdminOtp("");
-                      setAdminOtpSent(false);
-                      setAdminDevOtp(null);
-                    }}
-                  >
-                    Back to password sign-in
-                  </button>
-                </div>
-              </div>
+              <LoginAnimatedStep stepKey="admin-otp">
+                <CriticalOtpVerification
+                  email={adminPendingEmail}
+                  otp={adminOtp}
+                  onOtpChange={setAdminOtp}
+                  onVerify={() => void handleAdminOtpVerify()}
+                  onResend={() => void sendAdminLoginOtp(adminPendingEmail)}
+                  onBack={() => {
+                    setAdminLoginStep("password");
+                    setAdminPendingPassword("");
+                    setAdminOtp("");
+                    setAdminOtpSent(false);
+                    setAdminDevOtp(null);
+                    setLoginTransitioning(false);
+                  }}
+                  verifying={loginLoading}
+                  sending={adminOtpSending}
+                  otpSent={adminOtpSent}
+                  transitioning={loginTransitioning}
+                  devOtp={isLocalDev ? adminDevOtp : null}
+                  captchaVerified={captchaVerified}
+                  verifyingCaptcha={verifyingCaptcha}
+                  onVerifyCaptcha={handleVerifyCaptcha}
+                  title="Admin identity verification"
+                  subtitle={
+                    adminOtpSent
+                      ? `Password confirmed. Enter the secure code sent to ${adminPendingEmail}.`
+                      : undefined
+                  }
+                />
+              </LoginAnimatedStep>
             ) : isStudentLoginRoute && studentLoginStep === "otp" ? (
-              <div className="space-y-5">
-                <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-slate-700 leading-relaxed">
-                  {studentOtpSent ? (
-                    <>
-                      Enter the <strong>6-digit code</strong> sent to{" "}
-                      <span className="font-semibold text-slate-900">{studentOtpEmail || email}</span>.
-                    </>
-                  ) : (
-                    <>
-                      Password sign-in did not work for{" "}
-                      <span className="font-semibold text-slate-900">{studentOtpEmail || email}</span>.
-                      Tap below to email a one-time login code (nothing is sent until you tap).
-                    </>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">
-                    Email
-                  </Label>
-                  <Input
-                    type="email"
-                    className="h-12 bg-slate-50 border-none shadow-inner rounded-xl pl-4"
-                    value={studentOtpEmail || email}
-                    onChange={(e) => setStudentOtpEmail(e.target.value.trim().toLowerCase())}
-                    placeholder="you@example.com"
-                    required
-                  />
-                </div>
-                {!studentOtpSent ? (
-                  <Button
-                    type="button"
-                    className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-xl shadow-glow transition-all disabled:opacity-50"
-                    disabled={studentOtpSending || !(studentOtpEmail || email).includes("@")}
-                    onClick={() => void sendStudentLoginOtp(studentOtpEmail || email)}
-                  >
-                    {studentOtpSending ? <Loader2 className="size-5 animate-spin mr-2" /> : null}
-                    Send login code to email
-                  </Button>
-                ) : (
-                  <>
-                    <div className="flex flex-col items-center gap-4">
-                      <InputOTP
-                        maxLength={6}
-                        value={studentOtp}
-                        onChange={setStudentOtp}
-                        onComplete={() => void handleStudentOtpVerify()}
-                      >
-                        <InputOTPGroup className="gap-2">
-                          <InputOTPSlot index={0} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                          <InputOTPSlot index={1} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                          <InputOTPSlot index={2} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                          <InputOTPSlot index={3} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                          <InputOTPSlot index={4} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                          <InputOTPSlot index={5} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                        </InputOTPGroup>
-                      </InputOTP>
-                    </div>
-                    <div
-                      className={`flex items-center gap-4 p-4 border rounded-xl transition-all cursor-pointer select-none bg-slate-50 shadow-inner
-                        ${captchaVerified ? "border-green-400 bg-green-50/50" : "border-slate-200 hover:border-primary/50"}
-                      `}
-                      onClick={handleVerifyCaptcha}
-                    >
-                      <div className={`flex items-center justify-center size-8 rounded border transition-all ${captchaVerified ? "bg-green-500 border-green-500" : verifyingCaptcha ? "border-transparent" : "bg-white border-slate-300"}`}>
-                        {verifyingCaptcha ? (
-                          <Loader2 className="size-5 text-primary animate-spin" />
-                        ) : captchaVerified ? (
-                          <svg className="size-5 text-white animate-fade-in" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        ) : null}
-                      </div>
-                      <span className={`text-sm font-bold ${captchaVerified ? "text-green-700" : "text-slate-600"}`}>
-                        {verifyingCaptcha ? "Verifying..." : captchaVerified ? "Success!" : "Verify you are human"}
-                      </span>
-                    </div>
-                    <Button
-                      type="button"
-                      className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-xl shadow-glow transition-all disabled:opacity-50"
-                      disabled={loginLoading || studentOtpSending || !captchaVerified || studentOtp.length !== 6}
-                      onClick={() => void handleStudentOtpVerify()}
-                    >
-                      {loginLoading ? <Loader2 className="size-5 animate-spin mr-2" /> : null}
-                      Verify code & sign in
-                    </Button>
-                  </>
-                )}
-                <div className="flex flex-col items-center gap-2 text-center">
-                  {studentOtpSent ? (
-                    <button
-                      type="button"
-                      className="text-xs font-bold text-primary hover:underline disabled:opacity-50"
-                      disabled={studentOtpSending}
-                      onClick={() => void sendStudentLoginOtp(studentOtpEmail || email)}
-                    >
-                      {studentOtpSending ? "Sending…" : "Resend code"}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="text-xs font-bold text-slate-500 hover:underline"
-                    onClick={() => {
-                      setStudentLoginStep("password");
-                      setStudentOtp("");
-                      setStudentOtpSent(false);
-                    }}
-                  >
-                    Back to password sign-in
-                  </button>
-                </div>
-              </div>
+              <LoginAnimatedStep stepKey="student-otp">
+                <CriticalOtpVerification
+                  email={studentOtpEmail || email}
+                  otp={studentOtp}
+                  onOtpChange={setStudentOtp}
+                  onVerify={() => void handleStudentOtpVerify()}
+                  onResend={() => void sendStudentLoginOtp(studentOtpEmail || email)}
+                  onBack={() => {
+                    setStudentLoginStep("password");
+                    setStudentOtp("");
+                    setStudentOtpSent(false);
+                  }}
+                  verifying={loginLoading}
+                  sending={studentOtpSending}
+                  otpSent={studentOtpSent}
+                  devOtp={null}
+                  captchaVerified={captchaVerified}
+                  verifyingCaptcha={verifyingCaptcha}
+                  onVerifyCaptcha={handleVerifyCaptcha}
+                  showEmailField
+                  onEmailChange={setStudentOtpEmail}
+                  onSendCode={() => void sendStudentLoginOtp(studentOtpEmail || email)}
+                  title="Account recovery verification"
+                  subtitle={
+                    studentOtpSent
+                      ? `Enter the secure code sent to ${studentOtpEmail || email}.`
+                      : "Password sign-in failed. Request a one-time verification code to continue."
+                  }
+                />
+              </LoginAnimatedStep>
             ) : (
+              <LoginAnimatedStep stepKey="credentials">
               <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-2">
                   <Label
@@ -1180,6 +1059,7 @@ const Login = () => {
                   {isReferralLoginRoute ? "Sign in" : "Login"}
                 </Button>
               </form>
+              </LoginAnimatedStep>
             )}
 
             {/* PIN steps (create_pin / enter_pin) removed — see handleLogin + commented handlers below */}
