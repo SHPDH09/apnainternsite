@@ -50,6 +50,7 @@ import { HomeOutcomesSection } from "@/components/home/HomeOutcomesSection";
 import { HomeUniversitiesSection } from "@/components/home/HomeUniversitiesSection";
 import { HomeFaqSection } from "@/components/home/HomeFaqSection";
 import { HomeFinalCta } from "@/components/home/HomeFinalCta";
+import { QuantronChatbot } from "@/components/QuantronChatbot";
 import { HomeCoursesSections } from "@/components/courses/HomeCoursesSections";
 import {
   getDomainsForUgStream,
@@ -541,6 +542,7 @@ const Index = () => {
           </div>
         </DialogContent>
       </Dialog>
+      <QuantronChatbot />
     </div>
   );
 };
