@@ -886,10 +886,10 @@ const Login = () => {
                     <> Sending verification code…</>
                   )}
                 </div>
-                {isLocalDev && adminDevOtp ? (
+                {adminDevOtp ? (
                   <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                     <p className="font-bold text-xs uppercase tracking-wide text-amber-800 mb-1">
-                      Local testing only
+                      {isLocalDev ? "Local testing only" : "Email delivery unavailable"}
                     </p>
                     <p>
                       Your verification code:{" "}
