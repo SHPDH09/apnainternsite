@@ -22,14 +22,21 @@ export function resolveSupabaseProjectId(): string {
   return fromEnv || DEFAULT_PROJECT_ID;
 }
 
+function isLocalBrowserHost(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host.endsWith(".local");
+}
+
 /**
- * Always call Lambda directly for execute-api URLs (CORS enabled on API).
- * Same-origin proxy breaks on Cloudflare Workers when LAMBDA_ORIGIN is misconfigured.
+ * On deployed hosts, always use same-origin (/auth, /rest → Cloudflare/Vercel proxy).
+ * Direct execute-api calls fail CORS from *.workers.dev and other staging domains.
  */
 export function resolveBrowserApiOrigin(configuredUrl: string): string {
-  const url = configuredUrl.replace(/\/$/, "");
-  if (EXECUTE_API_RE.test(url)) return url;
-  return url;
+  if (typeof window !== "undefined" && !isLocalBrowserHost()) {
+    return window.location.origin;
+  }
+  return configuredUrl.replace(/\/$/, "");
 }
 
 export function resolveSupabaseUrl(): string {
@@ -37,6 +44,9 @@ export function resolveSupabaseUrl(): string {
   if (fromEnv) return resolveBrowserApiOrigin(fromEnv);
 
   if (import.meta.env.PROD) {
+    if (typeof window !== "undefined" && !isLocalBrowserHost()) {
+      return window.location.origin;
+    }
     return STAGING_LAMBDA_API;
   }
 

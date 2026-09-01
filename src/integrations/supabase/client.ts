@@ -20,6 +20,8 @@ if (typeof window !== "undefined") {
   const configured = String(import.meta.env.VITE_SUPABASE_URL || "").trim();
   if (configured.includes("execute-api")) {
     console.info("[apnaintern] API:", SUPABASE_URL.replace(/\/$/, ""));
+  } else if (SUPABASE_URL === window.location.origin) {
+    console.info("[apnaintern] API: same-origin proxy →", SUPABASE_URL.replace(/\/$/, ""));
   } else if (SUPABASE_URL.includes("supabase.co")) {
   const usingDefaults = !import.meta.env.VITE_SUPABASE_URL;
   if (usingDefaults) {
