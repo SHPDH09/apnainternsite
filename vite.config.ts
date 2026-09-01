@@ -51,11 +51,12 @@ export default defineConfig(({ mode }) => {
   const isAwsRds = mode === "awsrds";
   const isProdBuild = mode === "production";
 
-  const STAGING_LAMBDA = "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
+  // Production: omit Lambda URL defaults — browser resolves same-origin at runtime
+  // (Cloudflare worker proxies /auth, /rest, /api → Lambda; avoids CORS).
   const prodEnvDefine = isProdBuild
     ? {
         "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
-          process.env.VITE_SUPABASE_URL?.trim() || STAGING_LAMBDA,
+          process.env.VITE_SUPABASE_URL?.trim() || "",
         ),
         "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
           process.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || "local-anon-key",
@@ -64,7 +65,7 @@ export default defineConfig(({ mode }) => {
           process.env.VITE_SUPABASE_PROJECT_ID?.trim() || "apnaintern-local",
         ),
         "import.meta.env.VITE_SITE_API_ORIGIN": JSON.stringify(
-          process.env.VITE_SITE_API_ORIGIN?.trim() || STAGING_LAMBDA,
+          process.env.VITE_SITE_API_ORIGIN?.trim() || "",
         ),
       }
     : undefined;

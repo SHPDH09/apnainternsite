@@ -10,7 +10,7 @@
  * Set `VITE_SITE_API_ORIGIN` to your Lambda URL (no trailing slash), e.g.
  * `https://abc.execute-api.ap-south-1.amazonaws.com/staging`
  */
-import { resolveBrowserApiOrigin } from "@/lib/supabaseEnv";
+import { resolveBrowserApiOrigin, resolveSupabaseUrl } from "@/lib/supabaseEnv";
 
 export function getSiteApiOrigin(): string {
   if (typeof window === "undefined") return "";
@@ -33,16 +33,8 @@ export const apiUrl = siteApiUrl;
 
 /** Local Express or AWS Lambda API — Supabase Realtime is unavailable; use polling. */
 export function usePollingInsteadOfRealtime(): boolean {
-  const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || "");
-  const siteOrigin = String(import.meta.env.VITE_SITE_API_ORIGIN || "");
-  const browserHost =
-    typeof window !== "undefined" ? String(window.location.hostname || "") : "";
-  const haystack = `${supabaseUrl}\n${siteOrigin}\n${browserHost}`;
-  return (
-    /localhost|127\.0\.0\.1/i.test(haystack) ||
-    /execute-api\.amazonaws\.com/i.test(haystack) ||
-    /amazonaws\.com/i.test(supabaseUrl)
-  );
+  const resolved = resolveSupabaseUrl();
+  return !/\.supabase\.co/i.test(resolved);
 }
 
 /** @deprecated use usePollingInsteadOfRealtime */

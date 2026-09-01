@@ -61,6 +61,7 @@ Resources:
           - https://www.apnaintern.in
           - https://ezyintern.in
           - https://www.ezyintern.in
+          - https://apnainternsite.apnaintern-in.workers.dev
         AllowMethods:
           - GET
           - POST
