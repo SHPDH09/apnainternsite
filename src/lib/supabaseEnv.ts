@@ -7,6 +7,7 @@
 const DEFAULT_PROJECT_ID = "unqfphgjilxpbzajcdjl";
 
 const EXECUTE_API_RE = /execute-api\.[a-z0-9-]+\.amazonaws\.com/i;
+const WORKERS_DEV_RE = /\.workers\.dev$/i;
 
 /** Public anon JWT for project unqfphgjilxpbzajcdjl (RLS enforced server-side). */
 const DEFAULT_SUPABASE_ANON_KEY =
@@ -18,13 +19,19 @@ export function resolveSupabaseProjectId(): string {
 }
 
 /**
- * When VITE_SUPABASE_URL points at API Gateway (execute-api), the browser should
- * call same-origin /auth + /rest (Vercel/Cloudflare rewrites → Lambda) to avoid CORS failures.
+ * When VITE_SUPABASE_URL points at API Gateway (execute-api), use same-origin on
+ * Vercel. On *.workers.dev use Lambda directly if the Worker proxy is misconfigured.
  */
 export function resolveBrowserApiOrigin(configuredUrl: string): string {
   const url = configuredUrl.replace(/\/$/, "");
-  if (typeof window !== "undefined" && EXECUTE_API_RE.test(url)) {
-    return window.location.origin.replace(/\/$/, "");
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname || "";
+    if (WORKERS_DEV_RE.test(host) && EXECUTE_API_RE.test(url)) {
+      return url;
+    }
+    if (EXECUTE_API_RE.test(url)) {
+      return window.location.origin.replace(/\/$/, "");
+    }
   }
   return url;
 }
