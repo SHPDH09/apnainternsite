@@ -27,6 +27,7 @@
     "aws:lambda:deploy:guided": "bash aws/scripts/deploy-lambda.sh guided",
     "aws:rds:ship": "node aws/scripts/ship-to-aws-rds.mjs",
     "aws:rds:notifications": "node aws/scripts/apply-notifications-rds.mjs",
+    "aws:rds:grant-admin": "node aws/scripts/grant-admin-by-email.mjs",
     "aws:rds:site-cms": "node aws/scripts/apply-site-cms-rds.mjs",
     "aws:rds:provision": "bash aws/scripts/provision-rds.sh",
     "aws:rds:export": "node aws/scripts/run-rds-export.mjs",
