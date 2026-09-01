@@ -17,10 +17,14 @@ const DEFAULT_LAMBDA_ORIGIN =
   "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
 
 function lambdaOrigin(env: Env): string {
+  const stage = String((env as Env & { LAMBDA_STAGE?: string }).LAMBDA_STAGE || "staging")
+    .replace(/^\//, "")
+    .replace(/\/$/, "");
   let origin = (env.LAMBDA_ORIGIN || DEFAULT_LAMBDA_ORIGIN).replace(/\/$/, "");
-  // Dashboard often sets origin without /staging — API Gateway requires the stage path.
-  if (/execute-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(origin)) {
-    origin = `${origin}/staging`;
+  // Normalize: strip any trailing stage segment, then re-append the configured stage.
+  origin = origin.replace(/\/staging$/i, "").replace(/\/production$/i, "");
+  if (/execute-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(origin) && stage) {
+    origin = `${origin}/${stage}`;
   }
   return origin;
 }
