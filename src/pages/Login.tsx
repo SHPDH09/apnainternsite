@@ -388,19 +388,27 @@ const Login = () => {
           );
           return;
         }
-      } else {
-        const { data: studentOnly, error: studentRpcErr } = await supabase.rpc(
-          "account_is_student_only",
-          { check_email: normalizedEmail }
-        );
+      } else if (isAdminLoginRoute) {
+        const [{ data: mayAdmin, error: adminRpcErr }, { data: studentOnly, error: studentRpcErr }] =
+          await Promise.all([
+            supabase.rpc("account_requires_admin_login", { check_email: normalizedEmail }),
+            supabase.rpc("account_is_student_only", { check_email: normalizedEmail }),
+          ]);
+        if (adminRpcErr) {
+          console.warn("account_requires_admin_login RPC:", adminRpcErr.message);
+        }
         if (studentRpcErr) {
           console.warn("account_is_student_only RPC:", studentRpcErr.message);
+        }
+        if (mayAdmin === true) {
+          // Explicit admin/staff/cyber account — allow admin login.
         } else if (studentOnly === true) {
           toast.error(
             "You don't have access to the admin portal. This sign-in is only for authorised staff and administrators."
           );
           return;
         }
+        // If RPCs failed (proxy/network), continue — password + OTP will validate.
       }
 
       if (isStudentLoginRoute) {

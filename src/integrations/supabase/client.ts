@@ -18,12 +18,8 @@ assertSupabaseConfig(SUPABASE_URL);
 
 if (typeof window !== "undefined") {
   const configured = String(import.meta.env.VITE_SUPABASE_URL || "").trim();
-  if (configured.includes("execute-api") && SUPABASE_URL === window.location.origin.replace(/\/$/, "")) {
-    console.info(
-      "[apnaintern] API calls proxied via same-origin (Vercel → Lambda).",
-      "Configured:",
-      configured.replace(/\/$/, "")
-    );
+  if (configured.includes("execute-api")) {
+    console.info("[apnaintern] API:", SUPABASE_URL.replace(/\/$/, ""));
   } else if (SUPABASE_URL.includes("supabase.co")) {
   const usingDefaults = !import.meta.env.VITE_SUPABASE_URL;
   if (usingDefaults) {

@@ -49,6 +49,25 @@ export default defineConfig(({ mode }) => {
   loadEnv(mode, process.cwd(), "VITE_");
 
   const isAwsRds = mode === "awsrds";
+  const isProdBuild = mode === "production";
+
+  const STAGING_LAMBDA = "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
+  const prodEnvDefine = isProdBuild
+    ? {
+        "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
+          process.env.VITE_SUPABASE_URL?.trim() || STAGING_LAMBDA,
+        ),
+        "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
+          process.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || "local-anon-key",
+        ),
+        "import.meta.env.VITE_SUPABASE_PROJECT_ID": JSON.stringify(
+          process.env.VITE_SUPABASE_PROJECT_ID?.trim() || "apnaintern-local",
+        ),
+        "import.meta.env.VITE_SITE_API_ORIGIN": JSON.stringify(
+          process.env.VITE_SITE_API_ORIGIN?.trim() || STAGING_LAMBDA,
+        ),
+      }
+    : undefined;
 
   return {
     server: {
@@ -74,7 +93,7 @@ export default defineConfig(({ mode }) => {
           "import.meta.env.VITE_SITE_API_ORIGIN": JSON.stringify("http://localhost:8080"),
           "import.meta.env.VITE_PUBLIC_APP_URL": JSON.stringify("http://localhost:8080"),
         }
-      : undefined,
+      : prodEnvDefine,
     plugins: [react()],
     resolve: {
       alias: {
