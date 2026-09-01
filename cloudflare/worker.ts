@@ -1,27 +1,26 @@
 /**
  * Cloudflare Worker — proxy /auth, /rest, /storage, /functions, /api to AWS Lambda.
+ * Also accepts /staging/* from the SPA (Cloudflare *.workers.dev uses /staging prefix).
  * Static SPA files are served via the ASSETS binding (dist/).
- *
- * Workers static _redirects cannot proxy to external URLs (Pages-only feature).
  */
 
 export interface Env {
   ASSETS: Fetcher;
   LAMBDA_ORIGIN: string;
+  LAMBDA_STAGE?: string;
 }
 
-const PROXY_PREFIXES = ["/auth", "/rest", "/storage", "/functions", "/api"];
+const API_PREFIXES = ["/auth", "/rest", "/storage", "/functions", "/api"];
+const STAGE_SEGMENT = "/staging";
 
-/** Staging API Gateway base — used when LAMBDA_ORIGIN is missing in Worker env. */
 const DEFAULT_LAMBDA_ORIGIN =
   "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
 
 function lambdaOrigin(env: Env): string {
-  const stage = String((env as Env & { LAMBDA_STAGE?: string }).LAMBDA_STAGE || "staging")
+  const stage = String(env.LAMBDA_STAGE || "staging")
     .replace(/^\//, "")
     .replace(/\/$/, "");
   let origin = (env.LAMBDA_ORIGIN || DEFAULT_LAMBDA_ORIGIN).replace(/\/$/, "");
-  // Normalize: strip any trailing stage segment, then re-append the configured stage.
   origin = origin.replace(/\/staging$/i, "").replace(/\/production$/i, "");
   if (/execute-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(origin) && stage) {
     origin = `${origin}/${stage}`;
@@ -29,15 +28,27 @@ function lambdaOrigin(env: Env): string {
   return origin;
 }
 
+/** Map browser path → path relative to lambdaOrigin (which already includes /staging). */
+function upstreamPath(pathname: string): string {
+  if (pathname === STAGE_SEGMENT || pathname.startsWith(`${STAGE_SEGMENT}/`)) {
+    return pathname.slice(STAGE_SEGMENT.length) || "/";
+  }
+  return pathname;
+}
+
 function shouldProxy(pathname: string): boolean {
-  return PROXY_PREFIXES.some(
+  if (pathname === STAGE_SEGMENT || pathname.startsWith(`${STAGE_SEGMENT}/`)) {
+    return true;
+  }
+  return API_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
 
 async function proxyToLambda(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const target = new URL(url.pathname + url.search, lambdaOrigin(env));
+  const path = upstreamPath(url.pathname);
+  const target = new URL(path + url.search, lambdaOrigin(env));
 
   const init: RequestInit = {
     method: request.method,
@@ -46,10 +57,10 @@ async function proxyToLambda(request: Request, env: Env): Promise<Response> {
   };
 
   if (request.method !== "GET" && request.method !== "HEAD") {
-    init.body = request.body;
+    init.body = await request.arrayBuffer();
   }
 
-  return fetch(new Request(target.toString(), init));
+  return fetch(target.toString(), init);
 }
 
 export default {

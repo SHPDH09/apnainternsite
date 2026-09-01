@@ -1,16 +1,14 @@
 /**
  * API base URL for the frontend.
  *
- * | File / mode        | API target                          |
- * |--------------------|-------------------------------------|
- * | `.env.local`       | Local proxy → localhost:3000        |
- * | `.env.aws.local`   | AWS Lambda (deployed)               |
- * | Production (Vercel/Cloudflare) | Same-origin `/api/*` proxied to Lambda |
- *
- * Set `VITE_SITE_API_ORIGIN` to your Lambda URL (no trailing slash), e.g.
- * `https://abc.execute-api.ap-south-1.amazonaws.com/staging`
+ * Production Cloudflare *.workers.dev uses /staging prefix (see resolveDeployedApiBase).
+ * Vercel rewrites /auth and /rest to Lambda — no /staging prefix in the browser URL.
  */
-import { resolveBrowserApiOrigin, resolveSupabaseUrl } from "@/lib/supabaseEnv";
+import {
+  resolveBrowserApiOrigin,
+  resolveDeployedApiBase,
+  resolveSupabaseUrl,
+} from "@/lib/supabaseEnv";
 
 export function getSiteApiOrigin(): string {
   if (typeof window === "undefined") return "";
@@ -18,7 +16,7 @@ export function getSiteApiOrigin(): string {
   if (fromEnv?.trim()) return resolveBrowserApiOrigin(fromEnv.trim());
   const appUrl = import.meta.env.VITE_PUBLIC_APP_URL as string | undefined;
   if (appUrl?.trim()) return resolveBrowserApiOrigin(appUrl.trim());
-  return "";
+  return resolveDeployedApiBase();
 }
 
 /** Build full API path — relative on prod, absolute when `VITE_SITE_API_ORIGIN` is set. */

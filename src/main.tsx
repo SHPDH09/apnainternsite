@@ -3,7 +3,7 @@ import App from "./App.tsx";
 import "./index.css";
 import ReactGA from "react-ga4";
 import * as Sentry from "@sentry/react";
-import { registerApiProxyServiceWorker } from "@/lib/registerApiProxyServiceWorker";
+import { unregisterLegacyApiProxyServiceWorker } from "@/lib/registerApiProxyServiceWorker";
 
 ReactGA.initialize("G-8RN6D7SN2S");
 
@@ -13,7 +13,7 @@ Sentry.init({
 });
 
 async function bootstrap() {
-  await registerApiProxyServiceWorker();
+  await unregisterLegacyApiProxyServiceWorker();
   createRoot(document.getElementById("root")!).render(<App />);
 }
 

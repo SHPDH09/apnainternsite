@@ -4,7 +4,7 @@
 
 const DEFAULT_PROJECT_ID = "unqfphgjilxpbzajcdjl";
 
-/** Staging Lambda — auth, rest, storage, /api (hard fallback when env vars missing). */
+/** Staging Lambda — auth, rest, storage, /api (SSR/build fallback only). */
 export const STAGING_LAMBDA_API =
   "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
 
@@ -29,13 +29,25 @@ function isLocalBrowserHost(): boolean {
 }
 
 /**
- * On deployed hosts, always use same-origin (/auth, /rest → Cloudflare/Vercel proxy).
- * Direct execute-api calls fail CORS from *.workers.dev and other staging domains.
+ * Same-origin API base in the browser.
+ * Cloudflare *.workers.dev: prefix /staging so the edge proxy hits API Gateway stage.
+ * Vercel/custom domains: plain origin (platform rewrites /auth → Lambda /staging/auth).
  */
-export function resolveBrowserApiOrigin(configuredUrl: string): string {
-  if (typeof window !== "undefined" && !isLocalBrowserHost()) {
-    return window.location.origin;
+export function resolveDeployedApiBase(): string {
+  if (typeof window === "undefined" || isLocalBrowserHost()) {
+    return "";
   }
+  const origin = window.location.origin.replace(/\/$/, "");
+  if (window.location.hostname.endsWith(".workers.dev")) {
+    return `${origin}/staging`;
+  }
+  return origin;
+}
+
+/** Never call execute-api directly from the browser on deployed hosts (CORS). */
+export function resolveBrowserApiOrigin(configuredUrl: string): string {
+  const deployed = resolveDeployedApiBase();
+  if (deployed) return deployed;
   return configuredUrl.replace(/\/$/, "");
 }
 
@@ -43,10 +55,10 @@ export function resolveSupabaseUrl(): string {
   const fromEnv = String(import.meta.env.VITE_SUPABASE_URL || "").trim();
   if (fromEnv) return resolveBrowserApiOrigin(fromEnv);
 
+  const deployed = resolveDeployedApiBase();
+  if (deployed) return deployed;
+
   if (import.meta.env.PROD) {
-    if (typeof window !== "undefined" && !isLocalBrowserHost()) {
-      return window.location.origin;
-    }
     return STAGING_LAMBDA_API;
   }
 
