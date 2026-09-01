@@ -12,6 +12,14 @@ export interface Env {
 
 const PROXY_PREFIXES = ["/auth", "/rest", "/storage", "/functions", "/api"];
 
+/** Staging API Gateway base — used when LAMBDA_ORIGIN is missing in Worker env. */
+const DEFAULT_LAMBDA_ORIGIN =
+  "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
+
+function lambdaOrigin(env: Env): string {
+  return (env.LAMBDA_ORIGIN || DEFAULT_LAMBDA_ORIGIN).replace(/\/$/, "");
+}
+
 function shouldProxy(pathname: string): boolean {
   return PROXY_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
@@ -20,7 +28,7 @@ function shouldProxy(pathname: string): boolean {
 
 async function proxyToLambda(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const target = new URL(url.pathname + url.search, env.LAMBDA_ORIGIN.replace(/\/$/, ""));
+  const target = new URL(url.pathname + url.search, lambdaOrigin(env));
 
   const init: RequestInit = {
     method: request.method,

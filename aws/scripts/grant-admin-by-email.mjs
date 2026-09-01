@@ -1,12 +1,6 @@
 #!/usr/bin/env node
 /**
- * Grant admin (or super_admin) portal access on AWS RDS for an existing or new auth user.
- *
- * Usage (do NOT commit passwords):
- *   ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='secret' ADMIN_ROLE=admin \
- *     node aws/scripts/grant-admin-by-email.mjs
- *
- * Requires DATABASE_URL or AWS_RDS_* in env / .env.awsrds.local
+ * Grant admin portal access on AWS RDS (see api/lib/grantAdminByEmail.ts for Lambda bootstrap).
  */
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
