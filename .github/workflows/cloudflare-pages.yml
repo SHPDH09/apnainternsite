@@ -1,9 +1,9 @@
 # Cloudflare Workers — build + deploy on push to main (when secrets are set).
-# Dashboard: build command `npm run build`, deploy `npx wrangler deploy`
 #
+# Dashboard (if not using GitHub): Build = npm run build | Deploy = npx wrangler deploy
 # Required GitHub secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
 
-name: Cloudflare Pages
+name: Cloudflare Workers
 
 on:
   push:
@@ -11,43 +11,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: cloudflare-pages-${{ github.ref }}
+  group: cloudflare-workers-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build frontend
-        run: npm run build
-        env:
-          # Leave empty — browser resolves same-origin API at runtime (Worker proxy).
-          VITE_SUPABASE_PUBLISHABLE_KEY: local-anon-key
-          VITE_SUPABASE_PROJECT_ID: apnaintern-local
-
-      - name: Verify Cloudflare routing files in dist
-        run: test -f dist/_redirects && test -f dist/_headers && head -5 dist/_redirects
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist
-          retention-days: 7
-
   deploy:
-    needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
       deployments: write
@@ -62,10 +33,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_SUPABASE_PUBLISHABLE_KEY: local-anon-key
+          VITE_SUPABASE_PROJECT_ID: apnaintern-local
+
+      - name: Verify dist output
+        run: test -f dist/index.html && test -f dist/.assetsignore
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3

@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "node scripts/dev-aws-rds-local.mjs",
     "dev:aws": "node scripts/dev-aws.mjs",
@@ -14,8 +17,9 @@
     "dev:frontend:awsrds": "vite --mode awsrds",
     "build": "vite build && node scripts/postbuild-cloudflare.mjs",
     "build:cloudflare": "npm run build",
-    "deploy:cloudflare": "npm run build && wrangler pages deploy dist --project-name=apnainternsite",
-    "deploy": "wrangler deploy --assets=./dist --name=apnainternsite",
+    "deploy:workers": "wrangler deploy",
+    "deploy:cloudflare": "npm run build && wrangler deploy",
+    "deploy": "wrangler deploy",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",

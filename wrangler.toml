@@ -1,9 +1,20 @@
-# Cloudflare Workers — build: npm run build | deploy: npx wrangler deploy
-# API paths proxy to Lambda via cloudflare/worker.ts (not _redirects — Workers forbid external proxy).
+# Cloudflare Workers — Workers Builds (Git) settings:
+#
+#   Build command:  npm run build
+#   Deploy command: npx wrangler deploy
+#   Root directory:  /
+#   Node.js:        22
+#
+# Do NOT use "Retry" after seed_repo builds — use Create deployment.
+# Do NOT use wrangler pages deploy (this is a Worker + static assets, not Pages).
 
 name = "apnainternsite"
 main = "cloudflare/worker.ts"
 compatibility_date = "2024-09-23"
+
+[build]
+command = "npm run build"
+watch_dir = "src"
 
 [assets]
 directory = "./dist"
