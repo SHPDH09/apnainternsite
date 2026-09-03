@@ -1,6 +1,4 @@
 # Apply all aws/scripts/*.sql to AWS RDS + redeploy Lambda (when GitHub secrets set).
-#
-# Secrets: DATABASE_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (optional)
 
 name: RDS Apply All SQL
 
@@ -45,26 +43,20 @@ jobs:
             echo "::warning::DATABASE_URL GitHub secret is empty — skipping direct RDS apply"
           fi
 
-      - name: Configure AWS credentials
-        if: secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-1' }}
-
-      - name: Bundle Lambda and update function code only
-        if: secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != ''
+      - name: Bundle Lambda and update (skip if AWS secrets missing)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-1' }}
         run: |
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "::warning::AWS GitHub secrets not set — skipped Lambda deploy"
+            exit 0
+          fi
           node aws/scripts/bundle-lambda.mjs
           cd aws/lambda/dist && zip -r /tmp/lambda.zip . && cd -
           aws lambda update-function-code \
             --function-name ezyintern-api-staging \
             --zip-file fileb:///tmp/lambda.zip \
-            --region ap-south-1
-          aws lambda wait function-updated --function-name ezyintern-api-staging --region ap-south-1
-          echo "Lambda updated"
-
-      - name: Skip AWS deploy (no GitHub AWS secrets)
-        if: secrets.AWS_ACCESS_KEY_ID == '' || secrets.AWS_SECRET_ACCESS_KEY == ''
-        run: echo "::warning::AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY not set in GitHub — skipped Lambda deploy"
+            --region "${AWS_DEFAULT_REGION}"
+          aws lambda wait function-updated --function-name ezyintern-api-staging --region "${AWS_DEFAULT_REGION}"
