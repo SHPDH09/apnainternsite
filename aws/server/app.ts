@@ -18,6 +18,7 @@ import sendMail from "../../api/send-mail";
 import rpcByName from "../../api/rpc-call";
 import dataSelect from "../../api/data-select";
 import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
+import rdsApplyAll from "../../api/rds-apply-all";
 import { loadRootEnv } from "./load-env";
 import { ensureAllCmsTables } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
@@ -183,6 +184,7 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/auth/forgot-password", handler: forgotPassword },
     { method: "post", path: "/api/admin-register", handler: adminRegister },
     { method: "post", path: "/api/bootstrap-grant-admin", handler: bootstrapGrantAdmin },
+    { method: "post", path: "/api/rds-apply-all", handler: rdsApplyAll },
     { method: "all", path: "/api/admin-tasks", handler: adminTasks },
     { method: "post", path: "/api/razorpay-recovery", handler: razorpayRecovery },
     { method: "post", path: "/api/payment/create-order", handler: createOrder },

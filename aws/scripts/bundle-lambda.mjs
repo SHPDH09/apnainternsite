@@ -31,21 +31,23 @@ fs.writeFileSync(
   JSON.stringify({ type: "module", name: "ezyintern-lambda", version: "1.0.0" }, null, 2)
 );
 
-// Copy registration bootstrap SQL for Lambda cold-start auto-fix
+// Copy SQL for Lambda bootstrap + rds-apply-all endpoint
 const sqlDir = path.join(outDir, "sql");
 fs.mkdirSync(sqlDir, { recursive: true });
+const scriptsDir = path.join(root, "aws/scripts");
+for (const f of fs.readdirSync(scriptsDir).filter((name) => name.endsWith(".sql"))) {
+  fs.copyFileSync(path.join(scriptsDir, f), path.join(sqlDir, f));
+}
 for (const rel of [
-  "aws/scripts/12-rds-safe-metadata-json.sql",
-  "aws/scripts/18-rds-fix-payment-enrollment.sql",
-  "aws/scripts/19-rds-fix-password-text-id.sql",
-  "aws/scripts/20-rds-fix-admin-create-registration-text-meta.sql",
-  "aws/scripts/28-rds-student-data-upload.sql",
-  "aws/scripts/33-rds-student-data-upload-dup-delete.sql",
-  "aws/scripts/34-rds-student-data-upload-delete-harden.sql",
-  "aws/scripts/35-rds-student-data-upload-history-recover.sql",
-  "aws/scripts/36-rds-student-data-upload-id-type-fix.sql",
+  "supabase/update_payment_schema.sql",
+  "supabase/migrations/20260709100000_engineering_university_configs.sql",
+  "supabase/hotfix_internship_mode_filtering.sql",
+  "supabase/migrations/20260605120000_notification_management.sql",
 ]) {
-  fs.copyFileSync(path.join(root, rel), path.join(sqlDir, path.basename(rel)));
+  const src = path.join(root, rel);
+  if (fs.existsSync(src)) {
+    fs.copyFileSync(src, path.join(sqlDir, path.basename(rel)));
+  }
 }
 
 console.log("✅ Lambda bundle → aws/lambda/dist/handler.mjs");
