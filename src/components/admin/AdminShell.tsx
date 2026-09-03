@@ -1,34 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bell,
-  BookOpen,
-  CheckSquare,
   ChevronLeft,
-  ClipboardList,
-  Cog,
-  DollarSign,
-  FileSpreadsheet,
-  FileText,
-  GraduationCap,
-  Image,
-  IdCard,
-  IndianRupee,
   LayoutDashboard,
   LogOut,
-  Mail,
   Menu,
   PanelLeft,
-  Phone,
   Search,
   Settings,
-  Share2,
-  Store,
-  UploadCloud,
   User,
-  UserPlus,
-  Users,
-  Wrench,
-  Award,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -54,9 +34,10 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import {
-  adminNavButtonClass,
-  adminNavItemClass,
-  adminNavSectionClass,
+  AdminSidebarNav,
+  buildAdminNavSearchGroups,
+} from "@/components/admin/AdminSidebarNav";
+import {
   adminSidebarClass,
 } from "@/components/admin/ui/adminStyles";
 
@@ -95,206 +76,26 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   settings: "Settings",
 };
 
-const NAV_SEARCH_ENTRIES = Object.entries(ADMIN_TAB_LABELS).map(([value, label]) => ({
-  value,
-  label,
-}));
-
 type AdminNavProps = {
+  activeTab: string;
   isServiceEnabled: (key: string) => boolean;
   onNavigateEngineering: () => void;
   onNavigateNonEngineering: () => void;
 };
 
 function AdminNavItems({
+  activeTab,
   isServiceEnabled,
   onNavigateEngineering,
   onNavigateNonEngineering,
 }: AdminNavProps) {
   return (
-    <>
-      <div className={adminNavSectionClass}>Overview</div>
-      <TabsTrigger value="dashboard" className={adminNavItemClass}>
-        <LayoutDashboard className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Dashboard
-      </TabsTrigger>
-      <TabsTrigger value="popups" className={adminNavItemClass}>
-        <Bell className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Popup Msg Manage
-      </TabsTrigger>
-
-      {isServiceEnabled("students") && (
-        <>
-          <div className={adminNavSectionClass}>Students</div>
-          <TabsTrigger value="students" className={adminNavItemClass}>
-            <Users className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-            Directory
-          </TabsTrigger>
-          <TabsTrigger value="engineering-directory" className={adminNavItemClass}>
-            <Wrench className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-            Engineering
-          </TabsTrigger>
-          <button type="button" onClick={onNavigateEngineering} className={adminNavButtonClass}>
-            <Cog className="size-4 shrink-0 opacity-70" />
-            Eng. Management
-          </button>
-          <button type="button" onClick={onNavigateNonEngineering} className={adminNavButtonClass}>
-            <BookOpen className="size-4 shrink-0 opacity-70" />
-            Non-Tech Management
-          </button>
-          <TabsTrigger value="add-registration" className={adminNavItemClass}>
-            <UserPlus className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-            Add Registration
-          </TabsTrigger>
-          <TabsTrigger value="student-data-upload" className={adminNavItemClass}>
-            <FileSpreadsheet className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-            Student Data Upload
-          </TabsTrigger>
-        </>
-      )}
-
-      <div className={adminNavSectionClass}>Academics</div>
-      <TabsTrigger value="attendance" className={adminNavItemClass}>
-        <CheckSquare className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Attendance
-      </TabsTrigger>
-      <TabsTrigger value="staff-management" className={adminNavItemClass}>
-        <Users className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Staff Management
-      </TabsTrigger>
-      {isServiceEnabled("bulk") && (
-        <TabsTrigger value="bulk" className={adminNavItemClass}>
-          <Award className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-          Certificates
-        </TabsTrigger>
-      )}
-      {isServiceEnabled("bulk") && (
-        <TabsTrigger value="id-cards" className={adminNavItemClass}>
-          <IdCard className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-          ID Cards
-        </TabsTrigger>
-      )}
-      {isServiceEnabled("classes") && (
-        <>
-          <TabsTrigger value="uploads" className={adminNavItemClass}>
-            <UploadCloud className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-            Uploads
-          </TabsTrigger>
-          <TabsTrigger value="classes" className={adminNavItemClass}>
-            <BookOpen className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-            Live Classes
-          </TabsTrigger>
-        </>
-      )}
-      <TabsTrigger value="course-management" className={adminNavItemClass}>
-        <GraduationCap className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Course Management
-      </TabsTrigger>
-
-      {(isServiceEnabled("payments") || isServiceEnabled("leads")) && (
-        <div className={adminNavSectionClass}>Revenue</div>
-      )}
-      {isServiceEnabled("payments") && (
-        <>
-          <TabsTrigger value="payments" className={adminNavItemClass}>
-            <DollarSign className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-            Payments
-          </TabsTrigger>
-          <TabsTrigger value="check-payment" className={adminNavItemClass}>
-            <Search className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-            Check Payment
-          </TabsTrigger>
-          <TabsTrigger value="unpaid-students" className={adminNavItemClass}>
-            <IndianRupee className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-            Unpaid Students
-          </TabsTrigger>
-        </>
-      )}
-      {isServiceEnabled("leads") && (
-        <TabsTrigger value="leads" className={adminNavItemClass}>
-          <UserPlus className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-          Leads
-        </TabsTrigger>
-      )}
-      {isServiceEnabled("leads") && (
-        <TabsTrigger value="lead-assignment" className={adminNavItemClass}>
-          <ClipboardList className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-          Lead Assignment
-        </TabsTrigger>
-      )}
-      <TabsTrigger value="fees-management" className={adminNavItemClass}>
-        <IndianRupee className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Fees
-      </TabsTrigger>
-
-      {(isServiceEnabled("notifications") ||
-        isServiceEnabled("assignments") ||
-        isServiceEnabled("comms")) && <div className={adminNavSectionClass}>Communications</div>}
-      {isServiceEnabled("notifications") && (
-        <TabsTrigger value="notifications" className={adminNavItemClass}>
-          <Bell className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-          Notifications
-        </TabsTrigger>
-      )}
-      {isServiceEnabled("assignments") && (
-        <TabsTrigger value="assignments" className={adminNavItemClass}>
-          <FileText className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-          Assignments
-        </TabsTrigger>
-      )}
-      {isServiceEnabled("comms") && (
-        <TabsTrigger value="comms" className={adminNavItemClass}>
-          <Mail className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-          Comms Center
-        </TabsTrigger>
-      )}
-
-      <div className={adminNavSectionClass}>Partners</div>
-      <TabsTrigger value="cybercafe" className={adminNavItemClass}>
-        <Store className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Cyber Cafes
-      </TabsTrigger>
-      <TabsTrigger value="referrals" className={adminNavItemClass}>
-        <Share2 className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Referrals
-      </TabsTrigger>
-      <TabsTrigger value="college-rosters" className={adminNavItemClass}>
-        <FileSpreadsheet className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Rosters
-      </TabsTrigger>
-
-      <div className={adminNavSectionClass}>Website</div>
-      <TabsTrigger value="gallery" className={adminNavItemClass}>
-        <Image className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Gallery
-      </TabsTrigger>
-      <TabsTrigger value="home-cms" className={adminNavItemClass}>
-        <LayoutDashboard className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Home Content
-      </TabsTrigger>
-      <TabsTrigger value="consult-letter" className={adminNavItemClass}>
-        <FileText className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Consent Form
-      </TabsTrigger>
-      <TabsTrigger value="popups" className={adminNavItemClass}>
-        <Bell className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Popups
-      </TabsTrigger>
-      <TabsTrigger value="contact-details" className={adminNavItemClass}>
-        <Phone className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Contact Details
-      </TabsTrigger>
-      <TabsTrigger value="whatsapp-links" className={adminNavItemClass}>
-        <Share2 className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        WhatsApp Links
-      </TabsTrigger>
-
-      <div className={adminNavSectionClass}>System</div>
-      <TabsTrigger value="settings" className={adminNavItemClass}>
-        <Settings className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-        Settings
-      </TabsTrigger>
-    </>
+    <AdminSidebarNav
+      activeTab={activeTab}
+      isServiceEnabled={isServiceEnabled}
+      onNavigateEngineering={onNavigateEngineering}
+      onNavigateNonEngineering={onNavigateNonEngineering}
+    />
   );
 }
 
@@ -343,6 +144,7 @@ type AdminSidebarProps = AdminNavProps &
   };
 
 export function AdminSidebar({
+  activeTab,
   isServiceEnabled,
   onNavigateEngineering,
   onNavigateNonEngineering,
@@ -353,7 +155,7 @@ export function AdminSidebar({
   return (
     <aside
       className={cn(
-        "admin-sidebar hidden lg:flex w-[17rem] shrink-0 flex-col sticky top-0 h-screen",
+        "admin-sidebar hidden lg:flex w-[18.5rem] shrink-0 flex-col sticky top-0 h-screen",
         adminSidebarClass,
         className
       )}
@@ -378,8 +180,9 @@ export function AdminSidebar({
         </Button>
       </div>
 
-      <TabsList className="flex h-auto min-h-0 flex-1 flex-col items-stretch justify-start gap-0.5 overflow-y-auto rounded-none border-0 bg-transparent p-2 shadow-none">
+      <TabsList className="flex h-auto min-h-0 flex-1 flex-col items-stretch justify-start gap-1 overflow-y-auto rounded-none border-0 bg-transparent p-2 shadow-none">
         <AdminNavItems
+          activeTab={activeTab}
           isServiceEnabled={isServiceEnabled}
           onNavigateEngineering={onNavigateEngineering}
           onNavigateNonEngineering={onNavigateNonEngineering}
@@ -400,6 +203,7 @@ type AdminMobileNavProps = AdminNavProps &
 export function AdminMobileNav({
   open,
   onOpenChange,
+  activeTab,
   isServiceEnabled,
   onNavigateEngineering,
   onNavigateNonEngineering,
@@ -407,12 +211,16 @@ export function AdminMobileNav({
 }: AdminMobileNavProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="flex w-[18rem] flex-col p-0 sm:max-w-[18rem]">
-        <SheetHeader className="border-b px-4 py-3.5 text-left">
-          <SheetTitle className="text-sm font-semibold">Navigation</SheetTitle>
+      <SheetContent side="left" className={cn("flex w-[19rem] flex-col p-0 sm:max-w-[19rem]", adminSidebarClass)}>
+        <SheetHeader className="border-b border-slate-800/80 px-4 py-4 text-left">
+          <div className="flex items-center gap-3">
+            <BrandLogo variant="icon" size="sm" />
+            <SheetTitle className="text-sm font-bold text-white">Admin Navigation</SheetTitle>
+          </div>
         </SheetHeader>
-        <TabsList className="flex h-auto min-h-0 flex-1 flex-col items-stretch justify-start gap-0.5 overflow-y-auto rounded-none border-0 bg-transparent p-2 shadow-none">
+        <TabsList className="flex h-auto min-h-0 flex-1 flex-col items-stretch justify-start gap-1 overflow-y-auto rounded-none border-0 bg-transparent p-2 shadow-none">
           <AdminNavItems
+            activeTab={activeTab}
             isServiceEnabled={isServiceEnabled}
             onNavigateEngineering={() => {
               onNavigateEngineering();
@@ -438,6 +246,9 @@ type AdminTopBarProps = {
   onOpenPopups?: () => void;
   onNavigateTab?: (tab: string) => void;
   onOpenNotifications?: () => void;
+  isServiceEnabled?: (key: string) => boolean;
+  onNavigateEngineering?: () => void;
+  onNavigateNonEngineering?: () => void;
   visitorCount: number;
   uniqueVisitorCount: number;
   notificationCount?: number;
@@ -449,31 +260,48 @@ type AdminTopBarProps = {
 function AdminNavSearch({
   open,
   onOpenChange,
-  onSelect,
+  onSelectTab,
+  isServiceEnabled,
+  onNavigateEngineering,
+  onNavigateNonEngineering,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelect: (tab: string) => void;
+  onSelectTab: (tab: string) => void;
+  isServiceEnabled: (key: string) => boolean;
+  onNavigateEngineering: () => void;
+  onNavigateNonEngineering: () => void;
 }) {
+  const groups = useMemo(
+    () => buildAdminNavSearchGroups(isServiceEnabled, onNavigateEngineering, onNavigateNonEngineering),
+    [isServiceEnabled, onNavigateEngineering, onNavigateNonEngineering]
+  );
+
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       <CommandInput placeholder="Search modules…" />
       <CommandList>
         <CommandEmpty>No module found.</CommandEmpty>
-        <CommandGroup heading="Admin modules">
-          {NAV_SEARCH_ENTRIES.map(({ value, label }) => (
-            <CommandItem
-              key={value}
-              value={`${label} ${value}`}
-              onSelect={() => {
-                onSelect(value);
-                onOpenChange(false);
-              }}
-            >
-              {label}
-            </CommandItem>
-          ))}
-        </CommandGroup>
+        {groups.map((group) => (
+          <CommandGroup key={group.heading} heading={group.heading}>
+            {group.entries.map((entry) => (
+              <CommandItem
+                key={entry.value}
+                value={`${entry.label} ${entry.value}`}
+                onSelect={() => {
+                  if ("action" in entry && entry.action) {
+                    entry.action();
+                  } else {
+                    onSelectTab(entry.value);
+                  }
+                  onOpenChange(false);
+                }}
+              >
+                {entry.label}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ))}
       </CommandList>
     </CommandDialog>
   );
@@ -487,6 +315,9 @@ export function AdminTopBar({
   onOpenPopups,
   onNavigateTab,
   onOpenNotifications,
+  isServiceEnabled,
+  onNavigateEngineering,
+  onNavigateNonEngineering,
   visitorCount,
   uniqueVisitorCount,
   notificationCount = 0,
@@ -666,11 +497,14 @@ export function AdminTopBar({
         </div>
       </header>
 
-      {onNavigateTab ? (
+      {onNavigateTab && isServiceEnabled && onNavigateEngineering && onNavigateNonEngineering ? (
         <AdminNavSearch
           open={searchOpen}
           onOpenChange={setSearchOpen}
-          onSelect={onNavigateTab}
+          onSelectTab={onNavigateTab}
+          isServiceEnabled={isServiceEnabled}
+          onNavigateEngineering={onNavigateEngineering}
+          onNavigateNonEngineering={onNavigateNonEngineering}
         />
       ) : null}
     </>

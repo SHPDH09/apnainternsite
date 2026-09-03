@@ -128,7 +128,7 @@
   }
 
   .admin-shell {
-    --admin-sidebar-width: 17rem;
+    --admin-sidebar-width: 18.5rem;
   }
 
   .admin-shell .admin-sidebar [data-state="active"] svg {

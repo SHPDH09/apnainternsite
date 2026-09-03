@@ -3192,6 +3192,7 @@ Apna Intern Team`;
     >
       {showSidebar && (
         <AdminSidebar
+          activeTab={activeTab}
           isServiceEnabled={isServiceEnabled}
           onNavigateEngineering={() => navigate("/admin/engineering-management")}
           onNavigateNonEngineering={() => navigate("/admin/non-engineering-management")}
@@ -3204,6 +3205,7 @@ Apna Intern Team`;
       <AdminMobileNav
         open={mobileNavOpen}
         onOpenChange={setMobileNavOpen}
+        activeTab={activeTab}
         isServiceEnabled={isServiceEnabled}
         onNavigateEngineering={() => navigate("/admin/engineering-management")}
         onNavigateNonEngineering={() => navigate("/admin/non-engineering-management")}
@@ -3220,6 +3222,9 @@ Apna Intern Team`;
           onOpenPopups={() => navigateAdminTab("popups")}
           onNavigateTab={navigateAdminTab}
           onOpenNotifications={() => navigateAdminTab("notifications")}
+          isServiceEnabled={isServiceEnabled}
+          onNavigateEngineering={() => navigate("/admin/engineering-management")}
+          onNavigateNonEngineering={() => navigate("/admin/non-engineering-management")}
           visitorCount={visitorCount}
           uniqueVisitorCount={uniqueVisitorCount}
           notificationCount={notifications.length}
