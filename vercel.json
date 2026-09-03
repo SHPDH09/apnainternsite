@@ -1,4 +1,7 @@
 {
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "framework": "vite",
   "functions": {
     "api/send-bulk-mail.ts": {
       "maxDuration": 60
