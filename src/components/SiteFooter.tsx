@@ -112,6 +112,7 @@ export const SiteFooter = () => {
               <li><Link to="/" className="hover:text-white transition-colors">Home</Link></li>
               <li><a href="/#about" className="hover:text-white transition-colors">About</a></li>
               <li><a href="/#gallery" className="hover:text-white transition-colors">Gallery</a></li>
+              <li><a href="/blog" className="hover:text-white transition-colors">Blog</a></li>
               <li><a href="/#consent-form" className="hover:text-white transition-colors">Consent Form</a></li>
               <li><a href="/#faq" className="hover:text-white transition-colors">FAQ</a></li>
               <li><Link to="/verify" className="hover:text-white transition-colors">Verify Certificate</Link></li>

@@ -64,6 +64,7 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   "add-registration": "Add Registration",
   "student-data-upload": "Student Data Upload",
   gallery: "Gallery Management",
+  blog: "Blog Management",
   "home-cms": "Home Page Content",
   "consult-letter": "Consent Form Template",
   popups: "Popup Message Management",
@@ -218,6 +219,9 @@ function AdminNavItems({
       <div className={sectionClass}>Website</div>
       <TabsTrigger value="gallery" className={navItemClass}>
         <Image className="size-4 shrink-0" /> Gallery
+      </TabsTrigger>
+      <TabsTrigger value="blog" className={navItemClass}>
+        <BookOpen className="size-4 shrink-0" /> Blog
       </TabsTrigger>
       <TabsTrigger value="home-cms" className={navItemClass}>
         <LayoutDashboard className="size-4 shrink-0" /> Home Content

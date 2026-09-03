@@ -11,6 +11,7 @@ export const POPUP_PAGE_OPTIONS = [
   { key: "courses", label: "Courses Page" },
   { key: "universities", label: "Universities" },
   { key: "gallery", label: "Gallery" },
+  { key: "blog", label: "Blog" },
   { key: "team", label: "Team" },
   { key: "mous", label: "MOUs" },
   { key: "verify", label: "Verify Certificate" },
@@ -50,6 +51,7 @@ const HASH_PAGE: Record<string, PopupPageKey> = {
   about: "about",
   universities: "universities",
   gallery: "gallery",
+  blog: "blog",
   "expert-team": "team",
   team: "team",
   mous: "mous",
@@ -88,6 +90,7 @@ export function resolvePopupPageKeys(pathname: string, hash = ""): PopupPageKey[
   if (path === "/courses" || path.startsWith("/courses/")) keys.add("courses");
   if (path === "/verify") keys.add("verify");
   if (path === "/contact") keys.add("contact");
+  if (path === "/blog" || path.startsWith("/blog/")) keys.add("blog");
   if (path === "/login" || path === "/college/login" || path === "/referral/login" || path === "/cybercafe/login") {
     keys.add("login");
   }
