@@ -1,0 +1,5 @@
+{
+  "name": "Apna Intern (AWS RDS)",
+  "install": "npm ci && node scripts/cloud-agent-env-from-secrets.mjs",
+  "start": "pg_ctlcluster 16 main start 2>/dev/null || true"
+}

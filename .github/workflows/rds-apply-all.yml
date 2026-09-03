@@ -1,0 +1,83 @@
+# Apply all aws/scripts/*.sql to AWS RDS + redeploy Lambda (uses GitHub repo secrets).
+#
+# Required secrets (Settings → Secrets and variables → Actions):
+#   DATABASE_URL
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+# Optional: AWS_DEFAULT_REGION (default ap-south-1), RAZORPAY_*, SMTP_*, LOCAL_JWT_SECRET
+
+name: RDS Apply All SQL
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "aws/scripts/**"
+      - ".github/workflows/rds-apply-all.yml"
+
+concurrency:
+  group: rds-apply-all
+  cancel-in-progress: false
+
+jobs:
+  apply-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[rds-apply]')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply all RDS SQL
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AWS_RDS_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run aws:rds:apply-all
+
+      - name: Prepare Lambda deploy config
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          LOCAL_JWT_SECRET: ${{ secrets.LOCAL_JWT_SECRET }}
+        run: node aws/scripts/prepare-samconfig.mjs
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-1' }}
+
+      - name: Install SAM CLI
+        run: pipx install aws-sam-cli
+
+      - name: Bundle and deploy Lambda
+        run: |
+          node aws/scripts/bundle-lambda.mjs
+          sam build -t aws/sam/template.yaml
+          sam deploy \
+            --config-file aws/sam/samconfig.toml \
+            --template-file .aws-sam/build/template.yaml \
+            --no-confirm-changeset
+
+      - name: Verify staging upload RPC
+        run: |
+          sleep 15
+          TOKEN=$(curl -sS -X POST "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/v1/token?grant_type=password" \
+            -H "Content-Type: application/json" -H "apikey: local-anon-key" \
+            -d '{"email":"'"${{ secrets.ADMIN_TEST_EMAIL || 'rk331159@gmail.com' }}"'","password":"'"${{ secrets.ADMIN_TEST_PASSWORD }}"'"}' \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
+          curl -sS -X POST "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/v1/rpc/admin_student_data_upload_import" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -H "apikey: local-anon-key" \
+            -d "{\"p_email\":\"ghactions$(date +%s)@example.com\",\"p_password\":\"Test@12345\",\"p_phone\":\"9876543210\",\"p_full_name\":\"GH Test\",\"p_registration_number\":\"REGGH$(date +%s)\",\"p_paid\":true}"
