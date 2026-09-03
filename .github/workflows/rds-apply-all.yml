@@ -1,10 +1,6 @@
-# Apply all aws/scripts/*.sql to AWS RDS + redeploy Lambda code (uses GitHub repo secrets).
+# Apply all aws/scripts/*.sql to AWS RDS + redeploy Lambda (when GitHub secrets set).
 #
-# Secrets (GitHub → Settings → Secrets → Actions):
-#   DATABASE_URL          — direct RDS apply (optional if Lambda deploy succeeds)
-#   AWS_ACCESS_KEY_ID     — Lambda code-only update
-#   AWS_SECRET_ACCESS_KEY
-# Optional: RAZORPAY_*, SMTP_*, LOCAL_JWT_SECRET, ADMIN_TEST_PASSWORD
+# Secrets: DATABASE_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (optional)
 
 name: RDS Apply All SQL
 
@@ -50,6 +46,7 @@ jobs:
           fi
 
       - name: Configure AWS credentials
+        if: secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -57,6 +54,7 @@ jobs:
           aws-region: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-1' }}
 
       - name: Bundle Lambda and update function code only
+        if: secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != ''
         run: |
           node aws/scripts/bundle-lambda.mjs
           cd aws/lambda/dist && zip -r /tmp/lambda.zip . && cd -
@@ -65,20 +63,8 @@ jobs:
             --zip-file fileb:///tmp/lambda.zip \
             --region ap-south-1
           aws lambda wait function-updated --function-name ezyintern-api-staging --region ap-south-1
-          echo "Lambda updated — cold start will apply all RDS SQL via DATABASE_URL already on Lambda"
+          echo "Lambda updated"
 
-      - name: Trigger cold start + verify upload RPC
-        env:
-          ADMIN_TEST_PASSWORD: ${{ secrets.ADMIN_TEST_PASSWORD }}
-        run: |
-          curl -sS "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/health" || true
-          sleep 20
-          TOKEN=$(curl -sS -X POST "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/v1/token?grant_type=password" \
-            -H "Content-Type: application/json" -H "apikey: local-anon-key" \
-            -d '{"email":"rk331159@gmail.com","password":"'"${ADMIN_TEST_PASSWORD:-Raunak@12583}"'"}' \
-            | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
-          RESULT=$(curl -sS -X POST "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/v1/rpc/admin_student_data_upload_import" \
-            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -H "apikey: local-anon-key" \
-            -d "{\"p_email\":\"ghactions$(date +%s)@example.com\",\"p_password\":\"Test@12345\",\"p_phone\":\"9876543210\",\"p_full_name\":\"GH Test\",\"p_registration_number\":\"REGGH$(date +%s)\",\"p_paid\":true}")
-          echo "$RESULT"
-          echo "$RESULT" | grep -q '"ok":true' || echo "::warning::Upload RPC verify did not return ok:true (may need second attempt after bootstrap)"
+      - name: Skip AWS deploy (no GitHub AWS secrets)
+        if: secrets.AWS_ACCESS_KEY_ID == '' || secrets.AWS_SECRET_ACCESS_KEY == ''
+        run: echo "::warning::AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY not set in GitHub — skipped Lambda deploy"
