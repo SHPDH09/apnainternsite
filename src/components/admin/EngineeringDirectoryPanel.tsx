@@ -72,16 +72,6 @@ type CollegeItem = { id: string; name: string; university_id: string };
 
 export type EngineeringDirectoryActions = {
   onViewDetails: (student: StudentDirectoryStudent) => void | Promise<void>;
-  onEditDetails: (student: StudentDirectoryStudent) => void | Promise<void>;
-  onResetPassword: (student: StudentDirectoryStudent) => void | Promise<void>;
-  onResendCredentials: (student: StudentDirectoryStudent) => void | Promise<void>;
-  onViewConsentLetter: (student: StudentDirectoryStudent) => void | Promise<void>;
-  onUploadConsentLetter: (student: StudentDirectoryStudent) => void | Promise<void>;
-  onViewLogbook: (student: StudentDirectoryStudent) => void | Promise<void>;
-  onDownloadAttendanceReport: (student: StudentDirectoryStudent) => void | Promise<void>;
-  onDownloadOfferLetter: (student: StudentDirectoryStudent) => void | Promise<void>;
-  onToggleBlock: (student: StudentDirectoryStudent) => void | Promise<void>;
-  onDelete: (student: StudentDirectoryStudent) => void | Promise<void>;
 };
 
 type Props = {
@@ -537,53 +527,11 @@ export function EngineeringDirectoryPanel({
                         onViewDetails={() =>
                           toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
                         }
-                        onEditDetails={() =>
-                          toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
-                        }
-                        onResetPassword={() =>
-                          toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
-                        }
-                        onResendCredentials={() =>
-                          toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
-                        }
-                        onViewConsentLetter={() =>
-                          toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
-                        }
-                        onUploadConsentLetter={() =>
-                          toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
-                        }
-                        onViewLogbook={() =>
-                          toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
-                        }
-                        onDownloadAttendanceReport={() =>
-                          toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
-                        }
-                        onDownloadOfferLetter={() =>
-                          toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
-                        }
-                        onToggleBlock={() =>
-                          toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
-                        }
-                        onDelete={() =>
-                          toast.message("Sample preview only — run the BEU mock seed SQL for a real student.")
-                        }
                       />
                     ) : (
                       <StudentDirectoryActionsMenu
                         student={row as StudentDirectoryStudent}
                         onViewDetails={() => runStudentAction(row, actions.onViewDetails)}
-                        onEditDetails={() => runStudentAction(row, actions.onEditDetails)}
-                        onResetPassword={() => runStudentAction(row, actions.onResetPassword)}
-                        onResendCredentials={() => runStudentAction(row, actions.onResendCredentials, true)}
-                        onViewConsentLetter={() => runStudentAction(row, actions.onViewConsentLetter)}
-                        onUploadConsentLetter={() => runStudentAction(row, actions.onUploadConsentLetter)}
-                        onViewLogbook={() => runStudentAction(row, actions.onViewLogbook)}
-                        onDownloadAttendanceReport={() =>
-                          runStudentAction(row, actions.onDownloadAttendanceReport)
-                        }
-                        onDownloadOfferLetter={() => runStudentAction(row, actions.onDownloadOfferLetter)}
-                        onToggleBlock={() => runStudentAction(row, actions.onToggleBlock, true)}
-                        onDelete={() => runStudentAction(row, actions.onDelete, true)}
                       />
                     )}
                   </TableCell>
