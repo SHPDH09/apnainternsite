@@ -10,6 +10,7 @@ import { callRpc } from "./db";
 import { verifyToken } from "./local-jwt";
 import { ensureCmsTable, isCmsTable, isMissingRelationError } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
+import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
 
 function jwtFromRequest(req: Request) {
@@ -601,19 +602,33 @@ export async function restRpc(req: Request, res: Response) {
       const code = String((firstErr as { code?: string })?.code || "");
       const msg = String((firstErr as { message?: string })?.message || firstErr || "");
       const isRegistrationRpc = name === "admin_create_minimal_student_registration";
-      const shouldBootstrap =
+      const isUploadRpc = name.startsWith("admin_student_data_upload_");
+      const shouldBootstrapRegistration =
         isRegistrationRpc &&
         (code === "42883" ||
           /btrim\(uuid\)/i.test(msg) ||
           /could not find the function/i.test(msg) ||
           /function public\.admin_create_minimal_student_registration does not exist/i.test(msg));
+      const shouldBootstrapUpload =
+        isUploadRpc &&
+        (code === "42804" ||
+          code === "42883" ||
+          /could not find the function/i.test(msg) ||
+          /column "id" is of type uuid but expression is of type text/i.test(msg) ||
+          /function public\.admin_student_data_upload/i.test(msg));
 
-      if (!shouldBootstrap) {
+      if (!shouldBootstrapRegistration && !shouldBootstrapUpload) {
         throw firstErr;
       }
 
-      console.warn("[rest/rpc] registration RPC failed, applying RDS bootstrap and retrying:", msg);
-      await ensureAdminRegistrationRpc();
+      if (shouldBootstrapRegistration) {
+        console.warn("[rest/rpc] registration RPC failed, applying bootstrap and retrying:", msg);
+        await ensureAdminRegistrationRpc();
+      }
+      if (shouldBootstrapUpload) {
+        console.warn("[rest/rpc] student data upload RPC failed, applying bootstrap and retrying:", msg);
+        await ensureStudentDataUploadSchema();
+      }
       const data = await invokeRpc();
       res.json(data);
       return;

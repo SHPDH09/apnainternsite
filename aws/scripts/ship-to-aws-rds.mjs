@@ -36,10 +36,15 @@ async function verify() {
       to_regclass('public.notifications') AS notifications,
       to_regclass('public.notification_deliveries') AS deliveries,
       to_regclass('public.site_popups') AS site_popups,
+      to_regclass('public.student_data_uploads') AS student_data_uploads,
       EXISTS (
         SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = 'public' AND p.proname = 'admin_publish_notification'
-      ) AS publish_rpc
+      ) AS publish_rpc,
+      EXISTS (
+        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'admin_student_data_upload_import'
+      ) AS upload_import_rpc
   `);
   console.log("✅ RDS check:", rows[0]);
   await client.end();
@@ -52,8 +57,11 @@ async function main() {
   await runNode(path.join(root, "aws/scripts/apply-notifications-rds.mjs"));
   await runNode(path.join(root, "aws/scripts/apply-site-cms-rds.mjs"));
   await runNode(path.join(root, "aws/scripts/apply-admin-registration-rds.mjs"));
+  await runNode(path.join(root, "aws/scripts/apply-student-data-upload-rds.mjs"));
   await verify();
-  console.log("\n✅ AWS RDS ship complete (notifications + popups + contacts + admin registration).");
+  console.log(
+    "\n✅ AWS RDS ship complete (notifications + popups + contacts + admin registration + student data upload)."
+  );
   console.log("Next: npm run aws:lambda:deploy  (point Lambda DATABASE_URL to this RDS)");
 }
 

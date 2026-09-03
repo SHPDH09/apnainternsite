@@ -21,6 +21,7 @@ import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
 import { loadRootEnv } from "./load-env";
 import { ensureAllCmsTables } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
+import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import {
   authLogout,
   authSettings,
@@ -128,6 +129,14 @@ async function buildApp(): Promise<Express> {
       }
     } catch (err) {
       console.warn("[registration-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const upload = await ensureStudentDataUploadSchema();
+      if (upload.applied) {
+        console.log("[student-upload-bootstrap] applied student data upload schema");
+      }
+    } catch (err) {
+      console.warn("[student-upload-bootstrap] startup ensure failed:", err);
     }
   }
 

@@ -39,6 +39,11 @@ for (const rel of [
   "aws/scripts/18-rds-fix-payment-enrollment.sql",
   "aws/scripts/19-rds-fix-password-text-id.sql",
   "aws/scripts/20-rds-fix-admin-create-registration-text-meta.sql",
+  "aws/scripts/28-rds-student-data-upload.sql",
+  "aws/scripts/33-rds-student-data-upload-dup-delete.sql",
+  "aws/scripts/34-rds-student-data-upload-delete-harden.sql",
+  "aws/scripts/35-rds-student-data-upload-history-recover.sql",
+  "aws/scripts/36-rds-student-data-upload-id-type-fix.sql",
 ]) {
   fs.copyFileSync(path.join(root, rel), path.join(sqlDir, path.basename(rel)));
 }
