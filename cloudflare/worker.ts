@@ -45,10 +45,17 @@ function shouldProxy(pathname: string): boolean {
   );
 }
 
+/** Build full Lambda URL — do not use `new URL(path, baseWithStage)` (drops `/staging`). */
+function buildLambdaTarget(env: Env, pathname: string, search: string): string {
+  const path = upstreamPath(pathname);
+  const base = lambdaOrigin(env).replace(/\/$/, "");
+  const suffix = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${suffix}${search}`;
+}
+
 async function proxyToLambda(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const path = upstreamPath(url.pathname);
-  const target = new URL(path + url.search, lambdaOrigin(env));
+  const target = buildLambdaTarget(env, url.pathname, url.search);
 
   const init: RequestInit = {
     method: request.method,
