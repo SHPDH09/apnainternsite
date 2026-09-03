@@ -1,0 +1,6 @@
+{
+  "name": "Apna Intern",
+  "install": "npm ci",
+  "start": "true",
+  "terminals": []
+}
