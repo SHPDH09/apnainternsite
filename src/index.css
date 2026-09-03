@@ -128,11 +128,19 @@
   }
 
   .admin-shell {
-    --admin-sidebar-width: 16.5rem;
+    --admin-sidebar-width: 17rem;
   }
 
   .admin-shell .admin-sidebar [data-state="active"] svg {
     opacity: 1;
+    color: #5AA3E6;
+  }
+
+  .admin-page-canvas {
+    background-color: #f4f7fb;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgb(148 163 184 / 0.12) 1px, transparent 0);
+    background-size: 24px 24px;
   }
 }
 

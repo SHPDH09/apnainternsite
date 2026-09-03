@@ -57,7 +57,7 @@ import {
   adminNavButtonClass,
   adminNavItemClass,
   adminNavSectionClass,
-  adminSurface,
+  adminSidebarClass,
 } from "@/components/admin/ui/adminStyles";
 
 export const ADMIN_TAB_LABELS: Record<string, string> = {
@@ -311,22 +311,22 @@ function AdminSidebarFooter({ onLogout, userEmail }: AdminSidebarFooterProps) {
   }, [userEmail]);
 
   return (
-    <div className={cn("mt-auto shrink-0 border-t p-3", adminSurface)}>
-      <div className="mb-2 flex items-center gap-2 rounded-lg bg-muted/50 px-2.5 py-2">
-        <Avatar className="size-8">
-          <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+    <div className={cn("mt-auto shrink-0 border-t border-slate-800/80 bg-black/25 p-3")}>
+      <div className="mb-2 flex items-center gap-2 rounded-xl bg-white/[0.06] px-2.5 py-2.5">
+        <Avatar className="size-8 ring-2 ring-[#5AA3E6]/30">
+          <AvatarFallback className="bg-[#5AA3E6]/20 text-xs font-bold text-[#5AA3E6]">
             {initials}
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-medium text-foreground">Administrator</p>
-          <p className="truncate text-[11px] text-muted-foreground">{userEmail || "Signed in"}</p>
+          <p className="truncate text-xs font-semibold text-slate-100">Administrator</p>
+          <p className="truncate text-[11px] text-slate-500">{userEmail || "Signed in"}</p>
         </div>
       </div>
       <Button
         variant="ghost"
         size="sm"
-        className="h-9 w-full justify-start gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        className="h-9 w-full justify-start gap-2 text-red-400 hover:bg-red-500/10 hover:text-red-300"
         onClick={onLogout}
       >
         <LogOut className="size-4" />
@@ -353,24 +353,24 @@ export function AdminSidebar({
   return (
     <aside
       className={cn(
-        "admin-sidebar hidden lg:flex w-[16.5rem] shrink-0 flex-col border-r sticky top-0 h-screen",
-        adminSurface,
+        "admin-sidebar hidden lg:flex w-[17rem] shrink-0 flex-col sticky top-0 h-screen",
+        adminSidebarClass,
         className
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b px-4 py-3.5">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <BrandLogo size="sm" />
+      <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 px-4 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <BrandLogo variant="icon" size="sm" />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-foreground">Admin</p>
-            <p className="truncate text-[11px] text-muted-foreground">Apna Intern</p>
+            <p className="truncate text-sm font-bold text-white">Admin Panel</p>
+            <p className="truncate text-[11px] font-medium text-[#5AA3E6]">Apna Intern</p>
           </div>
         </div>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="size-8 shrink-0 text-muted-foreground"
+          className="size-8 shrink-0 text-slate-500 hover:bg-white/5 hover:text-slate-200"
           onClick={onCollapse}
           title="Collapse sidebar"
         >
@@ -518,7 +518,7 @@ export function AdminTopBar({
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
+      <header className="sticky top-0 z-30 flex h-[3.75rem] items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-white/80 md:px-6">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Button
             type="button"
@@ -590,15 +590,15 @@ export function AdminTopBar({
             </Button>
           ) : null}
 
-          <div className="hidden items-center gap-2 rounded-lg border bg-muted/30 px-2.5 py-1 sm:flex">
+          <div className="hidden items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-1.5 sm:flex">
             <div className="text-center">
-              <div className="text-[10px] font-medium text-muted-foreground">Views</div>
-              <div className="text-sm font-semibold tabular-nums">{visitorCount.toLocaleString()}</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Views</div>
+              <div className="text-sm font-bold tabular-nums text-slate-900">{visitorCount.toLocaleString()}</div>
             </div>
-            <div className="h-7 w-px bg-border" />
+            <div className="h-8 w-px bg-slate-200" />
             <div className="text-center">
-              <div className="text-[10px] font-medium text-muted-foreground">Visitors</div>
-              <div className="text-sm font-semibold tabular-nums">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Visitors</div>
+              <div className="text-sm font-bold tabular-nums text-[#2B7CD3]">
                 {uniqueVisitorCount.toLocaleString()}
               </div>
             </div>

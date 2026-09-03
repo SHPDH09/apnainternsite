@@ -3188,7 +3188,7 @@ Apna Intern Team`;
         else if (value === "whatsapp-links") navigate("/admin/whatsapp-links", { replace: true });
         else navigate(`/admin?tab=${encodeURIComponent(value)}`, { replace: true });
       }}
-      className="admin-shell flex min-h-screen bg-muted/30"
+      className="admin-shell flex min-h-screen bg-[#eef2f7]"
     >
       {showSidebar && (
         <AdminSidebar
