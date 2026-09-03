@@ -72,6 +72,8 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   uploads: "Uploads",
   classes: "Live Classes",
   payments: "Payments",
+  "check-payment": "Check Payment",
+  "unpaid-students": "Unpaid Students",
   leads: "Leads",
   "lead-assignment": "Lead Assignment",
   notifications: "Notifications",
@@ -193,10 +195,20 @@ function AdminNavItems({
         <div className={adminNavSectionClass}>Revenue</div>
       )}
       {isServiceEnabled("payments") && (
-        <TabsTrigger value="payments" className={adminNavItemClass}>
-          <DollarSign className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
-          Payments
-        </TabsTrigger>
+        <>
+          <TabsTrigger value="payments" className={adminNavItemClass}>
+            <DollarSign className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
+            Payments
+          </TabsTrigger>
+          <TabsTrigger value="check-payment" className={adminNavItemClass}>
+            <Search className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
+            Check Payment
+          </TabsTrigger>
+          <TabsTrigger value="unpaid-students" className={adminNavItemClass}>
+            <IndianRupee className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100" />
+            Unpaid Students
+          </TabsTrigger>
+        </>
       )}
       {isServiceEnabled("leads") && (
         <TabsTrigger value="leads" className={adminNavItemClass}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity,
   Download,
@@ -6,11 +6,14 @@ import {
   Loader2,
   ShoppingCart,
   TrendingUp,
+  UserPlus,
   Users,
 } from "lucide-react";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   XAxis,
   YAxis,
@@ -33,8 +36,11 @@ type AdminDashboardPanelProps = {
   payments: PaymentRow[];
   cancelledPayments: PaymentRow[];
   studentTotalCount: number;
+  visitorCount: number;
+  uniqueVisitorCount: number;
   isPaymentsLoading?: boolean;
   onExportCsv: () => void;
+  onNavigateTab?: (tab: string) => void;
 };
 
 function getDashboardStats(payments: PaymentRow[], cancelledPayments: PaymentRow[]) {
@@ -58,7 +64,10 @@ function getDashboardStats(payments: PaymentRow[], cancelledPayments: PaymentRow
   const growth =
     yesterdayRevenue === 0 ? 100 : ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100;
 
-  return { todayRevenue, growth, todayEnrolledCount, todayLeadsCount };
+  const totalRevenue = payments.reduce((acc, p) => acc + p.amount_paise / 100, 0);
+  const avgOrderValue = payments.length ? totalRevenue / payments.length : 0;
+
+  return { todayRevenue, growth, todayEnrolledCount, todayLeadsCount, avgOrderValue };
 }
 
 function filterRevenueByDate(
@@ -82,34 +91,27 @@ function filterRevenueByDate(
   return Object.entries(daily).map(([date, amount]) => ({ date, amount }));
 }
 
+function paymentsByDayOfWeek(payments: PaymentRow[]): { day: string; count: number }[] {
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const counts = new Array(7).fill(0);
+  payments.forEach((p) => {
+    counts[new Date(p.created_at).getDay()] += 1;
+  });
+  return days.map((day, i) => ({ day, count: counts[i] }));
+}
+
 export function AdminDashboardPanel({
   payments,
   cancelledPayments,
   studentTotalCount,
+  visitorCount,
+  uniqueVisitorCount,
   isPaymentsLoading,
   onExportCsv,
+  onNavigateTab,
 }: AdminDashboardPanelProps) {
   const [dashStartDate, setDashStartDate] = useState("");
   const [dashEndDate, setDashEndDate] = useState("");
-  const [livePulse, setLivePulse] = useState<{ name: string; value: number }[]>(
-    Array.from({ length: 12 }, (_, i) => ({ name: i.toString(), value: 40 + Math.random() * 20 }))
-  );
-  const [liveTraffic, setLiveTraffic] = useState(86);
-  const [monitoringStatus, setMonitoringStatus] = useState("Monitoring");
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLivePulse((prev) => {
-        const newVal = 35 + Math.random() * 35;
-        return [...prev.slice(1), { name: Date.now().toString(), value: newVal }];
-      });
-      setLiveTraffic((prev) => prev + (Math.random() > 0.5 ? 1 : -1));
-
-      const statuses = ["Monitoring", "Node active", "Traffic stable", "System optimized"];
-      setMonitoringStatus(statuses[Math.floor(Math.random() * statuses.length)]!);
-    }, 2500);
-    return () => clearInterval(interval);
-  }, []);
 
   const stats = useMemo(
     () => getDashboardStats(payments, cancelledPayments),
@@ -120,6 +122,13 @@ export function AdminDashboardPanel({
     () => filterRevenueByDate(payments, dashStartDate, dashEndDate),
     [payments, dashStartDate, dashEndDate]
   );
+
+  const weekdayData = useMemo(() => {
+    let filtered = payments;
+    if (dashStartDate) filtered = filtered.filter((p) => p.created_at >= `${dashStartDate}T00:00:00`);
+    if (dashEndDate) filtered = filtered.filter((p) => p.created_at <= `${dashEndDate}T23:59:59`);
+    return paymentsByDayOfWeek(filtered);
+  }, [payments, dashStartDate, dashEndDate]);
 
   const dateToolbar = (
     <div className="flex flex-wrap items-center gap-2">
@@ -192,114 +201,129 @@ export function AdminDashboardPanel({
           }
           bodyClassName="space-y-4"
         >
-          <div className="flex flex-wrap gap-3 text-sm">
-            <div>
-              <span className="text-muted-foreground">Students today</span>
-              <p className="font-semibold text-foreground">{stats.todayEnrolledCount}</p>
+          {chartData.length === 0 ? (
+            <div className="flex h-[240px] items-center justify-center rounded-lg border border-dashed border-border/60 bg-muted/20 text-sm text-muted-foreground">
+              No payments in this date range
             </div>
-            <div>
-              <span className="text-muted-foreground">Leads today</span>
-              <p className="font-semibold text-foreground">{stats.todayLeadsCount}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Revenue today</span>
-              <p className="font-semibold text-emerald-600">
-                ₹{stats.todayRevenue.toLocaleString()}
-              </p>
-            </div>
-          </div>
-
-          <ChartContainer
-            config={{
-              amount: { label: "Revenue", color: "hsl(var(--primary))" },
-            }}
-            className="h-[240px] w-full"
-          >
-            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="adminRevenueFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border/60" />
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                minTickGap={24}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                width={48}
-                tickFormatter={(v) => `₹${v}`}
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value) => (
-                      <span className="font-medium">₹{Number(value).toLocaleString()}</span>
-                    )}
-                  />
-                }
-              />
-              <Area
-                type="monotone"
-                dataKey="amount"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-                fill="url(#adminRevenueFill)"
-              />
-            </AreaChart>
-          </ChartContainer>
+          ) : (
+            <ChartContainer
+              config={{
+                amount: { label: "Revenue", color: "hsl(var(--primary))" },
+              }}
+              className="h-[240px] w-full"
+            >
+              <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="adminRevenueFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border/60" />
+                <XAxis
+                  dataKey="date"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  minTickGap={24}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={48}
+                  tickFormatter={(v) => `₹${v}`}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => (
+                        <span className="font-medium">₹{Number(value).toLocaleString()}</span>
+                      )}
+                    />
+                  }
+                />
+                <Area
+                  type="monotone"
+                  dataKey="amount"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  fill="url(#adminRevenueFill)"
+                />
+              </AreaChart>
+            </ChartContainer>
+          )}
         </AdminContentCard>
 
         <AdminContentCard
-          title="Platform health"
-          description="Live traffic and API status."
-          bodyClassName="space-y-5"
+          title="Enrollments by day"
+          description="Weekday distribution for selected range."
+          bodyClassName="space-y-4"
+        >
+          <ChartContainer
+            config={{
+              count: { label: "Payments", color: "hsl(var(--primary))" },
+            }}
+            className="h-[240px] w-full"
+          >
+            <BarChart data={weekdayData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border/60" />
+              <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} />
+              <YAxis hide />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </AdminContentCard>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <AdminContentCard
+          title="Site traffic"
+          description="Public homepage analytics."
+          bodyClassName="space-y-4"
         >
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Activity className="size-5" aria-hidden />
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">{monitoringStatus}</p>
-              <p className="text-xs text-muted-foreground">Traffic: {liveTraffic} req/s</p>
+              <p className="text-sm font-medium text-foreground">{visitorCount.toLocaleString()} page views</p>
+              <p className="text-xs text-muted-foreground">
+                {uniqueVisitorCount.toLocaleString()} unique visitors
+              </p>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Avg order value: ₹{stats.avgOrderValue.toFixed(0)}
+          </p>
+        </AdminContentCard>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">API response</span>
-              <span className="font-medium text-emerald-600">Stable</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className="h-full w-[92%] rounded-full bg-primary/80" />
-            </div>
+        <AdminContentCard
+          className="lg:col-span-2"
+          title="Quick actions"
+          description="Jump to frequently used admin modules."
+        >
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              { tab: "students", label: "Student directory", icon: Users },
+              { tab: "payments", label: "Payments & revenue", icon: IndianRupee },
+              { tab: "leads", label: "Leads hub", icon: UserPlus },
+              { tab: "check-payment", label: "Check payment ID", icon: TrendingUp },
+              { tab: "unpaid-students", label: "Unpaid students", icon: ShoppingCart },
+              { tab: "attendance", label: "Attendance", icon: Activity },
+            ].map(({ tab, label, icon: Icon }) => (
+              <Button
+                key={tab}
+                type="button"
+                variant="outline"
+                className="h-10 justify-start gap-2"
+                onClick={() => onNavigateTab?.(tab)}
+              >
+                <Icon className="size-4 text-primary" />
+                {label}
+              </Button>
+            ))}
           </div>
-
-          <ChartContainer
-            config={{
-              value: { label: "Traffic", color: "hsl(var(--primary))" },
-            }}
-            className="h-[120px] w-full"
-          >
-            <AreaChart data={livePulse} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="hsl(var(--primary))"
-                strokeWidth={1.5}
-                fill="hsl(var(--primary))"
-                fillOpacity={0.12}
-                isAnimationActive
-                animationDuration={800}
-              />
-            </AreaChart>
-          </ChartContainer>
         </AdminContentCard>
       </div>
     </div>

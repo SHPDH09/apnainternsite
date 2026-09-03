@@ -39,6 +39,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import AIAssignmentBuilder from "@/components/AIAssignmentBuilder";
 import { AdminDashboardPanel } from "@/components/admin/AdminDashboardPanel";
+import { CheckPaymentPanel } from "@/components/admin/CheckPaymentPanel";
+import { UnpaidStudentsDirectoryPanel } from "@/components/admin/UnpaidStudentsDirectoryPanel";
 import { AdminMobileNav, AdminSidebar, AdminTopBar } from "@/components/admin/AdminShell";
 import { adminPageClass } from "@/components/admin/ui";
 import { ChangePinModal } from "@/components/ChangePinModal";
@@ -2027,7 +2029,12 @@ export default function Admin() {
   useEffect(() => {
     if (!allowed) return;
 
-    if (activeTab === "dashboard" || activeTab === "payments") {
+    if (
+      activeTab === "dashboard" ||
+      activeTab === "payments" ||
+      activeTab === "check-payment" ||
+      activeTab === "unpaid-students"
+    ) {
       void loadPaymentsData();
       return;
     }
@@ -3235,8 +3242,11 @@ Apna Intern Team`;
                   payments={payments}
                   cancelledPayments={cancelledPayments}
                   studentTotalCount={studentTotalCount}
+                  visitorCount={visitorCount}
+                  uniqueVisitorCount={uniqueVisitorCount}
                   isPaymentsLoading={isPaymentsLoading}
                   onExportCsv={exportToCSV}
+                  onNavigateTab={navigateAdminTab}
                 />
               </TabsContent>
 
@@ -3661,6 +3671,14 @@ Apna Intern Team`;
                   </div>
                 </Card>
               </div>
+            </TabsContent>
+
+            <TabsContent value="check-payment" className="mt-0">
+              <CheckPaymentPanel />
+            </TabsContent>
+
+            <TabsContent value="unpaid-students" className="mt-0">
+              <UnpaidStudentsDirectoryPanel client={supabase} />
             </TabsContent>
 
             <TabsContent value="leads">
