@@ -10,40 +10,51 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const out = path.join(root, ".env.awsrds.local");
 
-const url =
+/** @type {string[]} */
+const lines = ["# Auto-generated from Cursor Environment secrets — do not commit"];
+
+const awsKey = process.env.AWS_ACCESS_KEY_ID?.trim();
+const awsSecret = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+if (awsKey && awsSecret) {
+  lines.push(`AWS_ACCESS_KEY_ID=${awsKey}`);
+  lines.push(`AWS_SECRET_ACCESS_KEY=${awsSecret}`);
+  lines.push(`AWS_DEFAULT_REGION=${process.env.AWS_DEFAULT_REGION?.trim() || "ap-south-1"}`);
+}
+
+let databaseUrl =
   process.env.DATABASE_URL?.trim() ||
   process.env.AWS_RDS_DATABASE_URL?.trim() ||
   process.env.AWS_RDS_URL?.trim();
 
-if (!url) {
+if (!databaseUrl) {
   const host = process.env.AWS_RDS_HOST?.trim();
   const user = process.env.AWS_RDS_USER?.trim();
   const pass = process.env.AWS_RDS_PASSWORD?.trim();
   const db = process.env.AWS_RDS_DATABASE?.trim() || "postgres";
   const port = process.env.AWS_RDS_PORT?.trim() || "5432";
   if (host && user && pass) {
-    const encUser = encodeURIComponent(user);
-    const encPass = encodeURIComponent(pass);
-    const built = `postgresql://${encUser}:${encPass}@${host}:${port}/${db}?sslmode=require`;
-    writeEnv(built);
-    process.exit(0);
+    databaseUrl = `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${host}:${port}/${db}?sslmode=require`;
   }
-  console.log("[cloud-agent-env] No DATABASE_URL / AWS_RDS_* secrets — skip .env.awsrds.local");
+}
+
+if (databaseUrl) {
+  lines.push(`DATABASE_URL=${databaseUrl.replace(/^["']|["']$/g, "")}`);
+}
+
+if (lines.length === 1) {
+  console.log("[cloud-agent-env] No AWS/RDS secrets in environment — skip .env.awsrds.local");
   process.exit(0);
 }
 
-writeEnv(url.replace(/^["']|["']$/g, ""));
+lines.push(
+  "LOCAL_SUPABASE=true",
+  "LOCAL_JWT_SECRET=" + (process.env.LOCAL_JWT_SECRET || "change-me-local-secret"),
+  "VITE_SUPABASE_URL=http://localhost:8080",
+  "VITE_SUPABASE_PUBLISHABLE_KEY=local-anon-key",
+  "RDS_RPC_OPEN=true",
+  "VITE_SITE_API_ORIGIN=http://localhost:8080",
+  "VITE_PUBLIC_APP_URL=http://localhost:8080"
+);
 
-function writeEnv(databaseUrl) {
-  const lines = [
-    "# Auto-generated from Cursor Environment secrets — do not commit",
-    `DATABASE_URL=${databaseUrl}`,
-    "LOCAL_SUPABASE=true",
-    "LOCAL_JWT_SECRET=" + (process.env.LOCAL_JWT_SECRET || "change-me-local-secret"),
-    "VITE_SUPABASE_URL=http://localhost:8080",
-    "VITE_SUPABASE_PUBLISHABLE_KEY=local-anon-key",
-    "RDS_RPC_OPEN=true",
-  ];
-  fs.writeFileSync(out, lines.join("\n") + "\n", { mode: 0o600 });
-  console.log("[cloud-agent-env] Wrote .env.awsrds.local from environment secrets");
-}
+fs.writeFileSync(out, lines.join("\n") + "\n", { mode: 0o600 });
+console.log("[cloud-agent-env] Wrote .env.awsrds.local from environment secrets");

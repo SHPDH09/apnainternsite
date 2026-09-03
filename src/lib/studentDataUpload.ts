@@ -1,6 +1,7 @@
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { siteApiUrl } from "@/lib/siteApi";
 
 export type StudentDataUploadMode = "paid" | "unpaid";
 
@@ -388,6 +389,115 @@ export async function fetchExistingRegistrationNumbers(
   return found;
 }
 
+function isUploadRpcSchemaError(message: string): boolean {
+  return (
+    /42804/i.test(message) ||
+    /uuid but expression is of type text/i.test(message) ||
+    /btrim\(uuid\)/i.test(message) ||
+    /could not find the function.*admin_student_data_upload_import/i.test(message)
+  );
+}
+
+async function importStudentRowViaAdminRegisterApi(
+  client: SupabaseClient,
+  adminId: string,
+  row: StudentDataUploadRow,
+  mode: StudentDataUploadMode,
+  uploadId: string | null | undefined
+): Promise<{ userId: string; registrationId: string }> {
+  const email = row.email.trim().toLowerCase();
+  const phone = row.contactNumber.replace(/\D/g, "").slice(-10);
+  const reg = row.registrationNumber.trim();
+  const ts = Date.now();
+
+  const res = await fetch(siteApiUrl("/api/admin-register"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      admin_id: adminId,
+      student_data: {
+        email,
+        password: row.password.trim(),
+        full_name: row.fullName.trim(),
+        gender: row.gender.trim() || "Other",
+        parent_name: row.parentName.trim() || null,
+        contact_number: phone,
+        university_name: row.university.trim(),
+        college_name: row.college.trim(),
+        degree: row.degree.trim(),
+        department: row.department.trim(),
+        subject: row.subject.trim(),
+        internship_domain: row.internshipDomain.trim() || row.degree.trim() || "Internship",
+        course: row.internshipDomain.trim() || "Internship",
+        class_semester: row.semester.trim(),
+        academic_session: row.session.trim(),
+        roll_number: row.rollNumber.trim(),
+      },
+      payment_amount: mode === "paid" ? "500" : "0",
+      transaction_id:
+        mode === "paid" ? `pay_admin_data_upload_${ts}` : `pay_admin_data_upload_unpaid_${ts}`,
+    }),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok || body.success !== true) {
+    const msg = String(body.message || body.error || "Admin register API failed.");
+    if (/already registered|duplicate|already linked/i.test(msg)) {
+      throw new Error(msg);
+    }
+    throw new Error(msg);
+  }
+
+  let userId = String(body.userId || body.user_id || "");
+  if (!userId) {
+    const { data: studentRow, error: lookupErr } = await client
+      .from("students")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    if (lookupErr) throw new Error(lookupErr.message);
+    userId = String((studentRow as { id?: string } | null)?.id || "");
+  }
+  if (!userId) throw new Error("Registration succeeded but student id was not found.");
+
+  const meta = {
+    source: "admin_student_data_upload",
+    password: row.password.trim(),
+    sheet_email: email,
+    auth_email: email,
+    internship_mode: row.mode.trim(),
+    subject: row.subject.trim(),
+    department: row.department.trim(),
+    bulk_upload_paid: mode === "paid",
+    payment_required: mode !== "paid",
+    ...(uploadId ? { upload_id: uploadId } : {}),
+    ...(mode === "paid"
+      ? { razorpay_payment_id: String(body.paymentId || `pay_admin_data_upload_${ts}`) }
+      : {}),
+  };
+
+  const { error: patchErr } = await client
+    .from("students")
+    .update({
+      registration_id: reg,
+      parent_name: row.parentName.trim() || null,
+      metadata: meta,
+    })
+    .eq("id", userId);
+
+  if (patchErr) throw new Error(patchErr.message);
+
+  const { error: roleErr } = await client.from("user_roles").insert({
+    user_id: userId,
+    role: "student",
+  });
+  if (roleErr && !/duplicate key|already exists/i.test(roleErr.message)) {
+    console.warn("[student-data-upload] user_roles insert:", roleErr.message);
+  }
+
+  return { userId, registrationId: reg };
+}
+
 export async function processStudentDataUploadRows(
   client: SupabaseClient,
   rows: StudentDataUploadRow[],
@@ -401,6 +511,11 @@ export async function processStudentDataUploadRows(
     client,
     rows.map((r) => r.registrationNumber)
   );
+
+  const {
+    data: { user: adminUser },
+  } = await client.auth.getUser();
+  const adminId = adminUser?.id || "";
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -477,6 +592,46 @@ export async function processStudentDataUploadRows(
       existingRegs.add(regKey);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to import student.";
+      const code = String((err as { code?: string })?.code || "");
+
+      if (adminId && isUploadRpcSchemaError(`${code} ${message}`)) {
+        try {
+          const viaApi = await importStudentRowViaAdminRegisterApi(
+            client,
+            adminId,
+            row,
+            mode,
+            uploadId
+          );
+          results.push({
+            rowNumber: row.rowNumber,
+            email,
+            registrationNumber: viaApi.registrationId,
+            success: true,
+            userId: viaApi.userId,
+          });
+          existingRegs.add(regKey);
+          onProgress?.(i + 1, rows.length);
+          continue;
+        } catch (fallbackErr) {
+          const fbMsg =
+            fallbackErr instanceof Error ? fallbackErr.message : "API fallback failed.";
+          const isSkip =
+            /duplicate registration number/i.test(fbMsg) ||
+            /already registered|already linked/i.test(fbMsg);
+          results.push({
+            rowNumber: row.rowNumber,
+            email,
+            registrationNumber: reg,
+            success: false,
+            skipped: isSkip,
+            message: fbMsg,
+          });
+          onProgress?.(i + 1, rows.length);
+          continue;
+        }
+      }
+
       const isSkip =
         /duplicate registration number/i.test(message) || /skipped/i.test(message);
       results.push({
