@@ -231,7 +231,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("Failed to send welcome email:", mailErr);
     }
 
-    return res.status(200).json({ success: true, message: 'Student registered successfully' });
+    return res.status(200).json({
+      success: true,
+      message: 'Student registered successfully',
+      userId,
+      registrationId: regId,
+      paymentId: mockPaymentId,
+    });
 
   } catch (error: any) {
     console.error("Admin Registration Error:", error);

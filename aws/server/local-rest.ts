@@ -9,6 +9,7 @@ import { getRpcDef } from "./rpc-registry";
 import { callRpc } from "./db";
 import { verifyToken } from "./local-jwt";
 import { ensureCmsTable, isCmsTable, isMissingRelationError } from "./cms-bootstrap";
+import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
 
 function jwtFromRequest(req: Request) {
@@ -586,10 +587,37 @@ export async function restRpc(req: Request, res: Response) {
         return;
       }
     }
-    const data = def
-      ? await callRpc(name, def.args, body, jwt)
-      : await callRpcAuto(name, body, jwt);
-    res.json(data);
+
+    const invokeRpc = async () =>
+      def
+        ? await callRpc(name, def.args, body, jwt)
+        : await callRpcAuto(name, body, jwt);
+
+    try {
+      const data = await invokeRpc();
+      res.json(data);
+      return;
+    } catch (firstErr) {
+      const code = String((firstErr as { code?: string })?.code || "");
+      const msg = String((firstErr as { message?: string })?.message || firstErr || "");
+      const isRegistrationRpc = name === "admin_create_minimal_student_registration";
+      const shouldBootstrap =
+        isRegistrationRpc &&
+        (code === "42883" ||
+          /btrim\(uuid\)/i.test(msg) ||
+          /could not find the function/i.test(msg) ||
+          /function public\.admin_create_minimal_student_registration does not exist/i.test(msg));
+
+      if (!shouldBootstrap) {
+        throw firstErr;
+      }
+
+      console.warn("[rest/rpc] registration RPC failed, applying RDS bootstrap and retrying:", msg);
+      await ensureAdminRegistrationRpc();
+      const data = await invokeRpc();
+      res.json(data);
+      return;
+    }
   } catch (err) {
     console.error("[rest/rpc]", err);
     res.status(400).json(pgErrorPayload(err));

@@ -7,6 +7,7 @@ import {
   type StudentTrack,
 } from "@/lib/studentTrack";
 import { parseJsonField } from "@/lib/parseJsonField";
+import { siteApiUrl } from "@/lib/siteApi";
 
 export type AdminAddRegistrationInput = {
   email: string;
@@ -151,13 +152,114 @@ function isSignatureMismatch(code: string | undefined, msg: string): boolean {
 }
 
 function isBrokenRdsRegistrationRpc(code: string | undefined, msg: string): boolean {
-  return code === "42883" || /btrim\(uuid\)/i.test(msg);
+  return (
+    code === "42883" ||
+    /btrim\(uuid\)/i.test(msg) ||
+    /needs a database update/i.test(msg)
+  );
+}
+
+function rpcNeedsApiFallback(code: string | undefined, msg: string): boolean {
+  return isSignatureMismatch(code, msg) || isBrokenRdsRegistrationRpc(code, msg);
+}
+
+/** REST fallback when Postgres RPC is missing or broken on RDS (works on deployed Lambda today). */
+async function tryAdminRegisterApi(
+  client: SupabaseClient,
+  email: string,
+  password: string,
+  phone: string,
+  fullName: string | undefined,
+  paymentId: string | undefined,
+  amountPaise: number | undefined,
+  input: AdminAddRegistrationInput
+): Promise<AdminAddRegistrationResult> {
+  const {
+    data: { session },
+  } = await client.auth.getSession();
+  const adminId = session?.user?.id;
+  const token = session?.access_token;
+  if (!adminId || !token) {
+    throw new Error("Your session expired. Please sign in again and retry.");
+  }
+
+  const amountRupees =
+    amountPaise != null && Number.isFinite(amountPaise)
+      ? Math.round(amountPaise) / 100
+      : 500;
+
+  const res = await fetch(siteApiUrl("/api/admin-register"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      admin_id: adminId,
+      student_data: {
+        email,
+        full_name: fullName || "Student",
+        contact_number: phone,
+        password,
+        university_name: input.universityName?.trim() || null,
+        college_name: input.collegeName?.trim() || null,
+        course: input.course?.trim() || "Internship",
+        internship_domain: input.degree?.trim() || input.course?.trim() || "Internship",
+        degree: input.degree?.trim() || null,
+        department: input.department?.trim() || null,
+        subject: input.subject?.trim() || null,
+        metadata: {
+          source: input.registrationSource || "admin_add_registration",
+          registration_source: input.registrationSource || "admin_add_registration",
+        },
+      },
+      payment_amount: amountRupees,
+      transaction_id: paymentId || undefined,
+    }),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok || body.success !== true) {
+    const msg = String(body.message || body.error || "Admin registration API failed.");
+    if (/already registered|duplicate/i.test(msg)) {
+      throw new Error("A student with this email already exists. Use a different email.");
+    }
+    throw new Error(msg);
+  }
+
+  let userId = String(body.userId || body.user_id || "");
+  let registrationId = body.registrationId ? String(body.registrationId) : null;
+  let resolvedPaymentId = String(body.paymentId || paymentId || "");
+
+  if (!userId || !registrationId) {
+    const { data: studentRow, error: lookupErr } = await client
+      .from("students")
+      .select("id, registration_id, metadata")
+      .eq("email", email)
+      .maybeSingle();
+    if (lookupErr) throw new Error(lookupErr.message);
+    if (!studentRow) throw new Error("Registration succeeded but student record was not found.");
+    if (!userId) userId = String((studentRow as { id?: string }).id || "");
+    if (!registrationId) {
+      registrationId = (studentRow as { registration_id?: string | null }).registration_id ?? null;
+    }
+    const meta = parseJsonField((studentRow as { metadata?: unknown }).metadata) || {};
+    if (!resolvedPaymentId) {
+      resolvedPaymentId = String(meta.razorpay_payment_id || meta.payment_id || paymentId || "");
+    }
+  }
+
+  return {
+    userId,
+    email,
+    registrationId,
+    paymentId: resolvedPaymentId,
+    paid: true,
+  };
 }
 
 const REGISTRATION_SETUP_HINT =
-  "Add Registration needs a database update. An admin should run: npm run aws:rds:admin-registration " +
-  "(or redeploy the API so it auto-applies on startup). " +
-  "SQL: aws/scripts/20-rds-fix-admin-create-registration-text-meta.sql";
+  "Add Registration could not complete. Ask an admin to run: npm run aws:rds:admin-registration";
 
 export async function adminCreateMinimalStudentRegistration(
   client: SupabaseClient,
@@ -179,20 +281,12 @@ export async function adminCreateMinimalStudentRegistration(
   // 1️⃣  Try the full 13-param RPC first (works after migration is applied)
   let result = await tryFullRpc(client, email, password, phone, fullName, paymentId, amountPaise, input);
 
-  if (result.error) {
-    const errMsg = String(result.error.message || "");
-    if (isBrokenRdsRegistrationRpc(result.error.code, errMsg)) {
-      throw new Error(REGISTRATION_SETUP_HINT);
-    }
-  }
-
   // 2️⃣  If the DB doesn't know the extra params yet, fall back to the 6-param version
   if (result.error && isSignatureMismatch(result.error.code, String(result.error.message || ""))) {
     console.info("[add-registration] Full RPC not deployed yet, falling back to 6-param version.");
     result = await tryLegacyRpc(client, email, password, phone, fullName, paymentId, amountPaise);
 
     if (!result.error) {
-      // Patch academic fields separately since legacy RPC doesn't handle them
       await patchAcademicFields(client, email, input);
     }
   }
@@ -201,12 +295,24 @@ export async function adminCreateMinimalStudentRegistration(
 
   if (error) {
     const msg = String(error.message || "");
-
-    if (isSignatureMismatch(error.code, msg)) {
-      throw new Error(REGISTRATION_SETUP_HINT);
-    }
-    if (isBrokenRdsRegistrationRpc(error.code, msg)) {
-      throw new Error(REGISTRATION_SETUP_HINT);
+    if (rpcNeedsApiFallback(error.code, msg)) {
+      console.info("[add-registration] RPC unavailable on RDS, using /api/admin-register fallback.");
+      try {
+        const apiResult = await tryAdminRegisterApi(
+          client,
+          email,
+          password,
+          phone,
+          fullName,
+          paymentId,
+          amountPaise,
+          input
+        );
+        return finalizeAdminRegistration(client, apiResult, input, email);
+      } catch (apiErr) {
+        const apiMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+        throw new Error(`${apiMsg} (${REGISTRATION_SETUP_HINT})`);
+      }
     }
     if (/access denied/i.test(msg)) {
       throw new Error("You do not have permission to add registrations. Please contact the admin.");
@@ -222,7 +328,27 @@ export async function adminCreateMinimalStudentRegistration(
     throw new Error("Registration could not be completed. Please try again.");
   }
 
-  const userId = String(row.user_id || "");
+  return finalizeAdminRegistration(
+    client,
+    {
+      userId: String(row.user_id || ""),
+      email: String(row.email || email),
+      registrationId: row.registration_id ? String(row.registration_id) : null,
+      paymentId: String(row.payment_id || paymentId || ""),
+      paid: row.paid === true,
+    },
+    input,
+    email
+  );
+}
+
+async function finalizeAdminRegistration(
+  client: SupabaseClient,
+  result: AdminAddRegistrationResult,
+  input: AdminAddRegistrationInput,
+  email: string
+): Promise<AdminAddRegistrationResult> {
+  const userId = result.userId;
   const engNames = await resolveEngineeringUniversityNames(client);
   const track: StudentTrack =
     input.studentTrack ||
@@ -279,15 +405,9 @@ export async function adminCreateMinimalStudentRegistration(
 
   await markLeadCrmConvertedByEmail(
     client,
-    String(row.email || email),
+    String(result.email || email),
     "Auto-converted: added to registration"
   );
 
-  return {
-    userId,
-    email:          String(row.email || email),
-    registrationId: row.registration_id ? String(row.registration_id) : null,
-    paymentId:      String(row.payment_id || paymentId || ""),
-    paid:           row.paid === true,
-  };
+  return result;
 }
