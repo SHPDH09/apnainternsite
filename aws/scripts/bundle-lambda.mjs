@@ -31,4 +31,16 @@ fs.writeFileSync(
   JSON.stringify({ type: "module", name: "ezyintern-lambda", version: "1.0.0" }, null, 2)
 );
 
+// Copy registration bootstrap SQL for Lambda cold-start auto-fix
+const sqlDir = path.join(outDir, "sql");
+fs.mkdirSync(sqlDir, { recursive: true });
+for (const rel of [
+  "aws/scripts/12-rds-safe-metadata-json.sql",
+  "aws/scripts/18-rds-fix-payment-enrollment.sql",
+  "aws/scripts/19-rds-fix-password-text-id.sql",
+  "aws/scripts/20-rds-fix-admin-create-registration-text-meta.sql",
+]) {
+  fs.copyFileSync(path.join(root, rel), path.join(sqlDir, path.basename(rel)));
+}
+
 console.log("✅ Lambda bundle → aws/lambda/dist/handler.mjs");

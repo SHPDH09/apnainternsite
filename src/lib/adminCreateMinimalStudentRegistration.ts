@@ -150,6 +150,15 @@ function isSignatureMismatch(code: string | undefined, msg: string): boolean {
   );
 }
 
+function isBrokenRdsRegistrationRpc(code: string | undefined, msg: string): boolean {
+  return code === "42883" || /btrim\(uuid\)/i.test(msg);
+}
+
+const REGISTRATION_SETUP_HINT =
+  "Add Registration needs a database update. An admin should run: npm run aws:rds:admin-registration " +
+  "(or redeploy the API so it auto-applies on startup). " +
+  "SQL: aws/scripts/20-rds-fix-admin-create-registration-text-meta.sql";
+
 export async function adminCreateMinimalStudentRegistration(
   client: SupabaseClient,
   input: AdminAddRegistrationInput
@@ -170,6 +179,13 @@ export async function adminCreateMinimalStudentRegistration(
   // 1️⃣  Try the full 13-param RPC first (works after migration is applied)
   let result = await tryFullRpc(client, email, password, phone, fullName, paymentId, amountPaise, input);
 
+  if (result.error) {
+    const errMsg = String(result.error.message || "");
+    if (isBrokenRdsRegistrationRpc(result.error.code, errMsg)) {
+      throw new Error(REGISTRATION_SETUP_HINT);
+    }
+  }
+
   // 2️⃣  If the DB doesn't know the extra params yet, fall back to the 6-param version
   if (result.error && isSignatureMismatch(result.error.code, String(result.error.message || ""))) {
     console.info("[add-registration] Full RPC not deployed yet, falling back to 6-param version.");
@@ -187,12 +203,10 @@ export async function adminCreateMinimalStudentRegistration(
     const msg = String(error.message || "");
 
     if (isSignatureMismatch(error.code, msg)) {
-      // Both RPCs failed — the function itself is missing entirely
-      throw new Error(
-        "Add Registration is not set up in the database yet. " +
-        "Please run supabase/migrations/20260604120000_admin_create_minimal_student_registration.sql " +
-        "in the Supabase SQL Editor, then try again."
-      );
+      throw new Error(REGISTRATION_SETUP_HINT);
+    }
+    if (isBrokenRdsRegistrationRpc(error.code, msg)) {
+      throw new Error(REGISTRATION_SETUP_HINT);
     }
     if (/access denied/i.test(msg)) {
       throw new Error("You do not have permission to add registrations. Please contact the admin.");

@@ -33,6 +33,7 @@
     "aws:rds:notifications": "node aws/scripts/apply-notifications-rds.mjs",
     "aws:rds:grant-admin": "node aws/scripts/grant-admin-by-email.mjs",
     "aws:rds:site-cms": "node aws/scripts/apply-site-cms-rds.mjs",
+    "aws:rds:admin-registration": "node aws/scripts/apply-admin-registration-rds.mjs",
     "aws:rds:provision": "bash aws/scripts/provision-rds.sh",
     "aws:rds:export": "node aws/scripts/run-rds-export.mjs",
     "aws:rds:export:full": "node aws/scripts/run-rds-export.mjs --full",

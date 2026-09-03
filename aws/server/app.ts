@@ -20,6 +20,7 @@ import dataSelect from "../../api/data-select";
 import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
 import { loadRootEnv } from "./load-env";
 import { ensureAllCmsTables } from "./cms-bootstrap";
+import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import {
   authLogout,
   authSettings,
@@ -119,6 +120,14 @@ async function buildApp(): Promise<Express> {
       console.log("[cms-bootstrap] site CMS tables ready");
     } catch (err) {
       console.warn("[cms-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const reg = await ensureAdminRegistrationRpc();
+      if (reg.applied) {
+        console.log("[registration-bootstrap] applied admin Add Registration RPC");
+      }
+    } catch (err) {
+      console.warn("[registration-bootstrap] startup ensure failed:", err);
     }
   }
 

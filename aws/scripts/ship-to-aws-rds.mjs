@@ -51,8 +51,9 @@ async function main() {
   console.log("🚀 Shipping schema to AWS RDS…\n");
   await runNode(path.join(root, "aws/scripts/apply-notifications-rds.mjs"));
   await runNode(path.join(root, "aws/scripts/apply-site-cms-rds.mjs"));
+  await runNode(path.join(root, "aws/scripts/apply-admin-registration-rds.mjs"));
   await verify();
-  console.log("\n✅ AWS RDS ship complete (notifications + popups + contacts).");
+  console.log("\n✅ AWS RDS ship complete (notifications + popups + contacts + admin registration).");
   console.log("Next: npm run aws:lambda:deploy  (point Lambda DATABASE_URL to this RDS)");
 }
 

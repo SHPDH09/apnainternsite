@@ -30,6 +30,10 @@ const files = [
   "supabase/migrations/20260605120000_notification_management.sql",
   "aws/scripts/50-rds-site-popups.sql",
   "aws/scripts/51-rds-site-contacts.sql",
+  "aws/scripts/12-rds-safe-metadata-json.sql",
+  "aws/scripts/18-rds-fix-payment-enrollment.sql",
+  "aws/scripts/19-rds-fix-password-text-id.sql",
+  "aws/scripts/20-rds-fix-admin-create-registration-text-meta.sql",
 ];
 
 async function main() {
