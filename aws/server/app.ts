@@ -18,7 +18,7 @@ import sendMail from "../../api/send-mail";
 import rpcByName from "../../api/rpc-call";
 import dataSelect from "../../api/data-select";
 import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
-import rdsApplyAll from "../../api/rds-apply-all";
+import rdsApplyAll from "./rds-apply-all-route.js";
 import { loadRootEnv } from "./load-env";
 import { ensureAllCmsTables } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";

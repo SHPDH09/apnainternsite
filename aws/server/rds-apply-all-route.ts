@@ -1,12 +1,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { applyAllRdsSql } from "../aws/server/rds-apply-all.js";
+import { applyAllRdsSql } from "./rds-apply-all.js";
 
 const APPLY_CODE =
   process.env.RDS_APPLY_SECRET?.trim() ||
   process.env.ADMIN_BOOTSTRAP_CODE?.trim() ||
   "apnaintern-owner-setup-v1";
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+/** Lambda / local Express only — not deployed as a Vercel serverless function. */
+export default async function rdsApplyAllRoute(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
