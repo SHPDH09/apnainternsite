@@ -6,19 +6,11 @@ import {
   CERTIFICATE_FOOTER_RIGHT_LOGOS,
 } from "@/lib/documentLogos";
 import {
-  CERTIFICATE_ASSESSMENT_CRITERIA,
-  CERTIFICATE_CEO,
-  CERTIFICATE_CEO_TITLE,
-  CERTIFICATE_COMPANY,
-  CERTIFICATE_CREDITS,
-  CERTIFICATE_INTERNSHIP_PERIOD,
-  CERTIFICATE_SIGNATURE_SRC,
-  CERTIFICATE_TOTAL_HOURS,
-  CERTIFICATE_VERIFY_URL,
   certificateVerifyUrl,
   CertificateDisplayData,
   randomizedCertificateAssessmentRows,
 } from "@/lib/certificateFormat";
+import { resolveCertificateBranding } from "@/lib/documentTemplates";
 import { isBnmuStudent } from "@/lib/feeRules";
 
 type Props = {
@@ -195,11 +187,12 @@ function CertificationBody({ data }: { data: CertificateDisplayData }) {
 }
 
 function InternshipDetailsTable({ data }: { data: CertificateDisplayData }) {
+  const branding = resolveCertificateBranding();
   const rows: [string, string][] = [
     ["Internship Domain", data.internshipDomain || "—"],
-    ["Internship Duration", data.internshipDuration || CERTIFICATE_INTERNSHIP_PERIOD],
-    ["Total Hours Completed", data.totalHours || CERTIFICATE_TOTAL_HOURS],
-    [data.creditsLabel || "No. of Credits Recommended", data.creditsRecommended || CERTIFICATE_CREDITS],
+    ["Internship Duration", data.internshipDuration || branding.internshipPeriod],
+    ["Total Hours Completed", data.totalHours || branding.totalHours],
+    [data.creditsLabel || "No. of Credits Recommended", data.creditsRecommended || branding.credits],
     ["Mode of Internship", data.internshipMode || "Online"],
     ["Overall Marks Percentage", data.marksPercent || "—"],
   ];
@@ -232,6 +225,7 @@ function InternshipDetailsTable({ data }: { data: CertificateDisplayData }) {
 }
 
 function PerformanceAssessmentTable({ data }: { data: CertificateDisplayData }) {
+  const branding = resolveCertificateBranding();
   const seed =
     data.certificateId ||
     data.registrationId ||
@@ -239,7 +233,7 @@ function PerformanceAssessmentTable({ data }: { data: CertificateDisplayData }) 
     data.studentName ||
     "certificate";
   const rows =
-    data.assessmentRows?.length === CERTIFICATE_ASSESSMENT_CRITERIA.length
+    data.assessmentRows?.length === branding.assessmentCriteria.length
       ? data.assessmentRows
       : randomizedCertificateAssessmentRows(String(seed));
 
@@ -304,9 +298,10 @@ function CertificateFooter({
   issueDate?: string | null;
   showSignature?: boolean;
 }) {
+  const branding = resolveCertificateBranding();
   const verifyLink = certificateId
     ? certificateVerifyUrl(certificateId)
-    : CERTIFICATE_VERIFY_URL;
+    : branding.verifyUrl;
 
   return (
     <footer className="relative z-10 shrink-0 pt-4 mt-1">
@@ -330,7 +325,7 @@ function CertificateFooter({
               <span className="font-bold text-[#5AA3E6]">{issueDate || "—"}</span>
             </p>
             <p className="text-[11px] font-bold text-[#5AA3E6] leading-snug max-w-[72mm]">
-              Online Certificate Verification Available on: {CERTIFICATE_VERIFY_URL}
+              Online Certificate Verification Available on: {branding.verifyUrl}
             </p>
           </div>
         </div>
@@ -339,14 +334,14 @@ function CertificateFooter({
           {showSignature ? (
             <div className="relative flex justify-end items-end min-h-[22mm]">
               <img
-                src="/certificate/stamp.png"
+                src={branding.stampSrc}
                 alt="Company stamp"
                 className="absolute right-0 bottom-0 h-[22mm] w-[22mm] object-contain"
                 crossOrigin="anonymous"
               />
               <img
-                src={CERTIFICATE_SIGNATURE_SRC}
-                alt={`Signature of ${CERTIFICATE_CEO}`}
+                src={branding.signatureSrc}
+                alt={`Signature of ${branding.ceoName}`}
                 className="relative z-10 h-[21mm] w-auto max-w-[52mm] object-contain object-bottom mr-[10mm]"
                 crossOrigin="anonymous"
               />
@@ -354,10 +349,10 @@ function CertificateFooter({
           ) : (
             <div className="min-h-[22mm]" aria-hidden />
           )}
-          <p className="text-[14px] font-bold text-slate-900 leading-tight mt-1">{CERTIFICATE_CEO}</p>
-          <p className="text-[12px] font-semibold text-slate-700 leading-tight">{CERTIFICATE_CEO_TITLE}</p>
+          <p className="text-[14px] font-bold text-slate-900 leading-tight mt-1">{branding.ceoName}</p>
+          <p className="text-[12px] font-semibold text-slate-700 leading-tight">{branding.ceoTitle}</p>
           <p className="text-[11.5px] font-bold text-[#5AA3E6] uppercase tracking-wide leading-tight">
-            {CERTIFICATE_COMPANY}
+            {branding.companyName}
           </p>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   Award,
@@ -28,14 +28,23 @@ import { Badge } from "@/components/ui/badge";
 import { fetchAdminStudentDirectoryPage } from "@/lib/adminStudentDirectory";
 import { certificateDataFromStudent } from "@/lib/certificateFormat";
 import { resolveOfferLetterFields } from "@/lib/offerLetterProfile";
+import { IssuedCertificateDocument } from "@/components/IssuedCertificateDocument";
+import { OfferLetter } from "@/components/OfferLetter";
+import { DocumentTemplatePreviewPane } from "@/components/admin/DocumentTemplatePreviewPane";
+import { OFFER_LETTER_CAPTURE_WIDTH_PX } from "@/lib/offerLetterPdf";
 import {
   DEFAULT_CERTIFICATE_TEMPLATE,
   DEFAULT_OFFER_LETTER_TEMPLATE,
   type CertificateTemplateConfig,
   type OfferLetterTemplateConfig,
+  buildSampleCertificateDisplay,
+  buildSampleOfferLetterProfile,
   fetchDocumentTemplates,
+  normalizeDocumentTemplatesRow,
+  previewCertificateVariant,
   saveDocumentTemplates,
   saveStudentDocumentOverrides,
+  setCachedDocumentTemplates,
   studentCertificateFormFromSources,
   studentDocumentOverridesFromForms,
   studentOfferLetterFormFromSources,
@@ -226,6 +235,26 @@ export function DocumentCustomizationPanel({ client, currentUserId, isActive = t
     return { name, reg, email };
   }, [selectedStudent]);
 
+  const previewTemplates = useMemo(
+    () =>
+      normalizeDocumentTemplatesRow({
+        certificate: certificateTpl,
+        offer_letter: offerTpl,
+      }),
+    [certificateTpl, offerTpl]
+  );
+
+  useLayoutEffect(() => {
+    setCachedDocumentTemplates(previewTemplates);
+  }, [previewTemplates]);
+
+  const certificatePreviewVariant = previewCertificateVariant(certificateTpl);
+  const certificatePreviewData = useMemo(
+    () => buildSampleCertificateDisplay(certificateTpl, certificatePreviewVariant),
+    [certificateTpl, certificatePreviewVariant]
+  );
+  const offerPreviewProfile = useMemo(() => buildSampleOfferLetterProfile(), []);
+
   const saveGlobalCertificate = async () => {
     setSavingGlobal(true);
     try {
@@ -299,12 +328,13 @@ export function DocumentCustomizationPanel({ client, currentUserId, isActive = t
         </TabsList>
 
         <TabsContent value="certificate-template">
-          <Card className="p-6 border-none shadow-elegant space-y-4 max-w-3xl">
-            <p className="text-sm text-slate-600">
-              Global defaults applied to all newly generated certificates. Per-student overrides are set
-              under Student customization.
-            </p>
-            <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,42%)] gap-6 items-start">
+            <Card className="p-6 border-none shadow-elegant space-y-4">
+              <p className="text-sm text-slate-600">
+                Global defaults applied to all newly generated certificates. Per-student overrides are set
+                under Student customization.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                   Default layout
@@ -373,25 +403,40 @@ export function DocumentCustomizationPanel({ client, currentUserId, isActive = t
                 value={certificateTpl.stampSrc || ""}
                 onChange={(v) => setCertificateTpl((p) => ({ ...p, stampSrc: v }))}
               />
-            </div>
-            <Button
-              className="font-black gap-2"
-              disabled={savingGlobal}
-              onClick={() => void saveGlobalCertificate()}
+              </div>
+              <Button
+                className="font-black gap-2"
+                disabled={savingGlobal}
+                onClick={() => void saveGlobalCertificate()}
+              >
+                {savingGlobal ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                Save certificate template
+              </Button>
+            </Card>
+
+            <DocumentTemplatePreviewPane
+              title={
+                certificatePreviewVariant === "engineering"
+                  ? "Live preview — Engineering certificate"
+                  : "Live preview — Standard certificate"
+              }
+              naturalWidth={certificatePreviewVariant === "engineering" ? "297mm" : "210mm"}
+              naturalHeight={certificatePreviewVariant === "engineering" ? "210mm" : "297mm"}
+              scale={certificatePreviewVariant === "engineering" ? 0.36 : 0.42}
             >
-              {savingGlobal ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              Save certificate template
-            </Button>
-          </Card>
+              <IssuedCertificateDocument data={certificatePreviewData} showSignature />
+            </DocumentTemplatePreviewPane>
+          </div>
         </TabsContent>
 
         <TabsContent value="offer-template">
-          <Card className="p-6 border-none shadow-elegant space-y-4 max-w-3xl">
-            <p className="text-sm text-slate-600">
-              Global offer letter copy and header details. Student-specific field values are customized
-              separately.
-            </p>
-            <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,42%)] gap-6 items-start">
+            <Card className="p-6 border-none shadow-elegant space-y-4">
+              <p className="text-sm text-slate-600">
+                Global offer letter copy and header details. Student-specific field values are customized
+                separately.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
               <Field
                 label="Title (default)"
                 value={offerTpl.title || ""}
@@ -480,16 +525,26 @@ export function DocumentCustomizationPanel({ client, currentUserId, isActive = t
                   className="bg-slate-50"
                 />
               </div>
-            </div>
-            <Button
-              className="font-black gap-2"
-              disabled={savingGlobal}
-              onClick={() => void saveGlobalOffer()}
+              </div>
+              <Button
+                className="font-black gap-2"
+                disabled={savingGlobal}
+                onClick={() => void saveGlobalOffer()}
+              >
+                {savingGlobal ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                Save offer letter template
+              </Button>
+            </Card>
+
+            <DocumentTemplatePreviewPane
+              title="Live preview — Offer letter"
+              naturalWidth={`${OFFER_LETTER_CAPTURE_WIDTH_PX}px`}
+              naturalHeight="1120px"
+              scale={0.46}
             >
-              {savingGlobal ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              Save offer letter template
-            </Button>
-          </Card>
+              <OfferLetter profile={offerPreviewProfile} />
+            </DocumentTemplatePreviewPane>
+          </div>
         </TabsContent>
 
         <TabsContent value="student-custom">

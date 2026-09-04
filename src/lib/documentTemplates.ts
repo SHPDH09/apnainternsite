@@ -135,6 +135,97 @@ export function setCachedDocumentTemplates(row: DocumentTemplatesRow | null) {
   cachedTemplates = row;
 }
 
+/** Branding fields for certificate PDF/HTML — reads live template cache (incl. admin draft). */
+export function resolveCertificateBranding() {
+  const t = getCachedDocumentTemplates().certificate;
+  return {
+    companyName: t.companyName?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.companyName!,
+    ceoName: t.ceoName?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.ceoName!,
+    ceoTitle: t.ceoTitle?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.ceoTitle!,
+    signatureSrc: t.signatureSrc?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.signatureSrc!,
+    stampSrc: t.stampSrc?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.stampSrc!,
+    verifyUrl: t.verifyUrl?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.verifyUrl!,
+    internshipPeriod: t.internshipPeriod?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.internshipPeriod!,
+    totalHours: t.totalHours?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.totalHours!,
+    credits: t.credits?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.credits!,
+    assessmentCriteria:
+      t.assessmentCriteria?.length ? t.assessmentCriteria : DEFAULT_CERTIFICATE_TEMPLATE.assessmentCriteria!,
+  };
+}
+
+export function buildSampleCertificateDisplay(
+  tpl: CertificateTemplateConfig,
+  variant: "standard" | "engineering" = "standard"
+): CertificateDisplayData {
+  const assessmentRows = (tpl.assessmentCriteria || DEFAULT_CERTIFICATE_TEMPLATE.assessmentCriteria!).map(
+    (criteria) => ({ criteria, rating: "Outstanding" as const })
+  );
+
+  const base: CertificateDisplayData = {
+    studentName: "Priya Sharma",
+    parentName: "Rajesh Sharma",
+    universityRollNo: "BEU/CSE/2024/0142",
+    collegeName: "Government Engineering College, Patna",
+    universityName: "Bihar Engineering University (BEU)",
+    academicSession: "2024-2028",
+    degree: "B.Tech",
+    subject: "Computer Science & Engineering",
+    internshipDomain: "Full Stack Web Development",
+    internshipDuration: tpl.internshipPeriod?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.internshipPeriod!,
+    internshipMode: "Online",
+    totalHours: tpl.totalHours?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.totalHours!,
+    creditsRecommended: tpl.credits?.trim() || DEFAULT_CERTIFICATE_TEMPLATE.credits!,
+    marksPercent: "95%",
+    certificateId: "API/INT/2026/PREVIEW",
+    issueDate: new Date().toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }),
+    assessmentRows,
+  };
+
+  if (variant === "engineering") {
+    return {
+      ...base,
+      certificateVariant: "engineering",
+      semester: "Semester 6",
+      gender: "Female",
+      startDate: "1 June 2026",
+      endDate: "20 June 2026",
+      durationLabel: "Four Weeks",
+      universityRegistrationNumber: "BEU/CSE/2024/0142",
+    };
+  }
+
+  return base;
+}
+
+export function buildSampleOfferLetterProfile(): Record<string, unknown> {
+  return {
+    full_name: "Priya Sharma",
+    registration_id: "API/INT/2026/PREVIEW",
+    roll_number: "BEU/CSE/2024/0142",
+    college_name: "Government Engineering College, Patna",
+    university_name: "Patna University",
+    subject: "Computer Science",
+    class_semester: "6",
+    internship_domain: "Full Stack Web Development",
+    course: "Full Stack Web Development",
+    internship_mode: "Online",
+    joining_date: "2026-06-01",
+    completion_date: "2026-06-20",
+    internship_duration: "4 Weeks",
+  };
+}
+
+export function previewCertificateVariant(
+  tpl: CertificateTemplateConfig
+): "standard" | "engineering" {
+  if (tpl.defaultVariant === "engineering") return "engineering";
+  return "standard";
+}
+
 export async function fetchDocumentTemplates(client: SupabaseClient): Promise<DocumentTemplatesRow> {
   const { data, error } = await client.from("document_templates").select("*").eq("id", 1).maybeSingle();
   if (error) throw error;
