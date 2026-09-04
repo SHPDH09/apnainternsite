@@ -19,7 +19,9 @@ export function HomeMarqueeStrip({ universities }: HomeMarqueeStripProps) {
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        setInView(entry.isIntersecting);
+        if (entry.isIntersecting) {
+          setInView(true);
+        }
       },
       { threshold: 0.15, rootMargin: "0px 0px -40px 0px" }
     );
