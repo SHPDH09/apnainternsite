@@ -167,19 +167,18 @@ export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) 
   if (compact) {
     return (
       <section className="student-dash-card p-5 md:p-6">
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="mb-4 flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="size-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
-              <GraduationCap className="size-4 text-white" />
+            <div className="size-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+              <GraduationCap className="size-4 text-slate-600" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-black text-slate-900 text-sm md:text-base">My Courses</h3>
-              <p className="text-[11px] text-slate-500 font-medium">{enrollments.length} enrolled</p>
+              <h3 className="font-semibold text-slate-900 text-sm md:text-base">My courses</h3>
+              <p className="text-xs text-slate-500">{enrollments.length} enrolled</p>
             </div>
-            <Badge className="border-none bg-emerald-600 font-bold shrink-0">{enrollments.length}</Badge>
           </div>
           {onViewAll ? (
-            <Button variant="ghost" size="sm" className="font-bold text-emerald-700 rounded-lg shrink-0" onClick={onViewAll}>
+            <Button variant="ghost" size="sm" className="font-medium text-slate-600 rounded-lg shrink-0" onClick={onViewAll}>
               View all
             </Button>
           ) : null}

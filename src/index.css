@@ -143,59 +143,68 @@
     background-size: 24px 24px;
   }
 
-  /* Student dashboard — premium tech aesthetic */
+  /* Student dashboard — professional / enterprise aesthetic */
   .student-dashboard-bg {
-    background-color: #f6f8fc;
-    background-image:
-      radial-gradient(ellipse 90% 60% at 50% -15%, rgb(90 163 230 / 0.12), transparent 55%),
-      radial-gradient(ellipse 50% 40% at 100% 10%, rgb(139 92 246 / 0.07), transparent 50%),
-      radial-gradient(ellipse 40% 35% at 0% 80%, rgb(16 185 129 / 0.06), transparent 45%);
+    background-color: #f8fafc;
   }
 
   .student-dash-grid {
-    background-image:
-      linear-gradient(rgb(148 163 184 / 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(148 163 184 / 0.04) 1px, transparent 1px);
-    background-size: 32px 32px;
+    background-image: none;
   }
 
   .student-dash-card {
-    @apply relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white/85 backdrop-blur-md;
-    box-shadow: 0 4px 24px -6px rgb(15 23 42 / 0.07);
-    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    @apply relative overflow-hidden rounded-xl border border-slate-200 bg-white;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
   .student-dash-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 16px 40px -10px rgb(15 23 42 / 0.12);
-    border-color: rgb(90 163 230 / 0.25);
+    transform: none;
+    box-shadow: 0 4px 12px -4px rgb(15 23 42 / 0.08);
+    border-color: rgb(203 213 225);
   }
 
   .student-dash-hero {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 42%, #0f2744 100%);
-    box-shadow: 0 24px 48px -20px rgb(15 23 42 / 0.45);
+    background: #ffffff;
+    border: 1px solid rgb(226 232 240);
+    box-shadow: 0 1px 3px rgb(15 23 42 / 0.04);
   }
 
-  .student-dash-hero-glow {
-    background: radial-gradient(circle, rgb(90 163 230 / 0.35) 0%, transparent 70%);
+  .student-dash-hero-accent {
+    background: linear-gradient(180deg, #5aa3e6 0%, #3b82c4 100%);
   }
 
-  .student-nav-pill {
-    @apply rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-200;
+  .student-nav-link {
+    @apply relative px-1 py-2 text-sm font-medium transition-colors duration-200;
   }
 
-  .student-nav-pill-active {
-    @apply bg-white text-slate-900 shadow-sm;
+  .student-nav-link-active {
+    @apply text-slate-900;
   }
 
-  .student-nav-pill-idle {
-    @apply text-slate-500 hover:text-slate-800 hover:bg-white/60;
+  .student-nav-link-active::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 2px;
+    border-radius: 9999px;
+    background: #5aa3e6;
+  }
+
+  .student-nav-link-idle {
+    @apply text-slate-500 hover:text-slate-800;
+  }
+
+  .student-stat-tile {
+    @apply rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3;
   }
 
   @keyframes studentDashFadeUp {
     from {
       opacity: 0;
-      transform: translateY(12px);
+      transform: translateY(8px);
     }
     to {
       opacity: 1;
@@ -204,7 +213,7 @@
   }
 
   .student-dash-animate-in {
-    animation: studentDashFadeUp 0.5s ease-out both;
+    animation: studentDashFadeUp 0.35s ease-out both;
   }
 }
 

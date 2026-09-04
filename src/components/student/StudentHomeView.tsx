@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Award,
   BookOpen,
+  Briefcase,
   CheckSquare,
   ClipboardList,
   Download,
@@ -12,10 +13,8 @@ import {
   Loader2,
   Lock,
   ScrollText,
-  Sparkles,
   Upload,
   Video,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,97 +53,97 @@ type DocumentVisual = {
 
 const LEARNING_ACCENTS = {
   blue: {
-    border: "border-t-blue-500",
-    iconBg: "bg-blue-50",
-    iconColor: "text-blue-600",
-    status: "text-blue-600",
-    button: "bg-blue-600",
-    buttonHover: "hover:bg-blue-700",
-    viewBtn: "text-blue-600 hover:bg-blue-50",
+    border: "border-l-[#5AA3E6]",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   purple: {
-    border: "border-t-violet-500",
-    iconBg: "bg-violet-50",
-    iconColor: "text-violet-600",
-    status: "text-violet-600",
-    button: "bg-violet-600",
-    buttonHover: "hover:bg-violet-700",
-    viewBtn: "text-violet-600 hover:bg-violet-50",
+    border: "border-l-violet-500",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   amber: {
-    border: "border-t-amber-500",
-    iconBg: "bg-amber-50",
-    iconColor: "text-amber-600",
-    status: "text-amber-600",
-    button: "bg-amber-500",
-    buttonHover: "hover:bg-amber-600",
-    viewBtn: "text-amber-600 hover:bg-amber-50",
+    border: "border-l-amber-500",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   green: {
-    border: "border-t-emerald-500",
-    iconBg: "bg-emerald-50",
-    iconColor: "text-emerald-600",
-    status: "text-emerald-600",
-    button: "bg-emerald-600",
-    buttonHover: "hover:bg-emerald-700",
-    viewBtn: "text-emerald-600 hover:bg-emerald-50",
+    border: "border-l-emerald-600",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
 } as const;
 
 const DOCUMENT_ACCENTS: Record<StudentDocumentId, Accent> = {
   consent: {
-    border: "border-t-violet-500",
-    iconBg: "bg-violet-50",
-    iconColor: "text-violet-600",
-    status: "text-violet-600",
-    button: "bg-violet-600",
-    buttonHover: "hover:bg-violet-700",
-    viewBtn: "text-violet-600 hover:bg-violet-50",
+    border: "border-l-violet-500",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   acceptance: {
-    border: "border-t-teal-500",
-    iconBg: "bg-teal-50",
-    iconColor: "text-teal-600",
-    status: "text-teal-600",
-    button: "bg-teal-600",
-    buttonHover: "hover:bg-teal-700",
-    viewBtn: "text-teal-600 hover:bg-teal-50",
+    border: "border-l-teal-600",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   logbook: {
-    border: "border-t-orange-500",
-    iconBg: "bg-orange-50",
-    iconColor: "text-orange-600",
-    status: "text-orange-600",
-    button: "bg-orange-500",
-    buttonHover: "hover:bg-orange-600",
-    viewBtn: "text-orange-600 hover:bg-orange-50",
+    border: "border-l-orange-500",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   certificate: {
-    border: "border-t-rose-500",
-    iconBg: "bg-rose-50",
-    iconColor: "text-rose-600",
-    status: "text-rose-600",
-    button: "bg-rose-600",
-    buttonHover: "hover:bg-rose-700",
-    viewBtn: "text-rose-600 hover:bg-rose-50",
+    border: "border-l-rose-600",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   attendance: {
-    border: "border-t-emerald-500",
-    iconBg: "bg-emerald-50",
-    iconColor: "text-emerald-600",
-    status: "text-emerald-600",
-    button: "bg-emerald-600",
-    buttonHover: "hover:bg-emerald-700",
-    viewBtn: "text-emerald-600 hover:bg-emerald-50",
+    border: "border-l-emerald-600",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   project: {
-    border: "border-t-indigo-500",
-    iconBg: "bg-indigo-50",
-    iconColor: "text-indigo-600",
-    status: "text-indigo-600",
-    button: "bg-indigo-600",
-    buttonHover: "hover:bg-indigo-700",
-    viewBtn: "text-indigo-600 hover:bg-indigo-50",
+    border: "border-l-indigo-600",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
 };
 
@@ -169,21 +168,21 @@ function SectionHeader({
   icon?: LucideIcon;
 }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 pb-4 border-b border-slate-200">
       <div className="flex items-start gap-3 min-w-0">
         {Icon ? (
-          <div className="size-10 rounded-xl bg-gradient-to-br from-[#5AA3E6] to-[#6366f1] flex items-center justify-center shrink-0 shadow-lg shadow-[#5AA3E6]/20">
-            <Icon className="size-5 text-white" />
+          <div className="size-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+            <Icon className="size-4 text-slate-600" />
           </div>
         ) : null}
         <div className="min-w-0">
-          <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">{title}</h2>
+          <h2 className="text-lg md:text-xl font-semibold text-slate-900 tracking-tight">{title}</h2>
           <p className="text-sm text-slate-500 max-w-2xl mt-0.5 leading-relaxed">{subtitle}</p>
         </div>
       </div>
       <Badge
-        variant="secondary"
-        className="self-start sm:self-auto font-bold text-[10px] tracking-wider uppercase bg-slate-100 text-slate-600 border-slate-200/80"
+        variant="outline"
+        className="self-start sm:self-auto font-medium text-[11px] text-slate-600 border-slate-200 bg-white"
       >
         {countLabel}
       </Badge>
@@ -191,21 +190,11 @@ function SectionHeader({
   );
 }
 
-function StatChip({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent: string;
-}) {
+function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm px-3 py-2.5 min-w-0">
-      <p className={`text-lg md:text-xl font-black tabular-nums truncate ${accent}`}>{value}</p>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-white/50 mt-0.5 truncate">
-        {label}
-      </p>
+    <div className="student-stat-tile min-w-0">
+      <p className="text-xl md:text-2xl font-semibold tabular-nums text-slate-900 truncate">{value}</p>
+      <p className="text-xs font-medium text-slate-500 mt-0.5 truncate">{label}</p>
     </div>
   );
 }
@@ -228,36 +217,32 @@ function LearningCard({
     <button
       type="button"
       onClick={onOpen}
-      className={`group student-dash-card text-left p-5 flex flex-col min-h-[228px] ${
-        showLocked ? "opacity-95" : ""
+      className={`group student-dash-card border-l-[3px] ${a.border} text-left p-5 flex flex-col min-h-[220px] ${
+        showLocked ? "opacity-90" : ""
       }`}
     >
       <div
-        className={`size-12 rounded-2xl ${a.iconBg} ${a.iconColor} flex items-center justify-center mb-4 relative ring-1 ring-black/[0.04] group-hover:scale-105 transition-transform duration-300`}
+        className={`size-10 rounded-lg border border-slate-200 ${a.iconBg} ${a.iconColor} flex items-center justify-center mb-4 relative`}
       >
-        <Icon className="size-5" />
+        <Icon className="size-4" />
         {showLocked ? (
-          <span className="absolute -right-1.5 -top-1.5 size-5 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md">
-            <Lock className="size-3" />
+          <span className="absolute -right-1 -top-1 size-4 rounded-full bg-amber-500 text-white flex items-center justify-center">
+            <Lock className="size-2.5" />
           </span>
-        ) : (
-          <span className="absolute -right-1 -top-1 size-2 rounded-full bg-emerald-400 ring-2 ring-white opacity-0 group-hover:opacity-100 transition-opacity" />
-        )}
+        ) : null}
       </div>
-      <h3 className="font-bold text-slate-900 text-base mb-1.5 group-hover:text-[#5AA3E6] transition-colors">
-        {module.title}
-      </h3>
+      <h3 className="font-semibold text-slate-900 text-[15px] mb-1.5">{module.title}</h3>
       <p className="text-sm text-slate-500 leading-relaxed flex-1">{module.description}</p>
-      <div className="mt-5 pt-4 border-t border-slate-100/80 flex items-center justify-between gap-3">
+      <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
         <span
-          className={`text-[10px] font-black uppercase tracking-wider ${showLocked ? "text-amber-600" : a.status}`}
+          className={`text-xs font-medium ${showLocked ? "text-amber-700" : "text-slate-500"}`}
         >
-          {locked ? "Locked · Pay to unlock" : serviceLocked ? "Locked · Contact admin" : module.statusLabel}
+          {locked ? "Locked — payment required" : serviceLocked ? "Locked — contact admin" : module.statusLabel}
         </span>
         <span
-          className={`size-9 rounded-xl ${a.button} ${a.buttonHover} text-white flex items-center justify-center shrink-0 shadow-md group-hover:shadow-lg transition-all group-hover:translate-x-0.5`}
+          className={`size-8 rounded-lg ${a.button} ${a.buttonHover} text-white flex items-center justify-center shrink-0`}
         >
-          {showLocked ? <Lock className="size-3.5" /> : <ArrowRight className="size-4" />}
+          {showLocked ? <Lock className="size-3.5" /> : <ArrowRight className="size-3.5" />}
         </span>
       </div>
     </button>
@@ -290,24 +275,24 @@ function DocumentCard({
 
   return (
     <div
-      className={`student-dash-card p-5 flex flex-col min-h-[268px] ${blocked ? "opacity-95" : ""}`}
+      className={`student-dash-card border-l-[3px] ${accent.border} p-5 flex flex-col min-h-[252px] ${blocked ? "opacity-90" : ""}`}
     >
       <div
-        className={`size-12 rounded-2xl ${accent.iconBg} ${accent.iconColor} flex items-center justify-center mb-4 relative ring-1 ring-black/[0.04]`}
+        className={`size-10 rounded-lg border border-slate-200 ${accent.iconBg} ${accent.iconColor} flex items-center justify-center mb-4 relative`}
       >
-        <Icon className="size-5" />
+        <Icon className="size-4" />
         {serviceLocked ? (
-          <span className="absolute -right-1.5 -top-1.5 size-5 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md">
-            <Lock className="size-3" />
+          <span className="absolute -right-1 -top-1 size-4 rounded-full bg-amber-500 text-white flex items-center justify-center">
+            <Lock className="size-2.5" />
           </span>
         ) : doc.ready ? (
-          <span className="absolute -right-1 -top-1 size-2 rounded-full bg-emerald-400 ring-2 ring-white" />
+          <span className="absolute -right-1 -top-1 size-2 rounded-full bg-emerald-500 ring-2 ring-white" />
         ) : null}
       </div>
-      <h3 className="font-bold text-slate-900 text-base mb-1.5">{doc.title}</h3>
+      <h3 className="font-semibold text-slate-900 text-[15px] mb-1.5">{doc.title}</h3>
       <p className="text-sm text-slate-500 leading-relaxed flex-1">{doc.description}</p>
       <p
-        className={`text-[10px] font-black uppercase tracking-wider mt-4 mb-3 ${serviceLocked ? "text-amber-600" : accent.status}`}
+        className={`text-xs font-medium mt-4 mb-3 ${serviceLocked ? "text-amber-700" : "text-slate-500"}`}
       >
         {serviceLocked ? "Locked" : doc.statusLabel}
       </p>
@@ -516,45 +501,34 @@ export function StudentHomeView({
   const docsReady = documents.filter((d) => d.ready).length;
 
   return (
-    <div className="space-y-8 md:space-y-10 student-dash-animate-in">
-      <section className="student-dash-hero relative overflow-hidden rounded-3xl text-white p-6 md:p-8 lg:p-10">
-        <div className="absolute inset-0 student-dash-grid opacity-[0.07] pointer-events-none" />
-        <div className="absolute -top-24 -right-16 size-64 student-dash-hero-glow blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-20 -left-10 size-48 rounded-full bg-violet-500/20 blur-3xl pointer-events-none" />
+    <div className="space-y-8 md:space-y-9 student-dash-animate-in">
+      <section className="student-dash-hero relative overflow-hidden rounded-xl p-6 md:p-8">
+        <div className="absolute left-0 top-0 bottom-0 w-1 student-dash-hero-accent rounded-l-xl" />
 
-        <div className="relative z-10 flex flex-col gap-8">
+        <div className="relative z-10 flex flex-col gap-6 pl-2 md:pl-3">
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
-            <div className="flex items-center gap-5 min-w-0">
-              <div className="relative shrink-0">
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#5AA3E6] to-violet-500 blur-md opacity-60" />
-                <div className="relative size-16 md:size-[4.5rem] rounded-2xl bg-slate-900/40 border border-white/20 flex items-center justify-center text-2xl md:text-3xl font-black backdrop-blur-sm">
-                  {initial}
-                </div>
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="size-14 md:size-16 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-xl md:text-2xl font-semibold text-slate-700 shrink-0">
+                {initial}
               </div>
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                  <Badge className="bg-[#5AA3E6]/20 text-sky-200 border-sky-400/30 font-bold text-[10px] uppercase tracking-wider">
-                    <Sparkles className="size-3 mr-1 inline" />
-                    Student Portal
-                  </Badge>
-                  {domainLabel ? (
-                    <Badge variant="outline" className="border-white/20 text-white/80 font-semibold text-[10px] max-w-[200px] truncate">
-                      {domainLabel}
-                    </Badge>
-                  ) : null}
-                </div>
-                <h1 className="text-3xl md:text-4xl lg:text-[2.75rem] font-black tracking-tight truncate leading-tight">
-                  Welcome back, {firstName}
+                <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500 mb-1">
+                  Internship Dashboard
+                </p>
+                <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 tracking-tight truncate">
+                  Good day, {firstName}
                 </h1>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm text-white/55">
-                  <span className="flex items-center gap-1">
-                    <Zap className="size-3.5 text-amber-300" />
-                    Your internship command centre
-                  </span>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-sm text-slate-500">
+                  {domainLabel ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Briefcase className="size-3.5 shrink-0" />
+                      {domainLabel}
+                    </span>
+                  ) : null}
                   {registrationLabel ? (
                     <>
-                      <span className="size-1 rounded-full bg-white/25 hidden sm:inline" />
-                      <span className="font-mono text-xs text-white/45">{registrationLabel}</span>
+                      {domainLabel ? <span className="text-slate-300 hidden sm:inline">|</span> : null}
+                      <span className="font-mono text-xs text-slate-500">{registrationLabel}</span>
                     </>
                   ) : null}
                 </div>
@@ -562,8 +536,9 @@ export function StudentHomeView({
             </div>
 
             <Button
-              size="lg"
-              className="shrink-0 self-start xl:self-center rounded-xl font-bold gap-2 bg-white text-slate-900 hover:bg-white/90 shadow-lg shadow-black/20 border-0 h-11 px-6"
+              size="default"
+              variant="outline"
+              className="shrink-0 self-start xl:self-center rounded-lg font-medium gap-2 border-slate-300 text-slate-800 hover:bg-slate-50 h-10 px-5"
               onClick={() => {
                 if (!internshipUnlocked) {
                   onLockedInternshipClick?.();
@@ -577,31 +552,28 @@ export function StudentHomeView({
               ) : (
                 <FileText className="size-4" />
               )}
-              Offer Letter
+              View offer letter
             </Button>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatChip label="Attendance" value={`${attendancePercentage.toFixed(0)}%`} accent="text-sky-300" />
-            <StatChip label="Classes" value={String(liveClassCount)} accent="text-violet-300" />
-            <StatChip
-              label="Assignments"
-              value={activeAssignments > 0 ? String(activeAssignments) : "Done"}
-              accent="text-amber-300"
+            <StatTile label="Attendance rate" value={`${attendancePercentage.toFixed(0)}%`} />
+            <StatTile label="Scheduled classes" value={String(liveClassCount)} />
+            <StatTile
+              label="Active assignments"
+              value={activeAssignments > 0 ? String(activeAssignments) : "None"}
             />
-            <StatChip label="Docs ready" value={`${docsReady}/${documents.length}`} accent="text-emerald-300" />
+            <StatTile label="Documents ready" value={`${docsReady} of ${documents.length}`} />
           </div>
         </div>
       </section>
 
       {!internshipUnlocked ? (
-        <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3.5 text-sm text-amber-950 flex gap-3 items-start shadow-sm">
-          <div className="size-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0">
-            <Lock className="size-4 text-amber-700" />
-          </div>
-          <p className="leading-relaxed pt-0.5">
-            You have course access only. Internship modules stay locked until you complete the
-            internship registration payment.
+        <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950 flex gap-3 items-start">
+          <Lock className="size-4 shrink-0 mt-0.5 text-amber-700" />
+          <p className="leading-relaxed">
+            Course access is active. Internship modules will unlock after registration payment is
+            completed.
           </p>
         </div>
       ) : null}
@@ -619,7 +591,7 @@ export function StudentHomeView({
               className="absolute inset-0 rounded-2xl bg-white/60 backdrop-blur-[2px] flex items-center justify-center z-10"
               onClick={() => onServiceLockedClick?.("my_courses")}
             >
-              <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white shadow-lg">
+              <span className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
                 <Lock className="size-3.5" /> My Courses locked
               </span>
             </button>
@@ -630,11 +602,11 @@ export function StudentHomeView({
       <section className="student-dash-animate-in" style={{ animationDelay: "0.05s" }}>
         <SectionHeader
           icon={BookOpen}
-          title="Learning Hub"
+          title="Learning"
           subtitle={
             internshipUnlocked
-              ? "Classes, notes, assignments and attendance — everything for daily progress."
-              : "Internship learning modules — unlock with college registration payment."
+              ? "Access classes, study materials, assignments, and attendance records."
+              : "Complete registration payment to access internship learning modules."
           }
           countLabel="4 modules"
         />
@@ -656,13 +628,13 @@ export function StudentHomeView({
       <section className="student-dash-animate-in" style={{ animationDelay: "0.1s" }}>
         <SectionHeader
           icon={FileText}
-          title="Document Vault"
+          title="Documents"
           subtitle={
             internshipUnlocked
-              ? "Official internship papers — view in browser or download as PDF anytime."
-              : "Internship documents unlock after the internship registration payment."
+              ? "Official internship documents — view online or download as PDF."
+              : "Documents become available after internship registration payment."
           }
-          countLabel={`${documents.length} documents`}
+          countLabel={`${documents.length} items`}
         />
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {documents.map((doc) => {
@@ -691,8 +663,8 @@ export function StudentHomeView({
                   className="absolute inset-0 rounded-2xl bg-white/65 backdrop-blur-[2px] flex items-center justify-center"
                   onClick={() => onLockedInternshipClick?.()}
                 >
-                  <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white shadow-lg">
-                    <Lock className="size-3.5" /> Pay to unlock
+                  <span className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                    <Lock className="size-3.5" /> Payment required
                   </span>
                 </button>
               ) : docServiceLocked ? (
@@ -701,7 +673,7 @@ export function StudentHomeView({
                   className="absolute inset-0 rounded-2xl bg-white/65 backdrop-blur-[2px] flex items-center justify-center"
                   onClick={() => onServiceLockedClick?.(serviceKey)}
                 >
-                  <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white shadow-lg">
+                  <span className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
                     <Lock className="size-3.5" /> Service locked
                   </span>
                 </button>
@@ -711,8 +683,8 @@ export function StudentHomeView({
         </div>
       </section>
 
-      <footer className="text-center text-[11px] text-slate-400 pb-2 pt-2 border-t border-slate-200/60">
-        Apna Intern · SDP Technology Pvt Ltd · Patna, Bihar
+      <footer className="text-center text-xs text-slate-400 pb-2 pt-4 border-t border-slate-200">
+        © Apna Intern · SDP Technology Pvt Ltd · Patna, Bihar
       </footer>
     </div>
   );

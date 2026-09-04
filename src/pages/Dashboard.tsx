@@ -784,42 +784,40 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen flex flex-col student-dashboard-bg">
-      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-[4.25rem] flex items-center justify-between max-w-7xl">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between max-w-7xl">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="size-9 rounded-xl bg-gradient-to-br from-[#5AA3E6] to-[#6366f1] flex items-center justify-center shrink-0 shadow-md shadow-[#5AA3E6]/25">
-              <span className="text-white font-black text-[10px] tracking-tight">AI</span>
+            <div className="size-8 rounded-lg bg-[#5AA3E6] flex items-center justify-center shrink-0">
+              <span className="text-white font-semibold text-[10px] tracking-tight">AI</span>
             </div>
             <div className="min-w-0 hidden sm:block">
-              <p className="font-black text-slate-900 text-sm leading-none truncate">Apna Intern</p>
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
-                Student Portal
-              </p>
+              <p className="font-semibold text-slate-900 text-sm leading-none truncate">Apna Intern</p>
+              <p className="text-[10px] font-medium text-slate-500 mt-0.5">Student portal</p>
             </div>
           </div>
 
-          <nav className="hidden md:flex items-center gap-1 rounded-full bg-slate-100/90 p-1 border border-slate-200/60">
+          <nav className="hidden md:flex items-center gap-6 h-full">
             <button
               type="button"
-              className={`student-nav-pill ${activeView === "home" ? "student-nav-pill-active" : "student-nav-pill-idle"}`}
+              className={`student-nav-link ${activeView === "home" ? "student-nav-link-active" : "student-nav-link-idle"}`}
               onClick={() => setActiveView("home")}
             >
               <span className="inline-flex items-center gap-1.5">
-                <LayoutDashboard className="size-3.5" /> Home
+                <LayoutDashboard className="size-3.5" /> Dashboard
               </span>
             </button>
             <button
               type="button"
-              className={`student-nav-pill ${activeView === "courses" ? "student-nav-pill-active" : "student-nav-pill-idle"}`}
+              className={`student-nav-link ${activeView === "courses" ? "student-nav-link-active" : "student-nav-link-idle"}`}
               onClick={() => setActiveView("courses")}
             >
               <span className="inline-flex items-center gap-1.5">
-                <GraduationCap className="size-3.5" /> Courses
+                <GraduationCap className="size-3.5" /> My courses
               </span>
             </button>
             <button
               type="button"
-              className={`student-nav-pill ${activeView === "profile" ? "student-nav-pill-active" : "student-nav-pill-idle"}`}
+              className={`student-nav-link ${activeView === "profile" ? "student-nav-link-active" : "student-nav-link-idle"}`}
               onClick={() => setActiveView("profile")}
             >
               <span className="inline-flex items-center gap-1.5">
@@ -828,7 +826,7 @@ const Dashboard = () => {
             </button>
             <button
               type="button"
-              className={`student-nav-pill ${activeView === "settings" ? "student-nav-pill-active" : "student-nav-pill-idle"}`}
+              className={`student-nav-link ${activeView === "settings" ? "student-nav-link-active" : "student-nav-link-idle"}`}
               onClick={() => setActiveView("settings")}
             >
               <span className="inline-flex items-center gap-1.5">
@@ -964,7 +962,7 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <main className="flex-1 py-6 md:py-10 student-dash-grid">
+      <main className="flex-1 py-6 md:py-8">
         <div className="container mx-auto px-4 max-w-7xl">
           {activeView !== "home" && (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
@@ -1370,19 +1368,19 @@ const Dashboard = () => {
 
           {/* Attendance Section — internship students only */}
           {activeView === 'home' && internshipUnlocked && (
-            <div id="attendance-section" className="mt-12 mb-10 student-dash-animate-in">
-              <div className="flex items-center justify-between mb-6 gap-4">
+            <div id="attendance-section" className="mt-10 mb-10 student-dash-animate-in">
+              <div className="flex items-center justify-between mb-5 gap-4 pb-4 border-b border-slate-200">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="size-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/20 shrink-0">
-                    <CheckSquare className="size-5 text-white" />
+                  <div className="size-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                    <CheckSquare className="size-4 text-slate-600" />
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">Mark Attendance</h2>
-                    <p className="text-sm text-slate-500 hidden sm:block">Hold to verify daily presence</p>
+                    <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Daily attendance</h2>
+                    <p className="text-sm text-slate-500 hidden sm:block">Hold the button for 10 seconds to mark</p>
                   </div>
                 </div>
-                <Badge className="bg-violet-100 text-violet-700 border-none font-black shrink-0">
-                  {attendanceList.length} days logged
+                <Badge variant="outline" className="font-medium text-slate-600 shrink-0">
+                  {attendanceList.length} days recorded
                 </Badge>
               </div>
 
@@ -1554,29 +1552,29 @@ const Dashboard = () => {
           )}
 
           {isServiceEnabled('live_classes') && (
-            <div id="live-classes-section" className="mt-14 relative student-dash-animate-in">
+            <div id="live-classes-section" className="mt-12 relative student-dash-animate-in">
               {isServiceLocked("live_classes") ? (
                 <button
                   type="button"
-                  className="absolute inset-0 z-20 rounded-2xl bg-white/60 backdrop-blur-[2px] flex items-center justify-center min-h-[200px]"
+                  className="absolute inset-0 z-20 rounded-xl bg-white/70 backdrop-blur-[1px] flex items-center justify-center min-h-[200px]"
                   onClick={() => setServiceLockKey("live_classes")}
                 >
-                  <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white shadow-lg">
-                    Live classes locked — tap for details
+                  <span className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm">
+                    Live classes locked
                   </span>
                 </button>
               ) : null}
-              <div className="flex items-center justify-between mb-6 gap-4">
+              <div className="flex items-center justify-between mb-5 gap-4 pb-4 border-b border-slate-200">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="size-10 rounded-xl bg-gradient-to-br from-[#5AA3E6] to-cyan-500 flex items-center justify-center shadow-lg shadow-[#5AA3E6]/20 shrink-0">
-                    <BookOpen className="size-5 text-white" />
+                  <div className="size-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                    <BookOpen className="size-4 text-slate-600" />
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">Live Sessions</h2>
-                    <p className="text-sm text-slate-500 hidden sm:block">Join scheduled classes and replays</p>
+                    <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Live sessions</h2>
+                    <p className="text-sm text-slate-500 hidden sm:block">Scheduled classes and recordings</p>
                   </div>
                 </div>
-                <Badge variant="secondary" className="bg-[#5AA3E6]/10 text-[#5AA3E6] border-none font-black shrink-0">
+                <Badge variant="outline" className="font-medium text-slate-600 shrink-0">
                   {liveClasses.length} scheduled
                 </Badge>
               </div>
@@ -1593,7 +1591,7 @@ const Dashboard = () => {
 
                     return (
                       <Card key={c.id} className="overflow-hidden student-dash-card border-0 shadow-none flex flex-col group bg-white">
-                        <div className="p-3 text-[10px] text-center font-black text-white uppercase tracking-[0.2em] bg-slate-900">
+                        <div className="p-3 text-[11px] text-center font-medium text-slate-600 bg-slate-50 border-b border-slate-200">
                           {new Date(c.scheduled_at).toLocaleString([], { dateStyle: 'full', timeStyle: 'short' })}
                         </div>
                         
