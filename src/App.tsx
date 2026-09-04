@@ -42,6 +42,7 @@ import { AuthRedirectGuard } from "./components/AuthRedirectGuard";
 import { AdminSessionRefresh } from "./components/AdminSessionRefresh";
 import { StudentSessionRefresh } from "./components/StudentSessionRefresh";
 import { authConfirmPathWithTokens } from "@/lib/authRedirectGuard";
+import { QuantronChatbot } from "@/components/QuantronChatbot";
 
 function AuthCallbackRedirect() {
   const { search, hash } = useLocation();
@@ -81,6 +82,7 @@ const App = () => (
         <StudentSessionRefresh />
         <VisitorTracker />
         <SitePopupsHost />
+        <QuantronChatbot />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
