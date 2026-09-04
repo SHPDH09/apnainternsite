@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 const SCRIPT_ID = "quantronsoft-chatbot-widget";
-const SCRIPT_SRC = "https://www.quantronsoft.com/chatbot-widget.js?v=9";
+const SCRIPT_SRC = "https://www.quantronsoft.com/chatbot-widget.js?v=10";
 const CHATBOT_ID = "cf463f5e-024f-43b7-a4a7-fa9aa4d2dbd0";
 
 /** QuantronSoft chat widget — load once site-wide. Settings update live from dashboard. */
