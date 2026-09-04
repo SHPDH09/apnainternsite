@@ -3,3 +3,7 @@ wrangler.toml
 wrangler.jsonc
 cloudflare/
 .wranglerignore
+
+# API routes run on AWS Lambda (same as Cloudflare Workers proxy). Vercel serves static SPA only.
+api/
+aws/

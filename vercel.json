@@ -2,20 +2,6 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist",
   "framework": "vite",
-  "functions": {
-    "api/send-bulk-mail.ts": {
-      "maxDuration": 60
-    },
-    "api/send-mail.ts": {
-      "maxDuration": 60
-    },
-    "api/gemini-generate.ts": {
-      "maxDuration": 60
-    },
-    "api/razorpay-recovery.ts": {
-      "maxDuration": 30
-    }
-  },
   "redirects": [
     {
       "source": "/cyber-cafe/login",
@@ -30,6 +16,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/:path*"
+    },
     {
       "source": "/auth/:path*",
       "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/:path*"
