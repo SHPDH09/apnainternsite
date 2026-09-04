@@ -783,17 +783,61 @@ const Dashboard = () => {
   const goToProfileHome = () => setActiveView("profile");
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="size-8 rounded-lg bg-[#5AA3E6] flex items-center justify-center shrink-0">
-              <span className="text-white font-black text-[11px] tracking-tight">AI</span>
+    <div className="min-h-screen flex flex-col student-dashboard-bg">
+      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl">
+        <div className="container mx-auto px-4 h-[4.25rem] flex items-center justify-between max-w-7xl">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="size-9 rounded-xl bg-gradient-to-br from-[#5AA3E6] to-[#6366f1] flex items-center justify-center shrink-0 shadow-md shadow-[#5AA3E6]/25">
+              <span className="text-white font-black text-[10px] tracking-tight">AI</span>
             </div>
-            <span className="font-bold text-slate-900 hidden sm:block">Student Portal</span>
+            <div className="min-w-0 hidden sm:block">
+              <p className="font-black text-slate-900 text-sm leading-none truncate">Apna Intern</p>
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
+                Student Portal
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 md:gap-4">
+          <nav className="hidden md:flex items-center gap-1 rounded-full bg-slate-100/90 p-1 border border-slate-200/60">
+            <button
+              type="button"
+              className={`student-nav-pill ${activeView === "home" ? "student-nav-pill-active" : "student-nav-pill-idle"}`}
+              onClick={() => setActiveView("home")}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <LayoutDashboard className="size-3.5" /> Home
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`student-nav-pill ${activeView === "courses" ? "student-nav-pill-active" : "student-nav-pill-idle"}`}
+              onClick={() => setActiveView("courses")}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <GraduationCap className="size-3.5" /> Courses
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`student-nav-pill ${activeView === "profile" ? "student-nav-pill-active" : "student-nav-pill-idle"}`}
+              onClick={() => setActiveView("profile")}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <User className="size-3.5" /> Profile
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`student-nav-pill ${activeView === "settings" ? "student-nav-pill-active" : "student-nav-pill-idle"}`}
+              onClick={() => setActiveView("settings")}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldCheck className="size-3.5" /> Settings
+              </span>
+            </button>
+          </nav>
+
+          <div className="flex items-center gap-1 md:gap-2">
             <DropdownMenu open={isNotifOpen} onOpenChange={setIsNotifOpen}>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="relative p-2">
@@ -858,10 +902,29 @@ const Dashboard = () => {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            <div className="flex md:hidden items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`size-9 rounded-xl ${activeView === "home" ? "bg-primary/10 text-primary" : ""}`}
+                onClick={() => setActiveView("home")}
+              >
+                <LayoutDashboard className="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`size-9 rounded-xl ${activeView === "courses" ? "bg-primary/10 text-primary" : ""}`}
+                onClick={() => setActiveView("courses")}
+              >
+                <GraduationCap className="size-4" />
+              </Button>
+            </div>
+
             <Button
               variant="ghost"
               size="sm"
-              className={`text-slate-600 hover:text-primary gap-2 ${
+              className={`hidden md:inline-flex text-slate-600 hover:text-primary gap-2 rounded-xl ${
                 activeView === "profile" ? "bg-primary/10 text-primary" : ""
               }`}
               onClick={activeView === "home" ? goToProfileHome : goToDashboardHome}
@@ -869,30 +932,27 @@ const Dashboard = () => {
               {activeView === "home" ? (
                 <>
                   <User className="size-4" />
-                  <span className="hidden sm:inline">Profile</span>
+                  <span className="hidden lg:inline">Profile</span>
                 </>
               ) : (
                 <>
                   <LayoutDashboard className="size-4" />
-                  <span className="hidden sm:inline">Dashboard</span>
+                  <span className="hidden lg:inline">Dashboard</span>
                 </>
               )}
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              className={`text-slate-600 hover:text-primary gap-2 ${activeView === "courses" ? "bg-primary/10 text-primary" : ""}`}
-              onClick={() => setActiveView("courses")}
+              className={`md:hidden text-slate-600 hover:text-primary rounded-xl ${
+                activeView === "profile" ? "bg-primary/10 text-primary" : ""
+              }`}
+              onClick={activeView === "home" ? goToProfileHome : goToDashboardHome}
             >
-              <GraduationCap className="size-4" />
-              <span className="hidden sm:inline">My Courses</span>
+              <User className="size-4" />
             </Button>
-            <Button variant="ghost" size="sm" className={`text-slate-600 hover:text-primary gap-2 ${activeView === 'settings' ? 'bg-primary/10 text-primary' : ''}`} onClick={() => setActiveView('settings')}>
-              <ShieldCheck className="size-4" />
-              <span className="hidden sm:inline">Settings</span>
-            </Button>
-            <div className="w-px h-4 bg-slate-200 mx-1"></div>
-            <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 gap-2" onClick={async () => {
+            <div className="hidden md:block w-px h-4 bg-slate-200" />
+            <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 gap-2 rounded-xl" onClick={async () => {
               await supabase.auth.signOut();
               navigate("/login");
             }}>
@@ -904,8 +964,8 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <main className="flex-1 py-8 md:py-10">
-        <div className="container mx-auto px-4 max-w-6xl">
+      <main className="flex-1 py-6 md:py-10 student-dash-grid">
+        <div className="container mx-auto px-4 max-w-7xl">
           {activeView !== "home" && (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
             <div className="flex items-center gap-5">
@@ -1310,11 +1370,20 @@ const Dashboard = () => {
 
           {/* Attendance Section — internship students only */}
           {activeView === 'home' && internshipUnlocked && (
-            <div id="attendance-section" className="mt-10 mb-10">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold flex items-center gap-3"><CheckSquare className="size-6 text-violet-600" /> Attendance</h2>
-                <div className="h-px flex-1 mx-6 bg-slate-200 hidden md:block"></div>
-                <Badge className="bg-violet-100 text-violet-700 border-none font-black">{attendanceList.length} Total Days</Badge>
+            <div id="attendance-section" className="mt-12 mb-10 student-dash-animate-in">
+              <div className="flex items-center justify-between mb-6 gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/20 shrink-0">
+                    <CheckSquare className="size-5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">Mark Attendance</h2>
+                    <p className="text-sm text-slate-500 hidden sm:block">Hold to verify daily presence</p>
+                  </div>
+                </div>
+                <Badge className="bg-violet-100 text-violet-700 border-none font-black shrink-0">
+                  {attendanceList.length} days logged
+                </Badge>
               </div>
 
               <div className="grid md:grid-cols-2 gap-8">
@@ -1485,22 +1554,31 @@ const Dashboard = () => {
           )}
 
           {isServiceEnabled('live_classes') && (
-            <div id="live-classes-section" className="mt-12 relative">
+            <div id="live-classes-section" className="mt-14 relative student-dash-animate-in">
               {isServiceLocked("live_classes") ? (
                 <button
                   type="button"
-                  className="absolute inset-0 z-20 rounded-2xl bg-white/60 backdrop-blur-[1px] flex items-center justify-center min-h-[200px]"
+                  className="absolute inset-0 z-20 rounded-2xl bg-white/60 backdrop-blur-[2px] flex items-center justify-center min-h-[200px]"
                   onClick={() => setServiceLockKey("live_classes")}
                 >
-                  <span className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-black text-white">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white shadow-lg">
                     Live classes locked — tap for details
                   </span>
                 </button>
               ) : null}
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-2xl font-bold flex items-center gap-3"><BookOpen className="size-6 text-primary" /> Live Learning Sessions</h2>
-                <div className="h-px flex-1 mx-6 bg-slate-200 hidden md:block"></div>
-                <Badge variant="secondary" className="bg-primary/10 text-primary border-none">{liveClasses.length} Scheduled</Badge>
+              <div className="flex items-center justify-between mb-6 gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-10 rounded-xl bg-gradient-to-br from-[#5AA3E6] to-cyan-500 flex items-center justify-center shadow-lg shadow-[#5AA3E6]/20 shrink-0">
+                    <BookOpen className="size-5 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">Live Sessions</h2>
+                    <p className="text-sm text-slate-500 hidden sm:block">Join scheduled classes and replays</p>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="bg-[#5AA3E6]/10 text-[#5AA3E6] border-none font-black shrink-0">
+                  {liveClasses.length} scheduled
+                </Badge>
               </div>
 
               {liveClasses.length > 0 ? (
@@ -1514,7 +1592,7 @@ const Dashboard = () => {
                     const embedUrl = sessionType === "youtube" ? youtubeEmbedUrl(c.url || "") : null;
 
                     return (
-                      <Card key={c.id} className="overflow-hidden border-none shadow-elegant flex flex-col group hover:-translate-y-2 transition-all duration-500 bg-white">
+                      <Card key={c.id} className="overflow-hidden student-dash-card border-0 shadow-none flex flex-col group bg-white">
                         <div className="p-3 text-[10px] text-center font-black text-white uppercase tracking-[0.2em] bg-slate-900">
                           {new Date(c.scheduled_at).toLocaleString([], { dateStyle: 'full', timeStyle: 'short' })}
                         </div>

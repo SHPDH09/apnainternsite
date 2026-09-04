@@ -12,8 +12,10 @@ import {
   Loader2,
   Lock,
   ScrollText,
+  Sparkles,
   Upload,
   Video,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -159,23 +161,51 @@ function SectionHeader({
   title,
   subtitle,
   countLabel,
+  icon: Icon,
 }: {
   title: string;
   subtitle: string;
   countLabel: string;
+  icon?: LucideIcon;
 }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
-      <div>
-        <div className="flex items-center gap-3 mb-1">
-          <span className="w-1 h-7 rounded-full bg-orange-500 shrink-0" />
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">{title}</h2>
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+      <div className="flex items-start gap-3 min-w-0">
+        {Icon ? (
+          <div className="size-10 rounded-xl bg-gradient-to-br from-[#5AA3E6] to-[#6366f1] flex items-center justify-center shrink-0 shadow-lg shadow-[#5AA3E6]/20">
+            <Icon className="size-5 text-white" />
+          </div>
+        ) : null}
+        <div className="min-w-0">
+          <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">{title}</h2>
+          <p className="text-sm text-slate-500 max-w-2xl mt-0.5 leading-relaxed">{subtitle}</p>
         </div>
-        <p className="text-sm text-slate-500 max-w-2xl ml-4">{subtitle}</p>
       </div>
-      <Badge variant="secondary" className="self-start sm:self-auto font-bold text-[10px] tracking-wider uppercase">
+      <Badge
+        variant="secondary"
+        className="self-start sm:self-auto font-bold text-[10px] tracking-wider uppercase bg-slate-100 text-slate-600 border-slate-200/80"
+      >
         {countLabel}
       </Badge>
+    </div>
+  );
+}
+
+function StatChip({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm px-3 py-2.5 min-w-0">
+      <p className={`text-lg md:text-xl font-black tabular-nums truncate ${accent}`}>{value}</p>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-white/50 mt-0.5 truncate">
+        {label}
+      </p>
     </div>
   );
 }
@@ -198,25 +228,35 @@ function LearningCard({
     <button
       type="button"
       onClick={onOpen}
-      className={`group text-left bg-white rounded-2xl border border-slate-100 border-t-4 ${a.border} shadow-sm hover:shadow-md transition-all p-5 flex flex-col min-h-[220px] ${
-        showLocked ? "opacity-90" : ""
+      className={`group student-dash-card text-left p-5 flex flex-col min-h-[228px] ${
+        showLocked ? "opacity-95" : ""
       }`}
     >
-      <div className={`size-11 rounded-xl ${a.iconBg} ${a.iconColor} flex items-center justify-center mb-4 relative`}>
+      <div
+        className={`size-12 rounded-2xl ${a.iconBg} ${a.iconColor} flex items-center justify-center mb-4 relative ring-1 ring-black/[0.04] group-hover:scale-105 transition-transform duration-300`}
+      >
         <Icon className="size-5" />
         {showLocked ? (
-          <span className="absolute -right-1 -top-1 size-5 rounded-full bg-amber-500 text-white flex items-center justify-center">
+          <span className="absolute -right-1.5 -top-1.5 size-5 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md">
             <Lock className="size-3" />
           </span>
-        ) : null}
+        ) : (
+          <span className="absolute -right-1 -top-1 size-2 rounded-full bg-emerald-400 ring-2 ring-white opacity-0 group-hover:opacity-100 transition-opacity" />
+        )}
       </div>
-      <h3 className="font-bold text-slate-900 text-base mb-2">{module.title}</h3>
+      <h3 className="font-bold text-slate-900 text-base mb-1.5 group-hover:text-[#5AA3E6] transition-colors">
+        {module.title}
+      </h3>
       <p className="text-sm text-slate-500 leading-relaxed flex-1">{module.description}</p>
-      <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
-        <span className={`text-[10px] font-black uppercase tracking-wider ${showLocked ? "text-amber-600" : a.status}`}>
+      <div className="mt-5 pt-4 border-t border-slate-100/80 flex items-center justify-between gap-3">
+        <span
+          className={`text-[10px] font-black uppercase tracking-wider ${showLocked ? "text-amber-600" : a.status}`}
+        >
           {locked ? "Locked · Pay to unlock" : serviceLocked ? "Locked · Contact admin" : module.statusLabel}
         </span>
-        <span className={`size-8 rounded-full ${a.button} ${a.buttonHover} text-white flex items-center justify-center shrink-0 transition-colors`}>
+        <span
+          className={`size-9 rounded-xl ${a.button} ${a.buttonHover} text-white flex items-center justify-center shrink-0 shadow-md group-hover:shadow-lg transition-all group-hover:translate-x-0.5`}
+        >
           {showLocked ? <Lock className="size-3.5" /> : <ArrowRight className="size-4" />}
         </span>
       </div>
@@ -250,19 +290,25 @@ function DocumentCard({
 
   return (
     <div
-      className={`bg-white rounded-2xl border border-slate-100 border-t-4 ${accent.border} shadow-sm p-5 flex flex-col min-h-[260px] ${blocked ? "opacity-90" : ""}`}
+      className={`student-dash-card p-5 flex flex-col min-h-[268px] ${blocked ? "opacity-95" : ""}`}
     >
-      <div className={`size-11 rounded-xl ${accent.iconBg} ${accent.iconColor} flex items-center justify-center mb-4 relative`}>
+      <div
+        className={`size-12 rounded-2xl ${accent.iconBg} ${accent.iconColor} flex items-center justify-center mb-4 relative ring-1 ring-black/[0.04]`}
+      >
         <Icon className="size-5" />
         {serviceLocked ? (
-          <span className="absolute -right-1 -top-1 size-5 rounded-full bg-amber-500 text-white flex items-center justify-center">
+          <span className="absolute -right-1.5 -top-1.5 size-5 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md">
             <Lock className="size-3" />
           </span>
+        ) : doc.ready ? (
+          <span className="absolute -right-1 -top-1 size-2 rounded-full bg-emerald-400 ring-2 ring-white" />
         ) : null}
       </div>
-      <h3 className="font-bold text-slate-900 text-base mb-2">{doc.title}</h3>
+      <h3 className="font-bold text-slate-900 text-base mb-1.5">{doc.title}</h3>
       <p className="text-sm text-slate-500 leading-relaxed flex-1">{doc.description}</p>
-      <p className={`text-[10px] font-black uppercase tracking-wider mt-4 mb-3 ${serviceLocked ? "text-amber-600" : accent.status}`}>
+      <p
+        className={`text-[10px] font-black uppercase tracking-wider mt-4 mb-3 ${serviceLocked ? "text-amber-600" : accent.status}`}
+      >
         {serviceLocked ? "Locked" : doc.statusLabel}
       </p>
       {doc.canUpload ? (
@@ -272,7 +318,7 @@ function DocumentCard({
             variant="ghost"
             size="sm"
             disabled={!doc.ready || busy}
-            className={`gap-1 font-bold text-[10px] px-1 ${accent.viewBtn}`}
+            className={`gap-1 font-bold text-[10px] px-1 rounded-lg ${accent.viewBtn}`}
             onClick={onView}
           >
             <Eye className="size-3.5 shrink-0" />
@@ -282,7 +328,7 @@ function DocumentCard({
             type="button"
             size="sm"
             disabled={!doc.ready || busy}
-            className={`gap-1 font-bold text-[10px] px-1 text-white ${accent.button} ${accent.buttonHover}`}
+            className={`gap-1 font-bold text-[10px] px-1 text-white rounded-lg ${accent.button} ${accent.buttonHover}`}
             onClick={onDownload}
           >
             {downloading ? (
@@ -297,7 +343,7 @@ function DocumentCard({
             variant="outline"
             size="sm"
             disabled={busy}
-            className="gap-1 font-bold text-[10px] px-1"
+            className="gap-1 font-bold text-[10px] px-1 rounded-lg border-slate-200"
             onClick={onUpload}
           >
             {uploading ? (
@@ -315,7 +361,7 @@ function DocumentCard({
             variant="ghost"
             size="sm"
             disabled={!doc.ready || busy}
-            className={`gap-1.5 font-bold text-xs ${accent.viewBtn}`}
+            className={`gap-1.5 font-bold text-xs rounded-lg ${accent.viewBtn}`}
             onClick={onView}
           >
             <Eye className="size-3.5" />
@@ -325,7 +371,7 @@ function DocumentCard({
             type="button"
             size="sm"
             disabled={!doc.ready || busy}
-            className={`gap-1.5 font-bold text-xs text-white ${accent.button} ${accent.buttonHover}`}
+            className={`gap-1.5 font-bold text-xs text-white rounded-lg ${accent.button} ${accent.buttonHover}`}
             onClick={onDownload}
           >
             {downloading ? (
@@ -466,55 +512,94 @@ export function StudentHomeView({
     guardService(documentIdToServiceKey(id), action);
   };
 
+  const domainLabel = String(profile?.internship_domain || profile?.course || "").trim();
+  const docsReady = documents.filter((d) => d.ready).length;
+
   return (
-    <div className="space-y-10">
-      <section className="rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 md:p-8 shadow-elegant">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div className="flex items-center gap-5 min-w-0">
-            <div className="size-16 md:size-[4.5rem] rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-2xl md:text-3xl font-black shrink-0">
-              {initial}
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight truncate">
-                Howdy, {firstName}!
-              </h1>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm text-white/60">
-                <span>Student Dashboard</span>
-                {registrationLabel ? (
-                  <>
-                    <span className="size-1 rounded-full bg-white/30 hidden sm:inline" />
-                    <span className="font-mono text-xs text-white/50">{registrationLabel}</span>
-                  </>
-                ) : null}
+    <div className="space-y-8 md:space-y-10 student-dash-animate-in">
+      <section className="student-dash-hero relative overflow-hidden rounded-3xl text-white p-6 md:p-8 lg:p-10">
+        <div className="absolute inset-0 student-dash-grid opacity-[0.07] pointer-events-none" />
+        <div className="absolute -top-24 -right-16 size-64 student-dash-hero-glow blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-10 size-48 rounded-full bg-violet-500/20 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col gap-8">
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+            <div className="flex items-center gap-5 min-w-0">
+              <div className="relative shrink-0">
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#5AA3E6] to-violet-500 blur-md opacity-60" />
+                <div className="relative size-16 md:size-[4.5rem] rounded-2xl bg-slate-900/40 border border-white/20 flex items-center justify-center text-2xl md:text-3xl font-black backdrop-blur-sm">
+                  {initial}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                  <Badge className="bg-[#5AA3E6]/20 text-sky-200 border-sky-400/30 font-bold text-[10px] uppercase tracking-wider">
+                    <Sparkles className="size-3 mr-1 inline" />
+                    Student Portal
+                  </Badge>
+                  {domainLabel ? (
+                    <Badge variant="outline" className="border-white/20 text-white/80 font-semibold text-[10px] max-w-[200px] truncate">
+                      {domainLabel}
+                    </Badge>
+                  ) : null}
+                </div>
+                <h1 className="text-3xl md:text-4xl lg:text-[2.75rem] font-black tracking-tight truncate leading-tight">
+                  Welcome back, {firstName}
+                </h1>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm text-white/55">
+                  <span className="flex items-center gap-1">
+                    <Zap className="size-3.5 text-amber-300" />
+                    Your internship command centre
+                  </span>
+                  {registrationLabel ? (
+                    <>
+                      <span className="size-1 rounded-full bg-white/25 hidden sm:inline" />
+                      <span className="font-mono text-xs text-white/45">{registrationLabel}</span>
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
+
+            <Button
+              size="lg"
+              className="shrink-0 self-start xl:self-center rounded-xl font-bold gap-2 bg-white text-slate-900 hover:bg-white/90 shadow-lg shadow-black/20 border-0 h-11 px-6"
+              onClick={() => {
+                if (!internshipUnlocked) {
+                  onLockedInternshipClick?.();
+                  return;
+                }
+                guardService("offer_letter", () => onOfferLetter());
+              }}
+            >
+              {!internshipUnlocked || isServiceLocked?.("offer_letter") ? (
+                <Lock className="size-4" />
+              ) : (
+                <FileText className="size-4" />
+              )}
+              Offer Letter
+            </Button>
           </div>
-          <Button
-            size="lg"
-            variant="outline"
-            className="border-white/25 bg-white/5 text-white hover:bg-white/10 hover:text-white font-semibold gap-2 shrink-0 self-start lg:self-center"
-            onClick={() => {
-              if (!internshipUnlocked) {
-                onLockedInternshipClick?.();
-                return;
-              }
-              guardService("offer_letter", () => onOfferLetter());
-            }}
-          >
-            {!internshipUnlocked || isServiceLocked?.("offer_letter") ? (
-              <Lock className="size-4" />
-            ) : (
-              <FileText className="size-4" />
-            )}
-            Offer Letter
-          </Button>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatChip label="Attendance" value={`${attendancePercentage.toFixed(0)}%`} accent="text-sky-300" />
+            <StatChip label="Classes" value={String(liveClassCount)} accent="text-violet-300" />
+            <StatChip
+              label="Assignments"
+              value={activeAssignments > 0 ? String(activeAssignments) : "Done"}
+              accent="text-amber-300"
+            />
+            <StatChip label="Docs ready" value={`${docsReady}/${documents.length}`} accent="text-emerald-300" />
+          </div>
         </div>
       </section>
 
       {!internshipUnlocked ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 flex gap-3 items-start">
-          <Lock className="size-4 shrink-0 mt-0.5 text-amber-700" />
-          <p>
+        <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3.5 text-sm text-amber-950 flex gap-3 items-start shadow-sm">
+          <div className="size-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0">
+            <Lock className="size-4 text-amber-700" />
+          </div>
+          <p className="leading-relaxed pt-0.5">
             You have course access only. Internship modules stay locked until you complete the
             internship registration payment.
           </p>
@@ -531,10 +616,10 @@ export function StudentHomeView({
           {isServiceLocked?.("my_courses") ? (
             <button
               type="button"
-              className="absolute inset-0 rounded-2xl bg-white/55 backdrop-blur-[1px] flex items-center justify-center z-10"
+              className="absolute inset-0 rounded-2xl bg-white/60 backdrop-blur-[2px] flex items-center justify-center z-10"
               onClick={() => onServiceLockedClick?.("my_courses")}
             >
-              <span className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-black text-white">
+              <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white shadow-lg">
                 <Lock className="size-3.5" /> My Courses locked
               </span>
             </button>
@@ -542,12 +627,13 @@ export function StudentHomeView({
         </div>
       ) : null}
 
-      <section>
+      <section className="student-dash-animate-in" style={{ animationDelay: "0.05s" }}>
         <SectionHeader
-          title="Learning"
+          icon={BookOpen}
+          title="Learning Hub"
           subtitle={
             internshipUnlocked
-              ? "Daily study activities — classes, notes, assignments and attendance."
+              ? "Classes, notes, assignments and attendance — everything for daily progress."
               : "Internship learning modules — unlock with college registration payment."
           }
           countLabel="4 modules"
@@ -567,12 +653,13 @@ export function StudentHomeView({
         </div>
       </section>
 
-      <section>
+      <section className="student-dash-animate-in" style={{ animationDelay: "0.1s" }}>
         <SectionHeader
-          title="Documents"
+          icon={FileText}
+          title="Document Vault"
           subtitle={
             internshipUnlocked
-              ? "Official internship papers — pre-filled with your registration details. View in browser or download as PDF."
+              ? "Official internship papers — view in browser or download as PDF anytime."
               : "Internship documents unlock after the internship registration payment."
           }
           countLabel={`${documents.length} documents`}
@@ -601,20 +688,20 @@ export function StudentHomeView({
               {!internshipUnlocked ? (
                 <button
                   type="button"
-                  className="absolute inset-0 rounded-2xl bg-white/55 backdrop-blur-[1px] flex items-center justify-center"
+                  className="absolute inset-0 rounded-2xl bg-white/65 backdrop-blur-[2px] flex items-center justify-center"
                   onClick={() => onLockedInternshipClick?.()}
                 >
-                  <span className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-black text-white">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white shadow-lg">
                     <Lock className="size-3.5" /> Pay to unlock
                   </span>
                 </button>
               ) : docServiceLocked ? (
                 <button
                   type="button"
-                  className="absolute inset-0 rounded-2xl bg-white/55 backdrop-blur-[1px] flex items-center justify-center"
+                  className="absolute inset-0 rounded-2xl bg-white/65 backdrop-blur-[2px] flex items-center justify-center"
                   onClick={() => onServiceLockedClick?.(serviceKey)}
                 >
-                  <span className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-black text-white">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-black text-white shadow-lg">
                     <Lock className="size-3.5" /> Service locked
                   </span>
                 </button>
@@ -624,8 +711,8 @@ export function StudentHomeView({
         </div>
       </section>
 
-      <footer className="text-center text-[11px] text-slate-400 pb-4">
-        Apna Intern · SDP Technology Pvt Ltd · Patna, Bihar · CIN U85500BR2024PTC072653
+      <footer className="text-center text-[11px] text-slate-400 pb-2 pt-2 border-t border-slate-200/60">
+        Apna Intern · SDP Technology Pvt Ltd · Patna, Bihar
       </footer>
     </div>
   );
