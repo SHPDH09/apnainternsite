@@ -14,6 +14,7 @@ import {
   Image,
   IdCard,
   IndianRupee,
+  KeyRound,
   LayoutDashboard,
   Mail,
   Phone,
@@ -328,7 +329,10 @@ export function buildAdminNavGroups(
     label: "System",
     icon: Settings,
     accent: "#64748B",
-    items: [{ kind: "tab", value: "settings", label: "Settings", icon: Settings }],
+    items: [
+      { kind: "tab", value: "keys", label: "Keys", icon: KeyRound },
+      { kind: "tab", value: "settings", label: "Settings", icon: Settings },
+    ],
   });
 
   return groups;

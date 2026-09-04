@@ -44,6 +44,14 @@ import {
   internshipUpgradePaymentPath,
   parseStudentAccessScope,
 } from "@/lib/studentPaymentAccess";
+import {
+  fetchDashboardServiceKeys,
+  isStudentServiceLocked,
+  learningTabToServiceKey,
+  resolveStudentServiceAccess,
+  type StudentServiceKey,
+} from "@/lib/studentServiceKeys";
+import { StudentServiceLockDialog } from "@/components/student/StudentServiceLockDialog";
 import { normalizeOfferLetterProfile } from "@/lib/offerLetterProfile";
 import { loadStudentDashboardProfile } from "@/lib/loadStudentDashboardProfile";
 import { displayRegistrationId } from "@/lib/registrationId";
@@ -115,6 +123,7 @@ const Dashboard = () => {
   const [generating, setGenerating] = useState(false);
   const [liveClasses, setLiveClasses] = useState<any[]>([]);
   const [systemSettings, setSystemSettings] = useState<any[]>([]);
+  const [serviceLockKey, setServiceLockKey] = useState<StudentServiceKey | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const offerLetterRef = useRef<HTMLDivElement>(null);
   const certRef = useRef<HTMLDivElement>(null);
@@ -250,6 +259,7 @@ const Dashboard = () => {
         fetchUnreadNotificationCount(supabase).catch(() => 0),
         fetchStudentAssignments(supabase).catch(() => []),
         supabase.from("payment_success").select("*").eq("user_id", uid).maybeSingle(),
+        fetchDashboardServiceKeys(supabase).catch(() => null),
       ]);
 
       const roles = (roleNames || []).map((role) => ({ role }));
@@ -410,6 +420,16 @@ const Dashboard = () => {
   const internshipUnlocked = useMemo(
     () => hasInternshipAccess(parseStudentAccessScope(profile?.metadata)),
     [profile?.metadata]
+  );
+
+  const isServiceLocked = useCallback(
+    (key: StudentServiceKey) => isStudentServiceLocked(key, profile?.metadata),
+    [profile?.metadata]
+  );
+
+  const serviceLockAccess = useMemo(
+    () => (serviceLockKey ? resolveStudentServiceAccess(serviceLockKey, profile?.metadata) : null),
+    [serviceLockKey, profile?.metadata]
   );
 
   const goUnlockInternship = useCallback(() => {
@@ -1240,6 +1260,10 @@ const Dashboard = () => {
                     goUnlockInternship();
                     return;
                   }
+                  if (isServiceLocked(learningTabToServiceKey(tab))) {
+                    setServiceLockKey(learningTabToServiceKey(tab));
+                    return;
+                  }
                   setLearningDefaultTab(tab);
                   setIsLearningOpen(true);
                 }}
@@ -1260,6 +1284,15 @@ const Dashboard = () => {
                 onOpenMyCourses={() => setActiveView("courses")}
                 internshipUnlocked={internshipUnlocked}
                 onLockedInternshipClick={goUnlockInternship}
+                isServiceLocked={isServiceLocked}
+                onServiceLockedClick={setServiceLockKey}
+              />
+              <StudentServiceLockDialog
+                open={serviceLockKey != null}
+                onOpenChange={(open) => {
+                  if (!open) setServiceLockKey(null);
+                }}
+                access={serviceLockAccess}
               />
               {documentActions.hiddenPdfNodes}
               <StudentDocumentPreviewDialog
@@ -1452,7 +1485,18 @@ const Dashboard = () => {
           )}
 
           {isServiceEnabled('live_classes') && (
-            <div id="live-classes-section" className="mt-12">
+            <div id="live-classes-section" className="mt-12 relative">
+              {isServiceLocked("live_classes") ? (
+                <button
+                  type="button"
+                  className="absolute inset-0 z-20 rounded-2xl bg-white/60 backdrop-blur-[1px] flex items-center justify-center min-h-[200px]"
+                  onClick={() => setServiceLockKey("live_classes")}
+                >
+                  <span className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-black text-white">
+                    Live classes locked — tap for details
+                  </span>
+                </button>
+              ) : null}
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-2xl font-bold flex items-center gap-3"><BookOpen className="size-6 text-primary" /> Live Learning Sessions</h2>
                 <div className="h-px flex-1 mx-6 bg-slate-200 hidden md:block"></div>

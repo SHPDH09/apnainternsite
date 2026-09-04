@@ -20,6 +20,11 @@ import { Badge } from "@/components/ui/badge";
 import type { LearningPanelTab } from "@/components/student/StudentLearningPanel";
 import { StudentMyCoursesPanel } from "@/components/student/StudentMyCoursesPanel";
 import type { StudentDocumentId, StudentDocumentMeta } from "@/hooks/useStudentDocumentActions";
+import {
+  documentIdToServiceKey,
+  learningTabToServiceKey,
+  type StudentServiceKey,
+} from "@/lib/studentServiceKeys";
 type Accent = {
   border: string;
   iconBg: string;
@@ -179,24 +184,27 @@ function LearningCard({
   module,
   onOpen,
   locked,
+  serviceLocked,
 }: {
   module: LearningModule;
   onOpen: () => void;
   locked?: boolean;
+  serviceLocked?: boolean;
 }) {
   const Icon = module.icon;
   const a = module.accent;
+  const showLocked = locked || serviceLocked;
   return (
     <button
       type="button"
       onClick={onOpen}
       className={`group text-left bg-white rounded-2xl border border-slate-100 border-t-4 ${a.border} shadow-sm hover:shadow-md transition-all p-5 flex flex-col min-h-[220px] ${
-        locked ? "opacity-90" : ""
+        showLocked ? "opacity-90" : ""
       }`}
     >
       <div className={`size-11 rounded-xl ${a.iconBg} ${a.iconColor} flex items-center justify-center mb-4 relative`}>
         <Icon className="size-5" />
-        {locked ? (
+        {showLocked ? (
           <span className="absolute -right-1 -top-1 size-5 rounded-full bg-amber-500 text-white flex items-center justify-center">
             <Lock className="size-3" />
           </span>
@@ -205,11 +213,11 @@ function LearningCard({
       <h3 className="font-bold text-slate-900 text-base mb-2">{module.title}</h3>
       <p className="text-sm text-slate-500 leading-relaxed flex-1">{module.description}</p>
       <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
-        <span className={`text-[10px] font-black uppercase tracking-wider ${locked ? "text-amber-600" : a.status}`}>
-          {locked ? "Locked · Pay to unlock" : module.statusLabel}
+        <span className={`text-[10px] font-black uppercase tracking-wider ${showLocked ? "text-amber-600" : a.status}`}>
+          {locked ? "Locked · Pay to unlock" : serviceLocked ? "Locked · Contact admin" : module.statusLabel}
         </span>
         <span className={`size-8 rounded-full ${a.button} ${a.buttonHover} text-white flex items-center justify-center shrink-0 transition-colors`}>
-          {locked ? <Lock className="size-3.5" /> : <ArrowRight className="size-4" />}
+          {showLocked ? <Lock className="size-3.5" /> : <ArrowRight className="size-4" />}
         </span>
       </div>
     </button>
@@ -225,6 +233,7 @@ function DocumentCard({
   onView,
   onDownload,
   onUpload,
+  serviceLocked,
 }: {
   doc: StudentDocumentMeta;
   accent: Accent;
@@ -234,20 +243,27 @@ function DocumentCard({
   onView: () => void;
   onDownload: () => void;
   onUpload?: () => void;
+  serviceLocked?: boolean;
 }) {
   const busy = downloading || uploading;
+  const blocked = serviceLocked || (!doc.ready && !doc.canUpload);
 
   return (
     <div
-      className={`bg-white rounded-2xl border border-slate-100 border-t-4 ${accent.border} shadow-sm p-5 flex flex-col min-h-[260px] ${!doc.ready && !doc.canUpload ? "opacity-90" : ""}`}
+      className={`bg-white rounded-2xl border border-slate-100 border-t-4 ${accent.border} shadow-sm p-5 flex flex-col min-h-[260px] ${blocked ? "opacity-90" : ""}`}
     >
-      <div className={`size-11 rounded-xl ${accent.iconBg} ${accent.iconColor} flex items-center justify-center mb-4`}>
+      <div className={`size-11 rounded-xl ${accent.iconBg} ${accent.iconColor} flex items-center justify-center mb-4 relative`}>
         <Icon className="size-5" />
+        {serviceLocked ? (
+          <span className="absolute -right-1 -top-1 size-5 rounded-full bg-amber-500 text-white flex items-center justify-center">
+            <Lock className="size-3" />
+          </span>
+        ) : null}
       </div>
       <h3 className="font-bold text-slate-900 text-base mb-2">{doc.title}</h3>
       <p className="text-sm text-slate-500 leading-relaxed flex-1">{doc.description}</p>
-      <p className={`text-[10px] font-black uppercase tracking-wider mt-4 mb-3 ${accent.status}`}>
-        {doc.statusLabel}
+      <p className={`text-[10px] font-black uppercase tracking-wider mt-4 mb-3 ${serviceLocked ? "text-amber-600" : accent.status}`}>
+        {serviceLocked ? "Locked" : doc.statusLabel}
       </p>
       {doc.canUpload ? (
         <div className="grid grid-cols-3 gap-2">
@@ -348,6 +364,8 @@ type Props = {
   /** When false, internship learning/docs stay locked and clicks go to payment. */
   internshipUnlocked?: boolean;
   onLockedInternshipClick?: () => void;
+  isServiceLocked?: (key: StudentServiceKey) => boolean;
+  onServiceLockedClick?: (key: StudentServiceKey) => void;
 };
 
 export function StudentHomeView({
@@ -372,6 +390,8 @@ export function StudentHomeView({
   onOpenMyCourses,
   internshipUnlocked = true,
   onLockedInternshipClick,
+  isServiceLocked,
+  onServiceLockedClick,
 }: Props) {
   const firstName = String(profile?.full_name || "Student").split(" ")[0];
   const initial = String(profile?.full_name || "S").charAt(0).toUpperCase();
@@ -422,6 +442,30 @@ export function StudentHomeView({
     },
   ];
 
+  const guardService = (key: StudentServiceKey, action: () => void) => {
+    if (isServiceLocked?.(key)) {
+      onServiceLockedClick?.(key);
+      return;
+    }
+    action();
+  };
+
+  const guardLearning = (tab: LearningPanelTab, action: () => void) => {
+    if (!internshipUnlocked) {
+      onLockedInternshipClick?.();
+      return;
+    }
+    guardService(learningTabToServiceKey(tab), action);
+  };
+
+  const guardDocument = (id: StudentDocumentId, action: () => void) => {
+    if (!internshipUnlocked) {
+      onLockedInternshipClick?.();
+      return;
+    }
+    guardService(documentIdToServiceKey(id), action);
+  };
+
   return (
     <div className="space-y-10">
       <section className="rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 md:p-8 shadow-elegant">
@@ -454,10 +498,14 @@ export function StudentHomeView({
                 onLockedInternshipClick?.();
                 return;
               }
-              onOfferLetter();
+              guardService("offer_letter", () => onOfferLetter());
             }}
           >
-            {internshipUnlocked ? <FileText className="size-4" /> : <Lock className="size-4" />}
+            {!internshipUnlocked || isServiceLocked?.("offer_letter") ? (
+              <Lock className="size-4" />
+            ) : (
+              <FileText className="size-4" />
+            )}
             Offer Letter
           </Button>
         </div>
@@ -474,11 +522,24 @@ export function StudentHomeView({
       ) : null}
 
       {studentId ? (
-        <StudentMyCoursesPanel
-          studentId={studentId}
-          compact
-          onViewAll={onOpenMyCourses}
-        />
+        <div className="relative">
+          <StudentMyCoursesPanel
+            studentId={studentId}
+            compact
+            onViewAll={onOpenMyCourses}
+          />
+          {isServiceLocked?.("my_courses") ? (
+            <button
+              type="button"
+              className="absolute inset-0 rounded-2xl bg-white/55 backdrop-blur-[1px] flex items-center justify-center z-10"
+              onClick={() => onServiceLockedClick?.("my_courses")}
+            >
+              <span className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-black text-white">
+                <Lock className="size-3.5" /> My Courses locked
+              </span>
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <section>
@@ -497,13 +558,10 @@ export function StudentHomeView({
               key={module.id}
               module={module}
               locked={!internshipUnlocked}
-              onOpen={() => {
-                if (!internshipUnlocked) {
-                  onLockedInternshipClick?.();
-                  return;
-                }
-                onOpenLearning(module.id);
-              }}
+              serviceLocked={
+                internshipUnlocked ? isServiceLocked?.(learningTabToServiceKey(module.id)) : false
+              }
+              onOpen={() => guardLearning(module.id, () => onOpenLearning(module.id))}
             />
           ))}
         </div>
@@ -520,7 +578,10 @@ export function StudentHomeView({
           countLabel={`${documents.length} documents`}
         />
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {documents.map((doc) => (
+          {documents.map((doc) => {
+            const serviceKey = documentIdToServiceKey(doc.id);
+            const docServiceLocked = internshipUnlocked ? isServiceLocked?.(serviceKey) : false;
+            return (
             <div key={doc.id} className="relative">
               <DocumentCard
                 doc={doc}
@@ -528,29 +589,12 @@ export function StudentHomeView({
                 icon={DOCUMENT_ICONS[doc.id]}
                 downloading={downloadingDoc === doc.id}
                 uploading={doc.id === "consent" && uploadingConsent}
-                onView={() => {
-                  if (!internshipUnlocked) {
-                    onLockedInternshipClick?.();
-                    return;
-                  }
-                  onViewDocument(doc.id);
-                }}
-                onDownload={() => {
-                  if (!internshipUnlocked) {
-                    onLockedInternshipClick?.();
-                    return;
-                  }
-                  onDownloadDocument(doc.id);
-                }}
+                serviceLocked={!!docServiceLocked}
+                onView={() => guardDocument(doc.id, () => onViewDocument(doc.id))}
+                onDownload={() => guardDocument(doc.id, () => onDownloadDocument(doc.id))}
                 onUpload={
                   onUploadDocument
-                    ? () => {
-                        if (!internshipUnlocked) {
-                          onLockedInternshipClick?.();
-                          return;
-                        }
-                        onUploadDocument(doc.id);
-                      }
+                    ? () => guardDocument(doc.id, () => onUploadDocument(doc.id))
                     : undefined
                 }
               />
@@ -564,9 +608,19 @@ export function StudentHomeView({
                     <Lock className="size-3.5" /> Pay to unlock
                   </span>
                 </button>
+              ) : docServiceLocked ? (
+                <button
+                  type="button"
+                  className="absolute inset-0 rounded-2xl bg-white/55 backdrop-blur-[1px] flex items-center justify-center"
+                  onClick={() => onServiceLockedClick?.(serviceKey)}
+                >
+                  <span className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-black text-white">
+                    <Lock className="size-3.5" /> Service locked
+                  </span>
+                </button>
               ) : null}
             </div>
-          ))}
+          );})}
         </div>
       </section>
 

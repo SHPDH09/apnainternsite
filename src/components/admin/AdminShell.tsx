@@ -74,6 +74,7 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   "contact-details": "Contact Details",
   "whatsapp-links": "WhatsApp Links",
   settings: "Settings",
+  keys: "Keys",
 };
 
 type AdminNavProps = {

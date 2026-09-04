@@ -62,6 +62,7 @@ import { GalleryManagementPanel } from "@/components/admin/GalleryManagementPane
 import { HomeCmsManagementPanel } from "@/components/admin/HomeCmsManagementPanel";
 import { ConsultLetterManagementPanel } from "@/components/admin/ConsultLetterManagementPanel";
 import { DocumentCustomizationPanel } from "@/components/admin/DocumentCustomizationPanel";
+import { StudentServiceKeysPanel } from "@/components/admin/StudentServiceKeysPanel";
 import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
 import { ContactDetailsManagementPanel } from "@/components/admin/ContactDetailsManagementPanel";
 import { WhatsAppLinksManagementPanel } from "@/components/admin/WhatsAppLinksManagementPanel";
@@ -4394,6 +4395,14 @@ Apna Intern Team`;
                 isActive={activeTab === "staff-management"}
                 onRefresh={loadAll}
                 onDeleteStaff={handleDeleteStaff}
+              />
+            </TabsContent>
+
+            <TabsContent value="keys" className="space-y-6 animate-fade-in">
+              <StudentServiceKeysPanel
+                client={supabase}
+                currentUserId={currentUserId}
+                isActive={activeTab === "keys"}
               />
             </TabsContent>
 
