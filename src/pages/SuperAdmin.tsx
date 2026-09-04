@@ -58,6 +58,7 @@ import {
   formatBulkMailEta,
   sendBulkCustomMail,
 } from "@/lib/bulkCustomMailSend";
+import { toastBulkMailResult } from "@/lib/bulkMailResultFeedback";
 import { FeesManagementPanel } from "@/components/admin/FeesManagementPanel";
 import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
 import { BulkUploadStudentBadge } from "@/components/BulkUploadStudentBadge";
@@ -3259,14 +3260,22 @@ const SuperAdmin = () => {
                         disabled={isSendingBulk || (!bulkEmailSubject || !bulkEmailBody) || (commsSelectedIds.length === 0 && csvEmails.length === 0)}
                         onClick={async () => {
                           const activeList = commRecipientType === 'enrolled' ? allStudentsComms : allLeadsComms;
-                          const emailField = commRecipientType === 'enrolled' ? 'email' : 'user_email';
-                          
+                          const resolveEmail = (s: { email?: string; user_email?: string }) =>
+                            String(s.email || s.user_email || "").trim().toLowerCase();
+
                           const targets = [
-                            ...activeList.filter((s: any) => commsSelectedIds.includes(s.id)).map((s: any) => s[emailField]),
-                            ...csvEmails
+                            ...activeList
+                              .filter((s: { id: string }) => commsSelectedIds.includes(s.id))
+                              .map(resolveEmail),
+                            ...csvEmails.map((e) => String(e || "").trim().toLowerCase()),
                           ];
-                          const uniqueTargets = Array.from(new Set(targets));
-                          
+                          const uniqueTargets = Array.from(new Set(targets.filter((e) => e.includes("@"))));
+
+                          if (!uniqueTargets.length) {
+                            toast.error("No valid email addresses selected.");
+                            return;
+                          }
+
                           setIsSendingBulk(true);
                           setBulkTotal(uniqueTargets.length);
                           setBulkProgress(0);
@@ -3276,29 +3285,26 @@ const SuperAdmin = () => {
                               : `Sending to ${uniqueTargets.length} recipients…`
                           );
 
-                          const result = await sendBulkCustomMail(
-                            uniqueTargets,
-                            bulkEmailSubject,
-                            bulkEmailBody,
-                            (done) => setBulkProgress(done)
-                          );
-
-                          setIsSendingBulk(false);
-
-                          if (result.rateLimited) {
-                            toast.error(
-                              result.sent > 0
-                                ? `Hostinger rate limit after ${result.sent} sent. Wait 1 hour, then send the rest in batches of 50.`
-                                : "Hostinger rate limit — wait 1 hour, then test with 1 email before bulk."
+                          try {
+                            const result = await sendBulkCustomMail(
+                              uniqueTargets,
+                              bulkEmailSubject,
+                              bulkEmailBody,
+                              (done) => setBulkProgress(done)
                             );
-                          } else if (result.failed > 0) {
-                            toast.warning(`Sent ${result.sent} of ${uniqueTargets.length}. ${result.failed} failed.`);
-                          } else {
-                            toast.success(`Sent to ${result.sent} recipients.`);
-                            setBulkEmailSubject("");
-                            setBulkEmailBody("");
-                            setCommsSelectedIds([]);
-                            setCsvEmails([]);
+
+                            toastBulkMailResult(result, uniqueTargets.length, {
+                              onFullSuccess: () => {
+                                setBulkEmailSubject("");
+                                setBulkEmailBody("");
+                                setCommsSelectedIds([]);
+                                setCsvEmails([]);
+                              },
+                            });
+                          } catch (err: unknown) {
+                            toast.error(err instanceof Error ? err.message : "Failed to send bulk email");
+                          } finally {
+                            setIsSendingBulk(false);
                           }
                         }}
                       >
