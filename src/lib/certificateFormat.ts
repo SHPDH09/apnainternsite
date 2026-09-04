@@ -7,6 +7,10 @@ import {
   resolveInternshipProgrammeConfig,
 } from "@/lib/internshipProgramme";
 import { resolveStudentTrack } from "@/lib/studentTrack";
+import {
+  applyStudentCertificateOverrides,
+  getCachedDocumentTemplates,
+} from "@/lib/documentTemplates";
 
 /** Fixed internship period shown on all certificates (per official template). */
 export const CERTIFICATE_INTERNSHIP_PERIOD = "1 June 2026 - 20 June 2026";
@@ -111,7 +115,9 @@ export type CertificateEligibilityIssue =
   | "no_graded_assignment";
 
 export function certificateVerifyUrl(certificateId: string): string {
-  return `${CERTIFICATE_VERIFY_URL}?cert=${encodeURIComponent(certificateId)}`;
+  const verifyBase =
+    getCachedDocumentTemplates().certificate.verifyUrl?.trim() || CERTIFICATE_VERIFY_URL;
+  return `${verifyBase}?cert=${encodeURIComponent(certificateId)}`;
 }
 
 /** Apna Intern internal IDs must never appear as university roll numbers. */
@@ -591,11 +597,12 @@ export function certificateDisplayFromRecord(
   cert?: Record<string, unknown> | null,
   options?: CertificateDisplayOptions
 ): CertificateDisplayData {
-  return applyCertificateRecordFields(
+  const merged = applyCertificateRecordFields(
     certificateDataFromStudent(student, cert, options),
     cert,
     options
   );
+  return applyStudentCertificateOverrides(merged, student);
 }
 
 export type CertificateEditFormState = {
@@ -759,6 +766,11 @@ export function certificateDataFromStudent(
 
   const gender = String(student?.gender || meta.gender || "").trim() || undefined;
 
+  const globalTpl = getCachedDocumentTemplates().certificate;
+  const globalPeriod = globalTpl.internshipPeriod?.trim() || programme.period;
+  const globalHours = globalTpl.totalHours?.trim() || performance.totalHours;
+  const globalCredits = globalTpl.credits?.trim() || performance.creditsRecommended;
+
   const base: CertificateDisplayData = {
     studentName: String(student?.full_name || "Student"),
     parentName: String(
@@ -778,11 +790,11 @@ export function certificateDataFromStudent(
     ).trim() || undefined,
     internshipDomain: domain || undefined,
     internshipDuration: isEngineering
-      ? sectionDuration || programme.period
-      : programme.period,
+      ? sectionDuration || globalPeriod
+      : globalPeriod,
     internshipMode: mode,
-    totalHours: performance.totalHours,
-    creditsRecommended: performance.creditsRecommended,
+    totalHours: globalHours,
+    creditsRecommended: globalCredits,
     creditsLabel: programme.creditsLabel,
     marksPercent: `${marksPct}%`,
     assessmentRows: performance.assessmentRows,
@@ -792,22 +804,53 @@ export function certificateDataFromStudent(
     ),
   };
 
-  if (!isEngineering) return base;
+  const forcedVariant = globalTpl.defaultVariant;
+  if (!isEngineering && forcedVariant === "engineering") {
+    return applyStudentCertificateOverrides(
+      {
+        ...base,
+        certificateVariant: "engineering",
+        semester: formatSemesterLabel(semesterRaw) || undefined,
+        gender,
+        startDate,
+        endDate,
+        durationLabel: engineeringDurationLabel(sectionDuration || globalPeriod),
+        attendancePercent: `${attendancePct}%`,
+        universityRegistrationNumber:
+          universityRegistrationNumber ||
+          universityRollNo ||
+          String(student?.roll_number || meta.roll_number || "").trim() ||
+          undefined,
+      },
+      student
+    );
+  }
 
-  return {
+  if (!isEngineering) {
+    const standard =
+      forcedVariant === "standard" ? { ...base, certificateVariant: "standard" as const } : base;
+    return applyStudentCertificateOverrides(standard, student);
+  }
+
+  const engineering = {
     ...base,
-    certificateVariant: "engineering",
+    certificateVariant: "engineering" as const,
     semester: formatSemesterLabel(semesterRaw) || undefined,
     gender,
     startDate,
     endDate,
-    durationLabel: engineeringDurationLabel(sectionDuration || programme.duration),
+    durationLabel: engineeringDurationLabel(sectionDuration || globalPeriod),
     attendancePercent: `${attendancePct}%`,
-    // Engineering narrative uses registration number = university roll / reg id field
     universityRegistrationNumber:
       universityRegistrationNumber ||
       universityRollNo ||
       String(student?.roll_number || meta.roll_number || "").trim() ||
       undefined,
   };
+
+  if (forcedVariant === "standard") {
+    return applyStudentCertificateOverrides({ ...engineering, certificateVariant: "standard" }, student);
+  }
+
+  return applyStudentCertificateOverrides(engineering, student);
 }

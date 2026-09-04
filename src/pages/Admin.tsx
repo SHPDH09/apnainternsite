@@ -61,6 +61,7 @@ import { StudentDataUploadPanel } from "@/components/admin/StudentDataUploadPane
 import { GalleryManagementPanel } from "@/components/admin/GalleryManagementPanel";
 import { HomeCmsManagementPanel } from "@/components/admin/HomeCmsManagementPanel";
 import { ConsultLetterManagementPanel } from "@/components/admin/ConsultLetterManagementPanel";
+import { DocumentCustomizationPanel } from "@/components/admin/DocumentCustomizationPanel";
 import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
 import { ContactDetailsManagementPanel } from "@/components/admin/ContactDetailsManagementPanel";
 import { WhatsAppLinksManagementPanel } from "@/components/admin/WhatsAppLinksManagementPanel";
@@ -4397,6 +4398,11 @@ Apna Intern Team`;
             </TabsContent>
 
             <TabsContent value="settings" className="space-y-6">
+              <DocumentCustomizationPanel
+                client={supabase}
+                currentUserId={currentUserId}
+                isActive={activeTab === "settings"}
+              />
               <div className="grid md:grid-cols-3 gap-6">
                 <div className="md:col-span-1 space-y-6">
                   <Card className="p-6 border-none shadow-elegant bg-gradient-to-br from-indigo-50 to-white">

@@ -3,6 +3,7 @@ import { DocumentBrandLogo } from "@/components/brand/DocumentBrandLogo";
 import {
   resolveOfferLetterFields,
 } from "@/lib/offerLetterProfile";
+import { getCachedDocumentTemplates } from "@/lib/documentTemplates";
 import {
   OFFER_LETTER_CAPTURE_WIDTH_PX,
   OFFER_LETTER_PADDING_PX,
@@ -31,6 +32,13 @@ const letterStyle: React.CSSProperties = {
 export const OfferLetter = forwardRef<HTMLDivElement, OfferLetterProps>(({ profile }, ref) => {
   const fields = resolveOfferLetterFields(profile);
   const pad = OFFER_LETTER_PADDING_PX;
+  const tpl = getCachedDocumentTemplates().offer_letter;
+  const certTpl = getCachedDocumentTemplates().certificate;
+  const ceoName = certTpl.ceoName?.trim() || CERTIFICATE_CEO;
+  const ceoTitle = certTpl.ceoTitle?.trim() || CERTIFICATE_CEO_TITLE;
+  const companyName = certTpl.companyName?.trim() || CERTIFICATE_COMPANY;
+  const signatureSrc = certTpl.signatureSrc?.trim() || CERTIFICATE_SIGNATURE_SRC;
+  const stampSrc = certTpl.stampSrc?.trim() || "/certificate/stamp.png";
 
   const topDateLabel = fields.isLnmu ? "Application Date" : "Date";
   const topDateValue = fields.issueDate;
@@ -74,11 +82,11 @@ export const OfferLetter = forwardRef<HTMLDivElement, OfferLetterProps>(({ profi
           </div>
 
           <div className="text-right text-[10px] leading-[1.4] text-slate-700 shrink-0 max-w-[240px]">
-            <p>Arfabad Colony, East Nahar Road, Bajranngpuri,</p>
-            <p>Patna - 800007</p>
-            <p className="font-semibold">7050936593</p>
-            <p>contact@ezyintern.in</p>
-            <p>www.ezyintern.in</p>
+            <p>{tpl.addressLine1 || "Arfabad Colony, East Nahar Road, Bajranngpuri,"}</p>
+            <p>{tpl.addressLine2 || "Patna - 800007"}</p>
+            <p className="font-semibold">{tpl.phone || "7050936593"}</p>
+            <p>{tpl.email || "contact@ezyintern.in"}</p>
+            <p>{tpl.website || "www.ezyintern.in"}</p>
           </div>
         </div>
 
@@ -88,7 +96,9 @@ export const OfferLetter = forwardRef<HTMLDivElement, OfferLetterProps>(({ profi
           className="text-center py-3 text-[17px] font-bold tracking-wide text-slate-900"
           style={{ paddingLeft: pad, paddingRight: pad }}
         >
-          {fields.isLnmu ? "Internship Acceptance Letters" : "INTERNSHIP OFFER LETTER"}
+          {fields.isLnmu
+            ? tpl.titleLnmu || "Internship Acceptance Letters"
+            : tpl.title || "INTERNSHIP OFFER LETTER"}
         </h1>
       </div>
 
@@ -119,17 +129,11 @@ export const OfferLetter = forwardRef<HTMLDivElement, OfferLetterProps>(({ profi
         </div>
 
         <div className="text-[14px] space-y-3 leading-relaxed text-justify">
-          <p className="font-bold">Dear Candidate,</p>
-          <p>
-            We are pleased to accept your application and formally offer you an internship at{" "}
-            <span className="font-bold">Apna Intern</span>.
-            Our internship programmes are designed in full alignment with{" "}
-            <span className="font-bold">NEP-2020, AICTE and UGC Internship Guidelines</span>, and your
-            university&apos;s specific internship framework.
-          </p>
+          <p className="font-bold">{tpl.greeting || "Dear Candidate,"}</p>
+          <p>{tpl.introParagraph || "We are pleased to accept your application and formally offer you an internship at Apna Intern."}</p>
 
           <div className="rounded-lg border border-sky-200 bg-sky-50 py-3 px-3">
-            <p className="font-bold mb-2">Your internship details are as follows:</p>
+            <p className="font-bold mb-2">{tpl.detailsHeading || "Your internship details are as follows:"}</p>
             <table className="w-full border-collapse text-[13px]" style={{ tableLayout: "fixed" }}>
               <colgroup>
                 <col style={{ width: "44%" }} />
@@ -148,41 +152,31 @@ export const OfferLetter = forwardRef<HTMLDivElement, OfferLetterProps>(({ profi
             </table>
           </div>
 
-          <p>
-            Please report to us on your start date as per the schedule above and bring this letter along
-            with the <span className="font-bold">Consent Letter</span> issued by your College. We also
-            request that you inform your{" "}
-            <span className="font-bold">College Internship Nodal Officer (CINO)</span> upon receiving
-            this acceptance letter. During the programme, you are required to maintain the minimum
-            required attendance and complete all tasks and assignments given by your mentor.
-          </p>
+          <p>{tpl.closingParagraph1 || "Please report to us on your start date as per the schedule above."}</p>
 
-          <p>
-            We look forward to a meaningful and enriching internship experience and appreciate your
-            interest in <span className="font-bold">Apna Intern</span>.
-          </p>
+          <p>{tpl.closingParagraph2 || `We look forward to a meaningful internship experience with ${companyName}.`}</p>
         </div>
 
         <div className="relative z-10 mt-6 w-full border-t border-slate-200 pt-4">
           <div className="flex justify-end items-end gap-2 mb-2">
             <img
-              src={CERTIFICATE_SIGNATURE_SRC}
-              alt={`Signature of ${CERTIFICATE_CEO}`}
+              src={signatureSrc}
+              alt={`Signature of ${ceoName}`}
               className="h-[48px] w-auto max-w-[170px] object-contain"
               crossOrigin="anonymous"
             />
             <img
-              src="/certificate/stamp.png"
+              src={stampSrc}
               alt="Company stamp"
               className="h-[48px] w-[48px] object-contain shrink-0"
               crossOrigin="anonymous"
             />
           </div>
           <div className="text-right mb-3">
-            <p className="text-[11px] font-bold text-slate-900">{CERTIFICATE_CEO}</p>
-            <p className="text-[10px] font-semibold text-slate-700">{CERTIFICATE_CEO_TITLE}</p>
+            <p className="text-[11px] font-bold text-slate-900">{ceoName}</p>
+            <p className="text-[10px] font-semibold text-slate-700">{ceoTitle}</p>
             <p className="text-[9px] font-bold text-sky-600 uppercase tracking-wide leading-tight">
-              {CERTIFICATE_COMPANY}
+              {companyName}
             </p>
           </div>
           <div className="flex flex-wrap justify-center items-center gap-2.5 py-1.5">
