@@ -147,9 +147,7 @@ const Index = () => {
   ]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const trustedStripRef = useRef<HTMLDivElement>(null);
   const [isPaused, setIsPaused] = useState(false);
-  const [isTrustedPaused, setIsTrustedPaused] = useState(false);
 
   useEffect(() => {
     if (!scrollRef.current || isPaused) return;
@@ -165,22 +163,6 @@ const Index = () => {
 
     return () => clearInterval(interval);
   }, [isPaused, unis]);
-
-  useEffect(() => {
-    if (!trustedStripRef.current || isTrustedPaused || unis.length === 0) return;
-
-    const scrollContainer = trustedStripRef.current;
-    const half = scrollContainer.scrollWidth / 2;
-    const interval = setInterval(() => {
-      if (scrollContainer.scrollLeft >= half) {
-        scrollContainer.scrollLeft = 0;
-      } else {
-        scrollContainer.scrollLeft += 1;
-      }
-    }, 30);
-
-    return () => clearInterval(interval);
-  }, [isTrustedPaused, unis]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -398,12 +380,7 @@ const Index = () => {
 
       <HomeHeroSection onRegister={goRegister} onVerify={goVerify} />
 
-      <HomeMarqueeStrip
-        universities={unis}
-        stripRef={trustedStripRef}
-        paused={isTrustedPaused}
-        onPauseChange={setIsTrustedPaused}
-      />
+      <HomeMarqueeStrip universities={unis} />
 
       <HomeStatsSection statsRef={statsRef} statCards={statCards} />
 

@@ -277,3 +277,39 @@
     0 1px 0 rgb(255 255 255 / 0.8) inset,
     0 24px 60px -28px rgb(43 124 211 / 0.22);
 }
+
+.home-marquee-track {
+  will-change: transform;
+}
+
+.home-marquee-track.home-marquee-running {
+  animation: homeMarqueeScroll 42s linear infinite;
+}
+
+.home-marquee-track.home-marquee-paused {
+  animation-play-state: paused;
+}
+
+.home-marquee-section-active {
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(238, 246, 255, 0.95) 50%,
+    rgba(255, 255, 255, 1) 100%
+  );
+}
+
+@keyframes homeMarqueeScroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-marquee-track.home-marquee-running {
+    animation: none;
+  }
+}
