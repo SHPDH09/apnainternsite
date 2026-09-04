@@ -1,15 +1,10 @@
 import { useEffect } from "react";
 
 const SCRIPT_ID = "quantronsoft-chatbot-widget";
-const SCRIPT_SRC = "https://www.quantronsoft.com/chatbot-widget.js?v=8";
-const COMPANY_ID = "cf463f5e-024f-43b7-a4a7-fa9aa4d2dbd0";
-const API_KEY = "7fbca4c88392bc52f129433e51731f995452e97e3dc77593";
+const SCRIPT_SRC = "https://www.quantronsoft.com/chatbot-widget.js?v=9";
+const CHATBOT_ID = "cf463f5e-024f-43b7-a4a7-fa9aa4d2dbd0";
 
-/** Bot name, color, and welcome message come from the widget token / dashboard. */
-const WIDGET_TOKEN =
-  "eyJ2IjoxLCJleHAiOjE4MjAwMzEwMzk4OTgsImNvbXBhbnkiOnsiaWQiOiJjZjQ2M2Y1ZS0wMjRmLTQzYjctYTRhNy1mYTlhYTRkMmRiZDAiLCJuYW1lIjoiQXBuYSBJbnRlcm4iLCJhcGlfa2V5IjoiN2ZiY2E0Yzg4MzkyYmM1MmYxMjk0MzNlNTE3MzFmOTk1NDUyZTk3ZTNkYzc3NTkzIiwiYm90X25hbWUiOiJBcG5hIEludGVybiBBc3Npc3RhbnQgbmV3IGhlbGxvIiwid2VsY29tZV9tZXNzYWdlIjoiSGkhIEhvdyBjYW4gSSBoZWxwIHlvdSB0b2RheT8iLCJwcmltYXJ5X2NvbG9yIjoiIzg2MDVmMCIsImNvbXBhbnlfaW5mbyI6IkFwbmEgSW50ZXJuXG5DRU8gRW1haWw6IGV6eWludGVybi5pbkBnbWFpbC5jb20iLCJ3ZWJzaXRlX3VybCI6IiIsImdvb2dsZV9zZWFyY2hfZW5hYmxlZCI6dHJ1ZSwiY2VvX2VtYWlsIjoiZXp5aW50ZXJuLmluQGdtYWlsLmNvbSIsImtub3dsZWRnZSI6W10sInJ1bGVzIjpbeyJydWxlX3RleHQiOiJBbHdheXMgYmUgcG9saXRlIGFuZCBwcm9mZXNzaW9uYWwifSx7InJ1bGVfdGV4dCI6Ik5ldmVyIHNoYXJlIGNvbmZpZGVudGlhbCBpbmZvcm1hdGlvbiJ9XSwidXBkYXRlZF9hdCI6IjIwMjYtMDktMDRUMDQ6MTA6MzkuODk4WiJ9fQ.Utjg81EsOE46GMqMv_u-Uku1FwcRF2fEBdHTNeN6gA0";
-
-/** QuantronSoft chat widget — load once site-wide (login, dashboards, public pages). */
+/** QuantronSoft chat widget — load once site-wide. Settings update live from dashboard. */
 export function QuantronChatbot() {
   useEffect(() => {
     if (document.getElementById(SCRIPT_ID)) return;
@@ -18,9 +13,7 @@ export function QuantronChatbot() {
     script.id = SCRIPT_ID;
     script.src = SCRIPT_SRC;
     script.async = true;
-    script.setAttribute("data-company-id", COMPANY_ID);
-    script.setAttribute("data-api-key", API_KEY);
-    script.setAttribute("data-widget-token", WIDGET_TOKEN);
+    script.setAttribute("data-chatbot-id", CHATBOT_ID);
     document.body.appendChild(script);
 
     return () => {
