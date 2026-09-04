@@ -26,8 +26,8 @@ export function HomeSectionHeader({
       )}
     >
       {pill ? (
-        <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-600 shadow-sm">
-          <span className="size-1.5 rounded-full bg-primary" aria-hidden />
+        <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#5AA3E6]/25 bg-gradient-to-r from-white to-[#eef6ff] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-[#2B7CD3] shadow-sm">
+          <span className="size-1.5 rounded-full bg-[#F7941D]" aria-hidden />
           {pill}
         </span>
       ) : null}
@@ -44,6 +44,13 @@ export function HomeSectionHeader({
           {description}
         </p>
       ) : null}
+      <div
+        className={cn(
+          "mt-5 h-1 w-16 rounded-full bg-gradient-to-r from-[#2B7CD3] to-[#F7941D]",
+          centered && "mx-auto"
+        )}
+        aria-hidden
+      />
     </div>
   );
 }
