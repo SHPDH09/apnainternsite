@@ -1,0 +1,5 @@
+# Cloudflare Workers — not used by Vercel; avoid any framework/build detection noise.
+wrangler.toml
+wrangler.jsonc
+cloudflare/
+.wranglerignore

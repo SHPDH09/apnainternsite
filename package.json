@@ -16,6 +16,7 @@
     "dev:frontend:aws": "vite --mode aws",
     "dev:frontend:awsrds": "vite --mode awsrds",
     "build": "vite build && node scripts/postbuild-cloudflare.mjs",
+    "vercel-build": "vite build",
     "build:cloudflare": "npm run build",
     "deploy:workers": "wrangler deploy",
     "deploy:cloudflare": "npm run build && wrangler deploy",

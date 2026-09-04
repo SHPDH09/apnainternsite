@@ -30,3 +30,4 @@ aws/sam/samconfig.toml
 
 .env
 .env*.local
+.wrangler/

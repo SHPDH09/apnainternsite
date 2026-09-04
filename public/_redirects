@@ -1,4 +1,0 @@
-# Used by Cloudflare Pages (external proxy rules). Workers deploy ignores this file
-# via dist/.assetsignore — API proxy runs in cloudflare/worker.ts instead.
-
-/cyber-cafe/login  /cybercafe/login  301
