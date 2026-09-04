@@ -4,6 +4,7 @@ import {
   getSmtpCredentials,
   sesMailHeaders,
 } from './lib/smtpTransport.js';
+import { formatSmtpError, isSesIdentityNotVerifiedError } from './lib/smtpErrors.js';
 
 /** Max recipients per request (one SMTP connection, ~45s on Vercel 60s limit). */
 const MAX_BATCH_SIZE = 15;
@@ -124,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sent++;
       } catch (e: unknown) {
         failed++;
-        lastError = e instanceof Error ? e.message : String(e);
+        lastError = formatSmtpError(e, { to: list[i], from: from.address });
         if (isSmtpRateLimitError(e)) {
           rateLimited = true;
           break;
@@ -166,8 +167,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     return res.status(500).json({
       success: false,
-      message: 'Bulk send failed',
-      error: err.message,
+      message: isSesIdentityNotVerifiedError(error)
+        ? 'Email address not verified in Amazon SES'
+        : 'Bulk send failed',
+      error: formatSmtpError(error),
     });
   }
 }

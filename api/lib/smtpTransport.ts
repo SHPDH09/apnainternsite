@@ -1,5 +1,7 @@
 /** Amazon SES SMTP (ap-south-1) — shared by Vercel mail API routes. */
 
+import { formatSmtpError } from "./smtpErrors.js";
+
 export type MailFrom = { name: string; address: string };
 
 export function resolveSmtpHost(): string {
@@ -18,11 +20,15 @@ export function resolveSmtpPort(): number {
 
 /** Verified SES envelope sender — must match a verified identity in SES. */
 export function resolveMailFromAddress(): string {
-  const explicit = (process.env.MAIL_FROM || process.env.SMTP_FROM || '').trim();
+  const explicit = (process.env.MAIL_FROM || process.env.SMTP_FROM || "").trim();
   const angle = explicit.match(/<([^>]+)>/);
   if (angle) return angle[1].trim();
-  if (explicit.includes('@')) return explicit;
-  return process.env.MAIL_FROM_ADDRESS || 'admin@ezyintern.in';
+  if (explicit.includes("@")) return explicit;
+  return (
+    process.env.MAIL_FROM_ADDRESS?.trim() ||
+    process.env.SES_FROM_ADDRESS?.trim() ||
+    "noreply@apnaintern.in"
+  );
 }
 
 /** Nodemailer `from` object — SES rejects some string-only formats (501). */
@@ -47,10 +53,10 @@ export function getSmtpCredentials(): { user: string; pass: string } {
 }
 
 export async function createSmtpTransporter() {
-  const nodemailer = (await import('nodemailer')).default;
+  const nodemailer = (await import("nodemailer")).default;
   const { user, pass } = getSmtpCredentials();
   if (!user || !pass) {
-    throw new Error('SMTP credentials missing');
+    throw new Error("SMTP credentials missing");
   }
   const port = resolveSmtpPort();
   return nodemailer.createTransport({
@@ -61,3 +67,5 @@ export async function createSmtpTransporter() {
     connectionTimeout: 10000,
   });
 }
+
+export { formatSmtpError };

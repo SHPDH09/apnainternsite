@@ -43,6 +43,7 @@
     "aws:rds:import": "node aws/scripts/run-rds-import.mjs",
     "aws:rds:import:csv": "bash -c 'set -a && [ -f .env.awsrds.local ] && . ./.env.awsrds.local; set +a; bash aws/scripts/import-csv-tables.sh'",
     "aws:rds:verify": "node aws/scripts/run-rds-verify.mjs",
+    "aws:ses:verify-email": "node aws/scripts/ses-verify-email.mjs",
     "aws:s3:provision": "bash aws/scripts/provision-s3-storage.sh",
     "aws:s3:sync": "bash aws/scripts/sync-storage-to-s3.sh",
     "aws:s3:sync:dry": "bash aws/scripts/sync-storage-to-s3.sh --dry-run",

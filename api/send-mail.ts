@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { formatSmtpError, isSesIdentityNotVerifiedError } from './lib/smtpErrors.js';
 
 /** Inlined — importing api/lib/*.ts crashes this Vercel function (FUNCTION_INVOCATION_FAILED). */
 type MailFrom = { name: string; address: string };
@@ -22,7 +23,7 @@ function resolveMailFromAddress(): string {
   const angle = explicit.match(/<([^>]+)>/);
   if (angle) return angle[1].trim();
   if (explicit.includes('@')) return explicit;
-  return process.env.MAIL_FROM_ADDRESS || 'admin@ezyintern.in';
+  return process.env.MAIL_FROM_ADDRESS?.trim() || process.env.SES_FROM_ADDRESS?.trim() || 'noreply@apnaintern.in';
 }
 
 function resolveMailFrom(label = 'Apna Intern'): MailFrom {
@@ -243,7 +244,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           } catch (e: unknown) {
             return {
               ok: false as const,
-              error: e instanceof Error ? e.message : String(e),
+              error: formatSmtpError(e, { to, from: from.address }),
               rateLimited: isSmtpRateLimitError(e),
             };
           }
@@ -542,8 +543,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     return res.status(500).json({
       success: false,
-      message: 'Failed to send email',
-      error: err.message,
+      message: isSesIdentityNotVerifiedError(error)
+        ? 'Email address not verified in Amazon SES'
+        : 'Failed to send email',
+      error: formatSmtpError(error, { from: resolveMailFromAddress() }),
       code: (error as { code?: string })?.code,
     });
   }
