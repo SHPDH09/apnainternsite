@@ -1,18 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CertificateAssessmentRow, CertificateDisplayData } from "@/lib/certificateFormat";
-import {
-  CERTIFICATE_ASSESSMENT_CRITERIA,
-  CERTIFICATE_CEO,
-  CERTIFICATE_CEO_TITLE,
-  CERTIFICATE_COMPANY,
-  CERTIFICATE_CREDITS,
-  CERTIFICATE_INTERNSHIP_PERIOD,
-  CERTIFICATE_SIGNATURE_SRC,
-  CERTIFICATE_TOTAL_HOURS,
-  CERTIFICATE_VERIFY_URL,
-} from "@/lib/certificateFormat";
 import type { OfferLetterResolved } from "@/lib/offerLetterProfile";
-import { ACCEPTANCE_LETTER_ISSUE_DATE, LNMU_STIPEND } from "@/lib/offerLetterProfile";
 
 export type CertificateTemplateConfig = {
   defaultVariant?: "auto" | "standard" | "engineering";
@@ -65,16 +53,22 @@ export type DocumentTemplatesRow = {
 
 export const DEFAULT_CERTIFICATE_TEMPLATE: CertificateTemplateConfig = {
   defaultVariant: "auto",
-  internshipPeriod: CERTIFICATE_INTERNSHIP_PERIOD,
-  totalHours: CERTIFICATE_TOTAL_HOURS,
-  credits: CERTIFICATE_CREDITS,
-  verifyUrl: CERTIFICATE_VERIFY_URL,
-  companyName: CERTIFICATE_COMPANY,
-  ceoName: CERTIFICATE_CEO,
-  ceoTitle: CERTIFICATE_CEO_TITLE,
-  signatureSrc: CERTIFICATE_SIGNATURE_SRC,
+  internshipPeriod: "1 June 2026 - 20 June 2026",
+  totalHours: "120 Hours",
+  credits: "4 Credits",
+  verifyUrl: "https://www.ezyintern.in/verify",
+  companyName: "Apna Intern",
+  ceoName: "Ajeet Kumar",
+  ceoTitle: "Founder & CEO",
+  signatureSrc: "/certificate/signature.png?v=7",
   stampSrc: "/certificate/stamp.png",
-  assessmentCriteria: [...CERTIFICATE_ASSESSMENT_CRITERIA],
+  assessmentCriteria: [
+    "Technical Knowledge & Application",
+    "Quality of Work & Task Completion",
+    "Initiative & Problem-Solving Ability",
+    "Communication & Interpersonal Skills",
+    "Punctuality, Discipline & Professional Conduct",
+  ],
 };
 
 export const DEFAULT_OFFER_LETTER_TEMPLATE: OfferLetterTemplateConfig = {
@@ -93,8 +87,8 @@ export const DEFAULT_OFFER_LETTER_TEMPLATE: OfferLetterTemplateConfig = {
     "Please report to us on your start date as per the schedule above and bring this letter along with the Consent Letter issued by your College. We also request that you inform your College Internship Nodal Officer (CINO) upon receiving this acceptance letter. During the programme, you are required to maintain the minimum required attendance and complete all tasks and assignments given by your mentor.",
   closingParagraph2:
     "We look forward to a meaningful and enriching internship experience and appreciate your interest in Apna Intern.",
-  defaultStipend: LNMU_STIPEND,
-  defaultIssueDate: ACCEPTANCE_LETTER_ISSUE_DATE,
+  defaultStipend: "Not Applicable",
+  defaultIssueDate: "30 May 2026",
 };
 
 let cachedTemplates: DocumentTemplatesRow | null = null;
