@@ -1,6 +1,4 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Shield, Sparkles } from "lucide-react";
 
 type LoginPremiumLayoutProps = {
@@ -20,9 +18,6 @@ export function LoginPremiumLayout({ title, subtitle, children, badge }: LoginPr
         <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_40%,rgba(255,255,255,0.06)_50%,transparent_60%)] animate-login-scan-line pointer-events-none" />
 
         <div className="relative z-10">
-          <Link to="/" className="inline-flex mb-10">
-            <BrandLogo size="lg" className="brightness-0 invert drop-shadow-lg" />
-          </Link>
           <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-widest backdrop-blur-sm mb-6">
             <Sparkles className="size-3.5 text-amber-300" />
             {badge || "Secure portal access"}
@@ -50,11 +45,6 @@ export function LoginPremiumLayout({ title, subtitle, children, badge }: LoginPr
       {/* Form panel */}
       <div className="flex-1 flex items-center justify-center p-6 md:p-10 bg-gradient-to-b from-slate-50 to-white">
         <div className="w-full max-w-md animate-fade-in-up">
-          <div className="lg:hidden flex justify-center mb-8">
-            <Link to="/" className="inline-flex">
-              <BrandLogo size="lg" />
-            </Link>
-          </div>
           <div className="text-center mb-8 lg:text-left">
             <h1 className="font-display text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
               {title}

@@ -8,7 +8,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BrandLogo } from "@/components/brand/BrandLogo";
 import { BRAND_TAGLINE } from "@/lib/brand";
 
 type HomeHeroSectionProps = {
@@ -37,10 +36,6 @@ export function HomeHeroSection({ onRegister, onVerify }: HomeHeroSectionProps) 
 
       <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-6 pb-20 pt-14 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:pb-24 lg:pt-20">
         <div className="animate-fade-in-up text-center lg:text-left">
-          <div className="mb-5 flex justify-center lg:justify-start">
-            <BrandLogo size="md" className="drop-shadow-sm" />
-          </div>
-
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#5AA3E6]/25 bg-white/90 px-4 py-2 text-sm font-semibold text-[#2B7CD3] shadow-sm backdrop-blur">
             <Sparkles className="size-4 text-[#F7941D]" />
             {BRAND_TAGLINE} · UGC internships · Pan India
