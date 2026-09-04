@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { StudentLearningPanel, type LearningPanelTab } from "@/components/student/StudentLearningPanel";
 import { StudentHomeView } from "@/components/student/StudentHomeView";
 import { StudentMyCoursesPanel } from "@/components/student/StudentMyCoursesPanel";
+import { StudentAttendancePanel } from "@/components/student/StudentAttendancePanel";
 import { StudentDocumentPreviewDialog } from "@/components/student/StudentDocumentPreviewDialog";
 import { useStudentDocumentActions } from "@/hooks/useStudentDocumentActions";
 import { fetchStudentLearningMaterials, type LearningMaterialRow } from "@/lib/learningMaterialsApi";
@@ -1368,187 +1369,17 @@ const Dashboard = () => {
 
           {/* Attendance Section — internship students only */}
           {activeView === 'home' && internshipUnlocked && (
-            <div id="attendance-section" className="mt-10 mb-10 student-dash-animate-in">
-              <div className="flex items-center justify-between mb-5 gap-4 pb-4 border-b border-slate-200">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="size-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                    <CheckSquare className="size-4 text-slate-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Daily attendance</h2>
-                    <p className="text-sm text-slate-500 hidden sm:block">Hold the button for 10 seconds to mark</p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="font-medium text-slate-600 shrink-0">
-                  {attendanceList.length} days recorded
-                </Badge>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-8">
-                {/* Mark Attendance Card */}
-                <Card className="p-8 border-none shadow-elegant bg-gradient-to-br from-slate-900 to-slate-800 text-white flex flex-col items-center justify-center text-center gap-6 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-5"><CheckSquare className="size-32" /></div>
-                  <div>
-                    <h3 className="text-xl font-black mb-1">Mark Attendance</h3>
-                    <p className="text-slate-400 text-sm">
-                      {attendanceMarkedToday
-                        ? "Attendance already marked for today."
-                        : "Hold the button for 10 seconds to mark (once per calendar day)."}
-                    </p>
-                  </div>
-
-                  {/* Circular Hold Button */}
-                  <div className="relative flex items-center justify-center select-none py-4">
-                    <div className="relative flex items-center justify-center">
-                      <svg className="absolute" width="160" height="160" style={{ transform: 'rotate(-90deg)' }}>
-                        {/* Background Track */}
-                        <circle cx="80" cy="80" r="70" fill="none" stroke="#ffffff10" strokeWidth="10" />
-                        {/* Progress Line */}
-                        <circle
-                          cx="80" cy="80" r="70"
-                          fill="none"
-                          stroke={attendanceMarkedToday ? "#10b981" : !canMarkAttendanceToday ? "#475569" : "#8b5cf6"}
-                          strokeWidth="10"
-                          strokeDasharray={`${2 * Math.PI * 70}`}
-                          strokeDashoffset={`${2 * Math.PI * 70 * (1 - holdProgress / 100)}`}
-                          strokeLinecap="round"
-                          className="transition-all duration-75 ease-linear"
-                          style={{ filter: isHolding ? 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.5))' : 'none' }}
-                        />
-                      </svg>
-                      
-                      <button
-                        className={`size-32 rounded-full flex flex-col items-center justify-center gap-1 font-black transition-all select-none touch-none z-10
-                          ${attendanceMarkedToday
-                            ? 'bg-emerald-500/20 text-emerald-400 cursor-not-allowed border-4 border-emerald-500/20'
-                            : !canMarkAttendanceToday
-                            ? 'bg-slate-800/60 text-slate-500 cursor-not-allowed border-4 border-slate-700/30'
-                            : isHolding
-                            ? 'bg-violet-600 text-white scale-90 shadow-[0_0_30px_rgba(139,92,246,0.6)]'
-                            : 'bg-slate-800 hover:bg-slate-700 text-white shadow-xl active:scale-95 border-4 border-slate-700/50'
-                          }`}
-                        onMouseDown={startHold}
-                        onMouseUp={cancelHold}
-                        onMouseLeave={cancelHold}
-                        onTouchStart={startHold}
-                        onTouchEnd={cancelHold}
-                        disabled={!canMarkAttendanceToday}
-                      >
-                        {attendanceMarkedToday ? (
-                          <div className="flex flex-col items-center animate-in zoom-in duration-300">
-                            <CheckCircle2 className="size-10 mb-1" />
-                            <span className="text-[10px] uppercase tracking-tighter">Verified</span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center">
-                            {isHolding ? (
-                              <>
-                                <span className="text-2xl font-black">{Math.round(holdProgress)}%</span>
-                                <span className="text-[10px] uppercase tracking-widest opacity-80">Marking...</span>
-                              </>
-                            ) : (
-                              <>
-                                <CheckSquare className="size-10 mb-1 opacity-20" />
-                                <span className="text-sm font-black uppercase tracking-widest">Hold</span>
-                                <span className="text-[8px] opacity-60">10 Seconds</span>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Stats Row */}
-                  <div className="flex items-center gap-6 pt-4 border-t border-white/10 w-full justify-center">
-                    <div className="text-center">
-                      <div className="text-2xl font-black text-violet-400">{attendanceStats.total}</div>
-                      <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Total Days</div>
-                    </div>
-                    <div className="w-px h-8 bg-white/10"></div>
-                    <div className="text-center">
-                      <div className={`text-sm font-black ${attendanceMarkedToday ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {attendanceMarkedToday ? '✅ Present' : '❌ Absent'}
-                      </div>
-                      <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Today</div>
-                    </div>
-                  </div>
-                </Card>
-
-              <Card className="p-6 border-none shadow-elegant bg-white">
-                <h3 className="text-sm font-black text-slate-800 mb-4 uppercase tracking-wider">Attendance Overview</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-violet-50 border border-violet-100 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-violet-700">Total Attendance</p>
-                    <p className="text-2xl font-black text-violet-700 mt-1">{attendanceStats.total}</p>
-                  </div>
-                  <div
-                    className={`rounded-xl border p-4 ${
-                      attendanceStats.isEligible
-                        ? "bg-emerald-50 border-emerald-100"
-                        : "bg-amber-50 border-amber-100"
-                    }`}
-                  >
-                    <p
-                      className={`text-[10px] font-black uppercase tracking-widest ${
-                        attendanceStats.isEligible ? "text-emerald-700" : "text-amber-700"
-                      }`}
-                    >
-                      Attendance %
-                    </p>
-                    <p
-                      className={`text-2xl font-black mt-1 ${
-                        attendanceStats.isEligible ? "text-emerald-700" : "text-amber-700"
-                      }`}
-                    >
-                      {attendanceStats.percentage.toFixed(1)}%
-                    </p>
-                  </div>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-3">
-                  {attendanceStats.total} of {attendanceStats.attendanceTotalDays} internship programme days marked (
-                  {attendanceStats.percentage.toFixed(1)}%).
-                </p>
-              </Card>
-
-                {/* Attendance History Card */}
-                <Card className="p-6 border-none shadow-elegant bg-white flex flex-col">
-                  <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2">
-                    <Clock className="size-5 text-violet-600" /> Attendance History
-                  </h3>
-                  {attendanceList.length === 0 ? (
-                    <div className="flex-1 flex flex-col items-center justify-center py-12 text-center">
-                      <div className="size-16 rounded-full bg-violet-50 flex items-center justify-center mb-4"><CheckSquare className="size-8 text-violet-300" /></div>
-                      <p className="text-slate-500 font-medium text-sm">No attendance records yet</p>
-                      <p className="text-slate-400 text-xs mt-1">Mark your first attendance using the button</p>
-                    </div>
-                  ) : (
-                    <ScrollArea className="flex-1 max-h-[300px]">
-                      <div className="space-y-2 pr-2">
-                        {attendanceList.map((rec, idx) => (
-                          <div key={rec.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-violet-50 hover:border-violet-100 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <div className="size-8 rounded-lg bg-violet-100 flex items-center justify-center">
-                                <CheckCircle2 className="size-4 text-violet-600" />
-                              </div>
-                              <div>
-                                <div className="text-sm font-bold text-slate-800">
-                                  {new Date(rec.marked_at).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                                </div>
-                                <div className="text-[11px] text-slate-500 font-medium">
-                                  {new Date(rec.marked_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                                </div>
-                              </div>
-                            </div>
-                            <Badge className="bg-emerald-50 text-emerald-700 border-none text-[10px] font-black">Present</Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </Card>
-              </div>
-            </div>
+            <StudentAttendancePanel
+              attendanceList={attendanceList}
+              stats={attendanceStats}
+              attendanceMarkedToday={attendanceMarkedToday}
+              canMarkAttendanceToday={canMarkAttendanceToday}
+              markingBlocked={isLnmuBnmuAttendanceMarkingBlocked(profile?.university_name)}
+              holdProgress={holdProgress}
+              isHolding={isHolding}
+              onHoldStart={startHold}
+              onHoldEnd={cancelHold}
+            />
           )}
 
           {isServiceEnabled('live_classes') && (

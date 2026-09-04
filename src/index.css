@@ -215,6 +215,38 @@
   .student-dash-animate-in {
     animation: studentDashFadeUp 0.35s ease-out both;
   }
+
+  .attendance-hold-shell {
+    width: 11rem;
+    height: 11rem;
+  }
+
+  .attendance-hold-active::before {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 9999px;
+    border: 2px solid rgb(90 163 230 / 0.35);
+    animation: attendanceHoldPulse 1.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes attendanceHoldPulse {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.6;
+    }
+    50% {
+      transform: scale(1.04);
+      opacity: 1;
+    }
+  }
+
+  .attendance-hold-btn:focus-visible {
+    outline: 2px solid #5aa3e6;
+    outline-offset: 4px;
+  }
 }
 
 @keyframes progress {
