@@ -56,7 +56,7 @@ import {
 } from "@/components/ui/input-otp";
 import { LoginPremiumLayout } from "@/components/login/LoginPremiumLayout";
 import { LoginSecurityCheck } from "@/components/login/LoginSecurityCheck";
-import { LoginOtpVerification } from "@/components/login/LoginOtpVerification";
+import { LoginOtpVerification, OTP_VERIFIED_ANIMATION_MS } from "@/components/login/LoginOtpVerification";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -85,6 +85,8 @@ const Login = () => {
   const [studentOtp, setStudentOtp] = useState("");
   const [studentOtpSending, setStudentOtpSending] = useState(false);
   const [studentOtpSent, setStudentOtpSent] = useState(false);
+  const [studentOtpVerified, setStudentOtpVerified] = useState(false);
+  const [studentOtpError, setStudentOtpError] = useState(false);
 
   /** Admin portal: password verified → email OTP before session is kept. */
   const [adminLoginStep, setAdminLoginStep] = useState<"password" | "otp">("password");
@@ -94,6 +96,8 @@ const Login = () => {
   const [adminOtpSending, setAdminOtpSending] = useState(false);
   const [adminOtpSent, setAdminOtpSent] = useState(false);
   const [adminDevOtp, setAdminDevOtp] = useState<string | null>(null);
+  const [adminOtpVerified, setAdminOtpVerified] = useState(false);
+  const [adminOtpError, setAdminOtpError] = useState(false);
   const isLocalDev = isLocalDevEnvironment();
 
   // Captcha State
@@ -127,6 +131,13 @@ const Login = () => {
   const [resetOtp, setResetOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [resetOtpVerified, setResetOtpVerified] = useState(false);
+  const [resetOtpError, setResetOtpError] = useState(false);
+
+  const waitForOtpVerifiedAnimation = () =>
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, OTP_VERIFIED_ANIMATION_MS);
+    });
 
   // Credential emails link with ?portal=student: sign out so admin/staff session does not steal the student login page.
   // Otherwise any existing session skips the form and redirects to that user's dashboard.
@@ -252,12 +263,17 @@ const Login = () => {
       toast.error("Please verify you are human");
       return;
     }
+    setAdminOtpError(false);
+    setAdminOtpVerified(false);
     setLoginLoading(true);
     try {
       const valid = await verifyAdminLoginOtp(supabase, adminPendingEmail, adminOtp);
       if (!valid) {
+        setAdminOtpError(true);
         throw new Error("Invalid or expired code. Tap Resend code and try again.");
       }
+      setAdminOtpVerified(true);
+      await waitForOtpVerifiedAnimation();
       const signIn = await signInStudentWithPassword(
         supabase,
         adminPendingEmail,
@@ -313,10 +329,17 @@ const Login = () => {
       toast.error("Please verify you are human");
       return;
     }
+    setStudentOtpError(false);
+    setStudentOtpVerified(false);
     setLoginLoading(true);
     try {
       const signIn = await signInStudentWithOtp(supabase, studentOtpEmail, studentOtp);
-      if (!signIn.ok) throw signIn.error;
+      if (!signIn.ok) {
+        setStudentOtpError(true);
+        throw signIn.error;
+      }
+      setStudentOtpVerified(true);
+      await waitForOtpVerifiedAnimation();
       await completeAuthAndNavigate();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Login failed";
@@ -617,6 +640,8 @@ const Login = () => {
       toast.error("Please enter your 6-digit OTP");
       return;
     }
+    setResetOtpError(false);
+    setResetOtpVerified(false);
     setResetLoading(true);
     try {
       const { data: valid, error: verifyErr } = await supabase.rpc('verify_password_reset_otp', {
@@ -625,8 +650,11 @@ const Login = () => {
       });
       if (verifyErr) throw verifyErr;
       if (!valid) {
+        setResetOtpError(true);
         throw new Error('Invalid or expired OTP. Request a new code and try again.');
       }
+      setResetOtpVerified(true);
+      await waitForOtpVerifiedAnimation();
       setResetOtp(otp);
       setResetStep("password");
     } catch (error: unknown) {
@@ -688,6 +716,8 @@ const Login = () => {
     setResetStep("email");
     setResetOtp("");
     setNewPassword("");
+    setResetOtpVerified(false);
+    setResetOtpError(false);
     setShowResetDialog(true);
   };
 
@@ -881,9 +911,16 @@ const Login = () => {
                   )
                 }
                 otp={adminOtp}
-                onOtpChange={setAdminOtp}
+                onOtpChange={(value) => {
+                  setAdminOtp(value);
+                  setAdminOtpVerified(false);
+                  setAdminOtpError(false);
+                }}
                 onVerify={() => void handleAdminOtpVerify()}
                 loading={loginLoading}
+                verified={adminOtpVerified}
+                verifying={loginLoading && !adminOtpVerified}
+                error={adminOtpError}
                 sending={adminOtpSending}
                 captchaVerified={captchaVerified}
                 verifyingCaptcha={verifyingCaptcha}
@@ -896,6 +933,8 @@ const Login = () => {
                   setAdminOtp("");
                   setAdminOtpSent(false);
                   setAdminDevOtp(null);
+                  setAdminOtpVerified(false);
+                  setAdminOtpError(false);
                 }}
               />
             ) : isStudentLoginRoute && studentLoginStep === "otp" ? (
@@ -909,9 +948,16 @@ const Login = () => {
                     </>
                   }
                   otp={studentOtp}
-                  onOtpChange={setStudentOtp}
+                  onOtpChange={(value) => {
+                    setStudentOtp(value);
+                    setStudentOtpVerified(false);
+                    setStudentOtpError(false);
+                  }}
                   onVerify={() => void handleStudentOtpVerify()}
                   loading={loginLoading}
+                  verified={studentOtpVerified}
+                  verifying={loginLoading && !studentOtpVerified}
+                  error={studentOtpError}
                   sending={studentOtpSending}
                   captchaVerified={captchaVerified}
                   verifyingCaptcha={verifyingCaptcha}
@@ -921,6 +967,8 @@ const Login = () => {
                     setStudentLoginStep("password");
                     setStudentOtp("");
                     setStudentOtpSent(false);
+                    setStudentOtpVerified(false);
+                    setStudentOtpError(false);
                   }}
                 />
               ) : (
@@ -1138,16 +1186,27 @@ const Login = () => {
                 headline="Verify your identity"
                 description={`Enter the 6-digit OTP sent to ${resetEmail}.`}
                 otp={resetOtp}
-                onOtpChange={setResetOtp}
+                onOtpChange={(value) => {
+                  setResetOtp(value);
+                  setResetOtpVerified(false);
+                  setResetOtpError(false);
+                }}
                 onVerify={() => void handleVerifyResetOtp()}
                 verifyLabel="Verify OTP & continue"
                 loading={resetLoading}
+                verified={resetOtpVerified}
+                verifying={resetLoading && !resetOtpVerified}
+                error={resetOtpError}
                 captchaVerified
                 verifyingCaptcha={false}
                 onVerifyCaptcha={() => {}}
                 showCaptcha={false}
                 slotSize="lg"
-                onBack={() => setResetStep("email")}
+                onBack={() => {
+                  setResetStep("email");
+                  setResetOtpVerified(false);
+                  setResetOtpError(false);
+                }}
                 backLabel="Change email"
               />
             )}
