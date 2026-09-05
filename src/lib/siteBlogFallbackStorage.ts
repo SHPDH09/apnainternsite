@@ -100,6 +100,13 @@ function toEnvelope(posts: FallbackBlogPost[]): string {
   return JSON.stringify({ [FALLBACK_MARKER]: posts } satisfies FallbackEnvelope);
 }
 
+function isStorageReadUnavailable(error: unknown): boolean {
+  const msg = blogErrorText(error);
+  return /not found|404|does not exist|not implemented|not_found|storage route not implemented/i.test(
+    msg
+  );
+}
+
 async function readEnvelope(client: SupabaseClient): Promise<FallbackBlogPost[]> {
   const publicUrl = publicStorageObjectUrl("logos", FALLBACK_OBJECT_PATH);
   if (publicUrl) {
@@ -107,17 +114,19 @@ async function readEnvelope(client: SupabaseClient): Promise<FallbackBlogPost[]>
       const res = await fetch(publicUrl, { cache: "no-store" });
       if (res.ok) return parseEnvelope(await res.text());
       if (res.status !== 404) {
+        const body = await res.text().catch(() => "");
+        if (/not implemented|not_found/i.test(body)) return [];
         throw new Error(`Blog fallback read failed (HTTP ${res.status})`);
       }
     } catch (err) {
-      const msg = blogErrorText(err);
-      if (!/failed|404|not found/i.test(msg)) throw err;
+      if (isStorageReadUnavailable(err)) return [];
+      throw err;
     }
   }
 
   const { data, error } = await client.storage.from("logos").download(FALLBACK_OBJECT_PATH);
   if (error) {
-    if (/not found|404|does not exist/i.test(error.message)) return [];
+    if (isStorageReadUnavailable(error)) return [];
     throw error;
   }
   const text = await data.text();
