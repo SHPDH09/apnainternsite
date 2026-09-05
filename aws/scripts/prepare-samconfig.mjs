@@ -38,7 +38,7 @@ const rzpId = e.RAZORPAY_KEY_ID || e.VITE_RAZORPAY_KEY_ID || "";
 const rzpSecret = e.RAZORPAY_KEY_SECRET || "";
 const smtpUser = e.SMTP_USER || "";
 const smtpPass = e.SMTP_PASS || "";
-const smtpHost = e.SMTP_HOST || "smtp.hostinger.com";
+const smtpHost = e.SMTP_HOST || "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com";
 const mailFromAddress = e.MAIL_FROM_ADDRESS || "info@apnaintern.in";
 const gemini = e.GEMINI_API_KEY || e.VITE_GEMINI_API_KEY || "";
 

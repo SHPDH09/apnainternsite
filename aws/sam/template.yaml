@@ -25,7 +25,7 @@ Parameters:
     NoEcho: true
   SmtpHost:
     Type: String
-    Default: smtp.hostinger.com
+    Default: brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com
   MailFromAddress:
     Type: String
     Default: info@apnaintern.in

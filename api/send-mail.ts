@@ -72,7 +72,7 @@ function resolveSmtpHost(): string {
   return (
     process.env.SMTP_HOST ||
     process.env.SES_SMTP_HOST ||
-    'smtp.hostinger.com'
+    'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com'
   );
 }
 

@@ -1,6 +1,6 @@
 /**
  * Cloudflare Worker — proxy /auth, /rest, /storage, /functions, /api to AWS Lambda.
- * OTP mail (login_otp / send_otp) is sent at the edge via Hostinger SMTP when configured,
+ * OTP mail (login_otp / send_otp) is sent at the edge via SES Mail Manager SMTP when configured,
  * so login works even when Lambda still has broken SES/SMTP env.
  */
 
@@ -135,15 +135,23 @@ async function tryHandleOtpSendMail(request: Request, env: Env): Promise<Respons
     );
   }
 
-  if (!String(env.SMTP_PASS || "").trim()) {
-    const mc = await tryMailchannelsOtp(recipient, otp, purpose, request);
-    if (mc) return mc;
-    return null;
-  }
-
   const purpose = resolveOtpPurpose(
     body.purpose || (action === "login_otp" ? "login" : "password_reset"),
   );
+
+  if (!String(env.SMTP_PASS || "").trim()) {
+    const mc = await tryMailchannelsOtp(recipient, otp, purpose, request);
+    if (mc) return mc;
+    return Response.json(
+      {
+        success: false,
+        emailSent: false,
+        message:
+          "Verification email could not be sent — configure SMTP_PASS on the Cloudflare Worker (SES Mail Manager ingress password).",
+      },
+      { status: 503, headers: { "X-Otp-Delivery": "edge-unconfigured" } },
+    );
+  }
 
   try {
     await sendOtpViaHostinger(env, recipient, otp, purpose);
