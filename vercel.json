@@ -12,6 +12,24 @@
   },
   "redirects": [
     {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.ezyintern.in" }],
+      "destination": "https://apnaintern.in/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "ezyintern.in" }],
+      "destination": "https://apnaintern.in/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.apnaintern.in" }],
+      "destination": "https://apnaintern.in/:path*",
+      "permanent": true
+    },
+    {
       "source": "/cyber-cafe/login",
       "destination": "/cybercafe/login",
       "permanent": true

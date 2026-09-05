@@ -83,7 +83,7 @@ async function requestOtpViaServer(
   });
   const serverJson = (await serverRes.json().catch(() => ({}))) as ServerOtpJson;
 
-  if (serverRes.ok && serverJson.success && serverJson.emailSent !== false) {
+  if (serverRes.ok && serverJson.success === true && serverJson.emailSent === true) {
     return { ok: true, json: serverJson };
   }
 

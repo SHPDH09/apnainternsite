@@ -26,19 +26,21 @@ export async function assertSendMailOk(res: Response): Promise<void> {
   try {
     body = JSON.parse(text) as SendMailJson;
   } catch {
-    if (!res.ok) {
-      throw new Error(text.trim().slice(0, 280) || `Email request failed (${res.status})`);
-    }
-    return;
+    const snippet = text.trim().slice(0, 280);
+    throw new Error(
+      snippet.includes("FUNCTION_INVOCATION_FAILED")
+        ? "Email server error — mail could not be sent. Try again in a minute or use https://apnaintern.in"
+        : snippet || `Email request failed (${res.status})`
+    );
   }
 
   const detail = (body.error || body.message || "").trim();
   const emailPending =
-    body.emailSent === false ||
+    body.emailSent !== true ||
     Boolean(body.warning) ||
     (Boolean(body.devOtp) && import.meta.env.PROD);
 
-  if (!res.ok || body.success === false || emailPending) {
+  if (!res.ok || body.success !== true || emailPending) {
     throw new Error(detail || `Email request failed (${res.status})`);
   }
 }
