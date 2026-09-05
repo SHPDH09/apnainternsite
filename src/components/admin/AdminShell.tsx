@@ -68,6 +68,7 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   "add-registration": "Add Registration",
   "student-data-upload": "Student Data Upload",
   gallery: "Gallery",
+  blog: "Blog & Vlog",
   "home-cms": "Home Page Content",
   "consult-letter": "Consent Form",
   popups: "Popup Messages",

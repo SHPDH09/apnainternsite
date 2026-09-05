@@ -316,6 +316,7 @@ export function buildAdminNavGroups(
     accent: "#EC4899",
     items: [
       { kind: "tab", value: "gallery", label: "Gallery", icon: Image },
+      { kind: "tab", value: "blog", label: "Blog & Vlog", icon: BookOpen },
       { kind: "tab", value: "home-cms", label: "Home Page Content", icon: LayoutDashboard },
       { kind: "tab", value: "consult-letter", label: "Consent Form", icon: FileText },
       { kind: "tab", value: "popups", label: "Popups", icon: Bell },

@@ -125,6 +125,7 @@ export const SiteFooter = () => {
               <li><Link to="/register" className="hover:text-white transition-colors font-bold text-primary">Register Now</Link></li>
               <li><Link to="/login" className="hover:text-white transition-colors">Student Login</Link></li>
               <li><Link to="/contact" className="hover:text-white transition-colors">Help & Support</Link></li>
+              <li><Link to="/blog" className="hover:text-white transition-colors">Blog</Link></li>
               <li><Link to="/benefits" className="hover:text-white transition-colors">Program Benefits</Link></li>
             </ul>
           </div>

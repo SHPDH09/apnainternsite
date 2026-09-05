@@ -10,6 +10,7 @@ export const POPUP_PAGE_OPTIONS = [
   { key: "benefits", label: "Benefits Page" },
   { key: "courses", label: "Courses Page" },
   { key: "universities", label: "Universities" },
+  { key: "blog", label: "Blog" },
   { key: "gallery", label: "Gallery" },
   { key: "team", label: "Team" },
   { key: "mous", label: "MOUs" },
@@ -88,6 +89,7 @@ export function resolvePopupPageKeys(pathname: string, hash = ""): PopupPageKey[
   if (path === "/courses" || path.startsWith("/courses/")) keys.add("courses");
   if (path === "/verify") keys.add("verify");
   if (path === "/contact") keys.add("contact");
+  if (path === "/blog" || path.startsWith("/blog/")) keys.add("blog");
   if (path === "/login" || path === "/college/login" || path === "/referral/login" || path === "/cybercafe/login") {
     keys.add("login");
   }

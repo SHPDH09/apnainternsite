@@ -50,7 +50,9 @@ import { HomeOutcomesSection } from "@/components/home/HomeOutcomesSection";
 import { HomeUniversitiesSection } from "@/components/home/HomeUniversitiesSection";
 import { HomeFaqSection } from "@/components/home/HomeFaqSection";
 import { HomeFinalCta } from "@/components/home/HomeFinalCta";
+import { HomeBlogSection } from "@/components/home/HomeBlogSection";
 import { HomeCoursesSections } from "@/components/courses/HomeCoursesSections";
+import { fetchPublicBlogPosts, type SiteBlogPost } from "@/lib/siteBlogApi";
 import {
   getDomainsForUgStream,
   type UgStreamKey,
@@ -83,6 +85,7 @@ const Index = () => {
   const [mous, setMous] = useState<SiteMou[]>([]);
   const [offlinePrograms, setOfflinePrograms] = useState<SiteOfflineProgram[]>([]);
   const [testimonials, setTestimonials] = useState<SiteTestimonial[]>([]);
+  const [blogPosts, setBlogPosts] = useState<SiteBlogPost[]>([]);
   const [consentFormUrl, setConsentFormUrl] = useState<string | null>(null);
   const [consentFormName, setConsentFormName] = useState<string | null>(null);
   const [domainsStream, setDomainsStream] = useState<UgStreamKey | null>(null);
@@ -117,12 +120,14 @@ const Index = () => {
       fetchPublicMous(supabase).catch(() => [] as SiteMou[]),
       fetchPublicOfflinePrograms(supabase).catch(() => [] as SiteOfflineProgram[]),
       fetchPublicTestimonials(supabase).catch(() => [] as SiteTestimonial[]),
-    ]).then(([certs, team, mouRows, offline, reviews]) => {
+      fetchPublicBlogPosts(supabase, { limit: 3, featuredOnly: false }).catch(() => [] as SiteBlogPost[]),
+    ]).then(([certs, team, mouRows, offline, reviews, blogs]) => {
       setSampleCerts(certs);
       setExpertTeam(team);
       setMous(mouRows);
       setOfflinePrograms(offline);
       setTestimonials(reviews);
+      setBlogPosts(blogs);
     });
   }, []);
 
@@ -471,6 +476,8 @@ const Index = () => {
       />
 
       <HomeFaqSection faqs={faqs} />
+
+      <HomeBlogSection posts={blogPosts} />
 
       <HomeFinalCta onRegister={goRegister} onVerify={goVerify} />
 

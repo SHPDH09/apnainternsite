@@ -2,7 +2,7 @@ import { query } from "./db.js";
 
 const BOOTSTRAPPED = new Set<string>();
 
-const CMS_TABLES = ["site_popups", "site_contact_details", "site_whatsapp_links"] as const;
+const CMS_TABLES = ["site_popups", "site_contact_details", "site_whatsapp_links", "site_blog_posts"] as const;
 const CMS_TABLE_SET = new Set<string>(CMS_TABLES);
 
 export function isCmsTable(table: string): boolean {
@@ -168,15 +168,74 @@ async function bootstrapSiteWhatsApp(): Promise<void> {
   `);
 }
 
+async function bootstrapSiteBlogPosts(): Promise<void> {
+  await runSql(`
+    CREATE TABLE IF NOT EXISTS public.site_blog_posts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      title text NOT NULL DEFAULT '',
+      slug text NOT NULL UNIQUE,
+      excerpt text,
+      content text NOT NULL DEFAULT '',
+      cover_image_url text,
+      cover_image_path text,
+      author_name text,
+      post_type text NOT NULL DEFAULT 'blog' CHECK (post_type IN ('blog', 'vlog')),
+      status text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'scheduled', 'published')),
+      published_at timestamptz,
+      scheduled_at timestamptz,
+      meta_title text,
+      meta_description text,
+      tags jsonb NOT NULL DEFAULT '[]'::jsonb,
+      is_active boolean NOT NULL DEFAULT true,
+      is_featured boolean NOT NULL DEFAULT false,
+      sort_order integer NOT NULL DEFAULT 0,
+      created_by uuid,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_site_blog_posts_public
+      ON public.site_blog_posts (is_active, status, is_featured DESC, sort_order ASC, published_at DESC NULLS LAST, scheduled_at DESC NULLS LAST);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_site_blog_posts_slug ON public.site_blog_posts (lower(slug));
+  `);
+
+  try {
+    await runSql(`
+      ALTER TABLE public.site_blog_posts ENABLE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS "Public read active blog posts" ON public.site_blog_posts;
+      CREATE POLICY "Public read active blog posts"
+        ON public.site_blog_posts FOR SELECT TO anon, authenticated USING (is_active = true);
+      DROP POLICY IF EXISTS "Admins manage blog posts" ON public.site_blog_posts;
+      CREATE POLICY "Admins manage blog posts"
+        ON public.site_blog_posts FOR ALL TO authenticated
+        USING (
+          public.has_role(auth.uid(), 'admin'::public.app_role)
+          OR public.has_role(auth.uid(), 'super_admin'::public.app_role)
+        )
+        WITH CHECK (
+          public.has_role(auth.uid(), 'admin'::public.app_role)
+          OR public.has_role(auth.uid(), 'super_admin'::public.app_role)
+        );
+    `);
+  } catch {
+    await runSql(`ALTER TABLE public.site_blog_posts DISABLE ROW LEVEL SECURITY`);
+  }
+
+  await runSql(`
+    GRANT SELECT ON public.site_blog_posts TO anon, authenticated;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON public.site_blog_posts TO authenticated;
+  `);
+}
+
 export async function ensureCmsTable(table: string): Promise<void> {
   if (!isCmsTable(table) || BOOTSTRAPPED.has(table)) return;
   if (table === "site_popups") await bootstrapSitePopups();
   else if (table === "site_contact_details") await bootstrapSiteContacts();
   else if (table === "site_whatsapp_links") await bootstrapSiteWhatsApp();
+  else if (table === "site_blog_posts") await bootstrapSiteBlogPosts();
   BOOTSTRAPPED.add(table);
 }
 
-/** Ensure all site CMS tables exist (popups, contacts, WhatsApp links). */
+/** Ensure all site CMS tables exist (popups, contacts, WhatsApp links, blog). */
 export async function ensureAllCmsTables(): Promise<{ ok: true; tables: string[] }> {
   for (const table of CMS_TABLES) {
     await ensureCmsTable(table);

@@ -59,6 +59,7 @@ import { resolveLeadStoredPassword } from "@/lib/leadTransferPayload";
 import { AdminAddRegistrationPanel } from "@/components/AdminAddRegistrationPanel";
 import { StudentDataUploadPanel } from "@/components/admin/StudentDataUploadPanel";
 import { GalleryManagementPanel } from "@/components/admin/GalleryManagementPanel";
+import { BlogManagementPanel } from "@/components/admin/BlogManagementPanel";
 import { HomeCmsManagementPanel } from "@/components/admin/HomeCmsManagementPanel";
 import { ConsultLetterManagementPanel } from "@/components/admin/ConsultLetterManagementPanel";
 import { DocumentCustomizationPanel } from "@/components/admin/DocumentCustomizationPanel";
@@ -4771,6 +4772,10 @@ Apna Intern Team`;
 
             <TabsContent value="gallery" className="mt-0">
               <GalleryManagementPanel client={supabase} currentUserId={currentUserId} />
+            </TabsContent>
+
+            <TabsContent value="blog" className="mt-0">
+              <BlogManagementPanel client={supabase} currentUserId={currentUserId} />
             </TabsContent>
 
             <TabsContent value="home-cms" className="mt-0">

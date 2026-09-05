@@ -20,6 +20,7 @@ type NavItem = { to: string; label: string };
 const PRIMARY_LINKS: NavItem[] = [
   { to: "/", label: "Home" },
   { to: "/#about", label: "About" },
+  { to: "/blog", label: "Blog" },
   { to: "/benefits", label: "Benefits" },
   { to: "/courses", label: "Courses" },
   { to: "/#universities", label: "Universities" },
