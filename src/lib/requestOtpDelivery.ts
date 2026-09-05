@@ -50,9 +50,9 @@ function formatOtpDeliveryError(insertError: string | undefined, server: ServerO
 
   if (isSmtpAuthMessage(primary)) {
     return (
-      "Email server login failed (SMTP 535 — wrong or expired SMTP password on AWS). " +
-      "Redeploy Lambda with the latest code (uses SES API + IAM, no SMTP password needed), " +
-      "or refresh SMTP_USER/SMTP_PASS in Lambda environment from Amazon SES → SMTP settings."
+      "Email server login failed (SMTP 535). Production mail API still has stale SMTP credentials. " +
+      "Update Lambda env SMTP_HOST/SMTP_USER/SMTP_PASS to the SES Mail Manager ingress endpoint, " +
+      "or redeploy after GitHub Actions secrets (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, SMTP_PASS) are set."
     );
   }
 
