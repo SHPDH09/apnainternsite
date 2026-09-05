@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths:
       - "api/**"
+      - "package.json"
+      - "package-lock.json"
       - "aws/lambda/**"
       - "aws/scripts/bundle-lambda.mjs"
       - "aws/scripts/update-lambda-mail-env.mjs"
