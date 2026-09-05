@@ -25,8 +25,6 @@ import {
   UploadCloud,
   UserPlus,
   Users,
-  User,
-  ScrollText,
   Wrench,
   Award,
 } from "lucide-react";
@@ -333,8 +331,6 @@ export function buildAdminNavGroups(
     icon: Settings,
     accent: "#64748B",
     items: [
-      { kind: "tab", value: "profile", label: "Profile", icon: User },
-      { kind: "tab", value: "activity-logs", label: "Activity Logs", icon: ScrollText },
       { kind: "tab", value: "keys", label: "Keys", icon: KeyRound },
       { kind: "tab", value: "settings", label: "Settings", icon: Settings },
     ],

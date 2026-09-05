@@ -76,8 +76,6 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   "whatsapp-links": "WhatsApp Links",
   settings: "Settings",
   keys: "Keys",
-  profile: "Profile",
-  "activity-logs": "Activity Logs",
 };
 
 type AdminNavProps = {
@@ -478,10 +476,6 @@ export function AdminTopBar({
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onNavigateTab?.("profile")}>
-                  <User className="mr-2 size-4" />
-                  Profile
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onNavigateTab?.("settings")}>
                   <Settings className="mr-2 size-4" />
                   Settings

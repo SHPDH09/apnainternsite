@@ -202,8 +202,6 @@ export function AdminAddRegistrationPanel({
             student_id: result.userId,
             registration_id: result.registrationId,
             payment_id: result.paymentId,
-            registration_source: ADMIN_ADD_REGISTRATION_SOURCE,
-            added_by_role: portalLabel,
           }
         );
       }

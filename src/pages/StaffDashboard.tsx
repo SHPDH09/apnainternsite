@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ADMIN_LOGIN_PATH, buildStudentCredentialLoginLink } from "@/lib/authRoutes";
@@ -33,11 +33,6 @@ import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
 import { fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
 import { siteApiUrl, usePollingInsteadOfRealtime } from "@/lib/siteApi";
 import { shouldRunBackgroundPoll } from "@/lib/apiPollingGuard";
-import {
-  logAdminAction as writeAdminLog,
-  resolveActorContext,
-  type ActorContext,
-} from "@/lib/adminActionLog";
 import { 
   LayoutDashboard, 
   Users, 
@@ -239,17 +234,6 @@ const StaffDashboard = () => {
   const [staffEmail, setStaffEmail] = useState<string | null>(null);
   const [staffProfile, setStaffProfile] = useState<AdminStaffProfile | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const actorContextRef = useRef<ActorContext | null>(null);
-  const logAdminAction = useCallback(
-    async (action_type: string, entity_type: string, description: string, metadata: any = {}) => {
-      await writeAdminLog(
-        supabase,
-        { action_type, entity_type, description, metadata },
-        actorContextRef.current
-      );
-    },
-    []
-  );
   const [permissions, setPermissions] = useState<StaffPermissions | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -579,9 +563,6 @@ const StaffDashboard = () => {
     setStaffName(session.user.user_metadata?.full_name || "Staff Member");
     setStaffEmail(session.user.email || null);
     setCurrentUserId(session.user.id);
-    void resolveActorContext(supabase, session.user.id, session.user.email || "").then((ctx) => {
-      actorContextRef.current = ctx;
-    });
     
     await refreshPermissions();
 
@@ -882,6 +863,24 @@ const StaffDashboard = () => {
       toast.error(err.message || "Update failed");
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const logAdminAction = async (action_type: string, entity_type: string, description: string, metadata: any = {}) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase.from('admin_logs').insert({
+        admin_id: user.id,
+        admin_email: user.email,
+        action_type,
+        entity_type,
+        description,
+        metadata
+      });
+    } catch (err) {
+      console.error('Failed to log admin action:', err);
     }
   };
 

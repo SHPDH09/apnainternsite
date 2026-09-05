@@ -8,38 +8,25 @@ CREATE TABLE IF NOT EXISTS public.admin_logs (
   entity_id TEXT,
   description TEXT,
   metadata JSONB,
-  actor_role TEXT,
-  actor_name TEXT,
-  actor_tag TEXT,
-  registration_source TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- RLS Policies
 ALTER TABLE public.admin_logs ENABLE ROW LEVEL SECURITY;
 
--- Admins and super admins can view all logs
+-- Only super admins can view logs
 DROP POLICY IF EXISTS "Super admins view all logs" ON public.admin_logs;
-DROP POLICY IF EXISTS "Admins view all logs" ON public.admin_logs;
-CREATE POLICY "Admins view all logs" ON public.admin_logs
-  FOR SELECT USING (
-    public.has_role(auth.uid(), 'super_admin')
-    OR public.has_role(auth.uid(), 'admin')
-  );
+CREATE POLICY "Super admins view all logs" ON public.admin_logs 
+  FOR SELECT USING (public.has_role(auth.uid(), 'super_admin'));
 
--- Dashboard users can insert audit logs
+-- Admins and super admins can insert their own logs
 DROP POLICY IF EXISTS "Admins can insert logs" ON public.admin_logs;
-DROP POLICY IF EXISTS "Dashboard users can insert logs" ON public.admin_logs;
-CREATE POLICY "Dashboard users can insert logs" ON public.admin_logs
+CREATE POLICY "Admins can insert logs" ON public.admin_logs 
   FOR INSERT WITH CHECK (
     EXISTS (
-      SELECT 1 FROM public.user_roles
-      WHERE user_id = auth.uid()
-        AND role IN ('admin', 'super_admin', 'college_admin')
-    )
-    OR EXISTS (
-      SELECT 1 FROM public.admin_staff
-      WHERE id = auth.uid()
+      SELECT 1 FROM public.user_roles 
+      WHERE user_id = auth.uid() 
+      AND role IN ('admin', 'super_admin')
     )
   );
 
