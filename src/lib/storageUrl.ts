@@ -16,17 +16,10 @@ const APP_BUCKET_TO_S3: Record<string, string> = {
 };
 
 const S3_REGION = import.meta.env.VITE_AWS_REGION || "ap-south-1";
+const DIRECT_S3_RE = /^https:\/\/([^.]+)\.s3\.([a-z0-9-]+)\.amazonaws\.com\/(.+)$/i;
 
-function splitUrlParts(url: string): { base: string; suffix: string } {
-  const qIndex = url.search(/[?#]/);
-  if (qIndex < 0) return { base: url, suffix: "" };
-  return { base: url.slice(0, qIndex), suffix: url.slice(qIndex) };
-}
-
-function toDirectS3Url(appBucket: string, objectPath: string): string | null {
-  const s3Bucket = APP_BUCKET_TO_S3[appBucket];
-  if (!s3Bucket) return null;
-  const key = objectPath
+function encodeObjectPath(objectPath: string): string {
+  return objectPath
     .replace(/^\/+/, "")
     .split("/")
     .filter(Boolean)
@@ -38,6 +31,34 @@ function toDirectS3Url(appBucket: string, objectPath: string): string | null {
       }
     })
     .join("/");
+}
+
+function appBucketFromS3Name(s3Bucket: string, objectPath: string): string {
+  if (/logos/i.test(s3Bucket) || objectPath.startsWith("popups/")) return "logos";
+  if (/consent/i.test(s3Bucket)) return "consent-forms";
+  if (/learning|assignment/i.test(s3Bucket)) return "learning-materials";
+  return "logos";
+}
+
+/** Same-origin /storage proxy — Lambda resolves the real S3 bucket. */
+function proxyPublicObjectUrl(appBucket: string, objectPath: string, suffix = ""): string | null {
+  const apiBase = resolveSupabaseUrl();
+  if (apiBase && !apiBase.includes("supabase.co")) {
+    return `${apiBase.replace(/\/$/, "")}/storage/v1/object/public/${appBucket}/${encodeObjectPath(objectPath)}${suffix}`;
+  }
+  return null;
+}
+
+function splitUrlParts(url: string): { base: string; suffix: string } {
+  const qIndex = url.search(/[?#]/);
+  if (qIndex < 0) return { base: url, suffix: "" };
+  return { base: url.slice(0, qIndex), suffix: url.slice(qIndex) };
+}
+
+function toDirectS3Url(appBucket: string, objectPath: string): string | null {
+  const s3Bucket = APP_BUCKET_TO_S3[appBucket];
+  if (!s3Bucket) return null;
+  const key = encodeObjectPath(objectPath);
   return `https://${s3Bucket}.s3.${S3_REGION}.amazonaws.com/${key}`;
 }
 
@@ -45,6 +66,21 @@ export function resolveStorageUrl(url: string | null | undefined): string | null
   if (!url?.trim()) return null;
   const trimmed = url.trim();
   const { base, suffix } = splitUrlParts(trimmed);
+
+  // Legacy direct S3 URLs (often wrong bucket in DB) → same-origin storage proxy.
+  const s3Direct = base.match(DIRECT_S3_RE);
+  if (s3Direct) {
+    let path = s3Direct[3];
+    try {
+      path = decodeURIComponent(s3Direct[3]);
+    } catch {
+      path = s3Direct[3];
+    }
+    const appBucket = appBucketFromS3Name(s3Direct[1], path);
+    const proxied = proxyPublicObjectUrl(appBucket, path, suffix);
+    if (proxied) return proxied;
+    return trimmed;
+  }
 
   const m = base.match(STORAGE_PUBLIC_RE);
   if (m) {
@@ -56,7 +92,9 @@ export function resolveStorageUrl(url: string | null | undefined): string | null
       /* keep raw */
     }
 
-    // Prefer direct public S3 URL (reliable for <img>/PDF; avoids API Gateway quirks)
+    // Prefer same-origin proxy; direct S3 only when no deployed API base.
+    const proxied = proxyPublicObjectUrl(bucket, path, suffix);
+    if (proxied) return proxied;
     const direct = toDirectS3Url(bucket, path);
     if (direct) return `${direct}${suffix}`;
 
@@ -99,11 +137,13 @@ export function resolveStorageUrl(url: string | null | undefined): string | null
 /** Build a public URL for a freshly uploaded object. */
 export function publicStorageObjectUrl(appBucket: string, objectPath: string): string {
   const cleanPath = objectPath.replace(/^\/+/, "").split(/[?#]/)[0];
+  const proxied = proxyPublicObjectUrl(appBucket, cleanPath);
+  if (proxied) return proxied;
   const direct = toDirectS3Url(appBucket, cleanPath);
   if (direct) return direct;
   const apiBase = resolveSupabaseUrl();
   if (apiBase) {
-    return `${apiBase}/storage/v1/object/public/${appBucket}/${cleanPath}`;
+    return `${apiBase.replace(/\/$/, "")}/storage/v1/object/public/${appBucket}/${encodeObjectPath(cleanPath)}`;
   }
   return cleanPath;
 }
@@ -125,6 +165,7 @@ export function storageObjectUrlCandidates(
 
   const path = (filePath || "").replace(/^\/+/, "").split(/[?#]/)[0];
   if (path) {
+    add(proxyPublicObjectUrl(appBucket, path));
     const base = path.split("/").filter(Boolean).pop();
     // Prefer basename first: legacy S3 sync used flat keys while DB kept uploaderId/file.
     if (base && base !== path) add(publicStorageObjectUrl(appBucket, base));
