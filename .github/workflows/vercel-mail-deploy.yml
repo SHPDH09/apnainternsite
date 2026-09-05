@@ -32,6 +32,36 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: local-anon-key
           VITE_SUPABASE_PROJECT_ID: apnaintern-local
 
+      - name: Sync Vercel mail env (when token + SMTP_PASS configured)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || 'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com' }}
+          SMTP_USER: ${{ secrets.SMTP_USER || 'inp-3u5sedrqj7kqwjazxwmph2th' }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM_ADDRESS: ${{ secrets.MAIL_FROM_ADDRESS || 'info@apnaintern.in' }}
+        run: |
+          if [ -z "${VERCEL_TOKEN:-}" ] || [ -z "${VERCEL_PROJECT_ID:-}" ] || [ -z "${SMTP_PASS:-}" ]; then
+            echo "::warning::Set VERCEL_TOKEN, VERCEL_PROJECT_ID, and SMTP_PASS in GitHub secrets to sync Vercel mail env"
+            exit 0
+          fi
+          for pair in \
+            "SMTP_HOST=${SMTP_HOST}" \
+            "SMTP_USER=${SMTP_USER}" \
+            "SMTP_PORT=587" \
+            "MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS}" \
+            "USE_SES_API=false"; do
+            key="${pair%%=*}"
+            val="${pair#*=}"
+            printf '%s' "$val" | npx vercel env add "$key" production --token "$VERCEL_TOKEN" --yes 2>/dev/null || \
+              printf '%s' "$val" | npx vercel env rm "$key" production --token "$VERCEL_TOKEN" --yes 2>/dev/null; \
+              printf '%s' "$val" | npx vercel env add "$key" production --token "$VERCEL_TOKEN" --yes
+          done
+          printf '%s' "$SMTP_PASS" | npx vercel env add SMTP_PASS production --token "$VERCEL_TOKEN" --yes 2>/dev/null || \
+            (npx vercel env rm SMTP_PASS production --token "$VERCEL_TOKEN" --yes 2>/dev/null; \
+             printf '%s' "$SMTP_PASS" | npx vercel env add SMTP_PASS production --token "$VERCEL_TOKEN" --yes)
+
       - name: Deploy to Vercel (when token configured)
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
