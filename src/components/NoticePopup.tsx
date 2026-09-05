@@ -146,6 +146,7 @@ export function SitePopupsHost() {
                   url={current.image_url}
                   alt={current.title || "Popup"}
                   className={imageClassName}
+                  fallbackClassName="flex min-h-[160px] w-full items-center justify-center bg-slate-100 text-sm text-slate-500"
                 />
               </a>
             ) : (
@@ -155,6 +156,7 @@ export function SitePopupsHost() {
                 url={current.image_url}
                 alt={current.title || "Popup"}
                 className={imageClassName}
+                fallbackClassName="flex min-h-[160px] w-full items-center justify-center bg-slate-100 text-sm text-slate-500"
               />
             )}
           </div>
