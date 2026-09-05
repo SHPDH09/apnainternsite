@@ -574,6 +574,10 @@ export async function restRpc(req: Request, res: Response) {
     >;
     const jwt = jwtFromRequest(req);
     if (isTsRpc(name)) {
+      if (name.startsWith("admin_") && !jwt) {
+        res.status(401).json({ message: "JWT required" });
+        return;
+      }
       const data = await runTsRpc(name);
       res.json(data);
       return;

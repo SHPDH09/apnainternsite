@@ -35,7 +35,7 @@ export function formatSiteBlogError(error: unknown): string {
   if (/duplicate key|23505/i.test(msg) && /slug/i.test(msg)) {
     return "This URL slug is already used. Change the slug and save again.";
   }
-  if (/DATABASE_URL|ensure-blog-cms|503/i.test(msg)) {
+  if (/DATABASE_URL|ensure-blog-cms|503|Lambda blog bootstrap/i.test(msg)) {
     return "Blog storage setup failed on the server. Redeploy API/Lambda, then retry Save.";
   }
   return msg || "Blog save failed.";
@@ -47,7 +47,7 @@ async function probeBlogTable(client: SupabaseClient): Promise<boolean> {
   return !isSiteBlogTableMissing(error);
 }
 
-/** Ensure site_blog_posts exists — RPC, send-mail (Vercel), dedicated API, then verify. */
+/** Ensure site_blog_posts exists — RPC, Lambda ensure-blog-cms, send-mail fallback, then verify. */
 export async function ensureSiteBlogStorage(client: SupabaseClient): Promise<void> {
   if (await probeBlogTable(client)) return;
 
@@ -57,6 +57,41 @@ export async function ensureSiteBlogStorage(client: SupabaseClient): Promise<voi
     typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
 
   const bootstrapErrors: string[] = [];
+
+  if (token) {
+    try {
+      const { error } = await client.rpc("admin_ensure_site_cms_tables");
+      if (!error) {
+        await new Promise((r) => setTimeout(r, 500));
+        if (await probeBlogTable(client)) return;
+      } else {
+        bootstrapErrors.push(blogErrorText(error));
+      }
+    } catch (err) {
+      bootstrapErrors.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  if (token && typeof fetch !== "undefined") {
+    try {
+      const res = await fetch(`${origin}/api/ensure-blog-cms`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (res.ok) {
+        await new Promise((r) => setTimeout(r, 600));
+        if (await probeBlogTable(client)) return;
+      } else {
+        const body = (await res.json().catch(() => ({}))) as { message?: string };
+        bootstrapErrors.push(body.message || `ensure-blog-cms HTTP ${res.status}`);
+      }
+    } catch (err) {
+      bootstrapErrors.push(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   if (token && typeof fetch !== "undefined") {
     try {
@@ -69,7 +104,7 @@ export async function ensureSiteBlogStorage(client: SupabaseClient): Promise<voi
         body: JSON.stringify({ action: "ensure_blog_cms" }),
       });
       if (mailRes.ok) {
-        await new Promise((r) => setTimeout(r, 400));
+        await new Promise((r) => setTimeout(r, 600));
         if (await probeBlogTable(client)) return;
       } else {
         const body = (await mailRes.json().catch(() => ({}))) as { message?: string };
@@ -80,40 +115,11 @@ export async function ensureSiteBlogStorage(client: SupabaseClient): Promise<voi
     }
   }
 
-  try {
-    await client.rpc("admin_ensure_site_cms_tables");
-  } catch {
-    /* optional */
-  }
-
-  if (await probeBlogTable(client)) return;
-
-  if (token && typeof fetch !== "undefined") {
-    try {
-      const res = await fetch(`${origin}/api/ensure-blog-cms`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-      if (res.ok) {
-        await new Promise((r) => setTimeout(r, 400));
-        if (await probeBlogTable(client)) return;
-      } else {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        bootstrapErrors.push(body.message || `ensure-blog-cms HTTP ${res.status}`);
-      }
-    } catch (err) {
-      bootstrapErrors.push(err instanceof Error ? err.message : String(err));
-    }
-  }
-
   if (await probeBlogTable(client)) return;
 
   throw new Error(
     bootstrapErrors.join("; ") ||
-      "site_blog_posts table is missing on the database. Set DATABASE_URL on Vercel or redeploy Lambda."
+      "site_blog_posts table is missing on the database. Redeploy Lambda and retry Save."
   );
 }
 

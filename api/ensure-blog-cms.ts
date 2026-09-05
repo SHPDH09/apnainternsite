@@ -4,7 +4,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { verifyToken } from "../aws/server/local-jwt.js";
-import { proxyBlogCmsBootstrapToLambda, runBlogCmsBootstrap } from "./lib/blogCmsBootstrap.js";
+import { ensureBlogCmsWithFallback } from "./lib/blogCmsBootstrap.js";
 
 function bearer(req: VercelRequest): string | null {
   const h = req.headers.authorization || req.headers.Authorization;
@@ -37,29 +37,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = `Bearer ${token}`;
 
   try {
-    const result = await runBlogCmsBootstrap();
+    const result = await ensureBlogCmsWithFallback(authHeader);
     return res.status(200).json({ ok: true, table: "site_blog_posts", via: result.via });
-  } catch (directErr) {
-    const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
-    if (!/DATABASE_URL not configured/i.test(directMsg)) {
-      console.error("[ensure-blog-cms] direct bootstrap failed:", directMsg);
-      return res.status(500).json({ ok: false, message: directMsg });
-    }
-  }
-
-  try {
-    const upstream = await proxyBlogCmsBootstrapToLambda(authHeader);
-    const body = (await upstream.json().catch(() => ({}))) as { ok?: boolean; message?: string; via?: string };
-    if (!upstream.ok) {
-      return res.status(upstream.status).json({
-        ok: false,
-        message: body.message || `Lambda bootstrap failed (HTTP ${upstream.status})`,
-      });
-    }
-    return res.status(200).json({ ok: true, table: "site_blog_posts", via: body.via || "lambda" });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[ensure-blog-cms] lambda proxy failed:", message);
+    console.error("[ensure-blog-cms] bootstrap failed:", message);
     return res.status(503).json({
       ok: false,
       message: "Blog storage could not be initialized. Redeploy the API (Lambda) and retry.",

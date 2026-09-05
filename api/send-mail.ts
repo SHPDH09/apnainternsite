@@ -446,8 +446,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(401).json({ success: false, message: 'Invalid or expired session' });
       }
       try {
-        const { runBlogCmsBootstrap } = await import('./lib/blogCmsBootstrap.js');
-        const result = await runBlogCmsBootstrap();
+        const { ensureBlogCmsWithFallback } = await import('./lib/blogCmsBootstrap.js');
+        const result = await ensureBlogCmsWithFallback(authHeader);
         return res.status(200).json({
           success: true,
           ok: true,

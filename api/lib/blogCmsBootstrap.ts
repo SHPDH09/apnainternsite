@@ -112,6 +112,27 @@ export async function runBlogCmsBootstrap(): Promise<{ ok: true; via: "direct" |
   throw new Error("DATABASE_URL not configured on this host");
 }
 
+/** Direct RDS bootstrap, then Lambda fallback (Vercel send-mail / local API). */
+export async function ensureBlogCmsWithFallback(
+  authHeader: string
+): Promise<{ ok: true; via: "direct" | "lambda" }> {
+  try {
+    return await runBlogCmsBootstrap();
+  } catch (directErr) {
+    const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
+    if (!/DATABASE_URL not configured/i.test(directMsg)) {
+      throw directErr;
+    }
+  }
+
+  const upstream = await proxyBlogCmsBootstrapToLambda(authHeader);
+  const body = (await upstream.json().catch(() => ({}))) as { ok?: boolean; message?: string; via?: string };
+  if (!upstream.ok) {
+    throw new Error(body.message || `Lambda blog bootstrap failed (HTTP ${upstream.status})`);
+  }
+  return { ok: true, via: (body.via as "lambda") || "lambda" };
+}
+
 export async function proxyBlogCmsBootstrapToLambda(authHeader: string): Promise<Response> {
   return fetch(`${LAMBDA_API_ORIGIN.replace(/\/$/, "")}/api/ensure-blog-cms`, {
     method: "POST",

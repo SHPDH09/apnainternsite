@@ -9,6 +9,7 @@ on:
     paths:
       - "api/**"
       - "aws/lambda/**"
+      - "aws/server/**"
       - "aws/scripts/bundle-lambda.mjs"
       - "aws/scripts/update-lambda-mail-env.mjs"
       - ".github/workflows/lambda-otp-deploy.yml"
