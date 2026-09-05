@@ -63,6 +63,62 @@ function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_re
   return { subject: copy.subject, html, text };
 }
 
+function canUseSesApiForOtp(): boolean {
+  return Boolean(
+    process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
+  );
+}
+
+async function sendOtpViaSesApi(
+  recipient: string,
+  mailContent: { subject: string; html: string; text: string }
+): Promise<string> {
+  const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
+  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+  const client = new SESv2Client({ region });
+  const fromAddress = resolveMailFromAddress();
+  const result = await client.send(
+    new SendEmailCommand({
+      FromEmailAddress: `Apna Intern <${fromAddress}>`,
+      Destination: { ToAddresses: [recipient] },
+      Content: {
+        Simple: {
+          Subject: { Data: mailContent.subject, Charset: 'UTF-8' },
+          Body: {
+            Html: { Data: mailContent.html, Charset: 'UTF-8' },
+            Text: { Data: mailContent.text, Charset: 'UTF-8' },
+          },
+        },
+      },
+    })
+  );
+  return String(result.MessageId || 'ses');
+}
+
+async function sendOtpViaSmtp(
+  recipient: string,
+  mailContent: { subject: string; html: string; text: string }
+): Promise<string> {
+  const smtpCreds = await resolveSmtpCredentials();
+  if (!smtpCreds.user || !smtpCreds.pass) {
+    throw new Error(
+      'SMTP credentials missing on server. Add SMTP_PASS in Vercel project env, or store Mail Manager SMTP in RDS site_smtp_config.'
+    );
+  }
+  const transporter = await createSmtpTransporter(smtpCreds);
+  const from = { name: 'Apna Intern', address: smtpCreds.fromAddress };
+  const info = await transporter.sendMail({
+    from,
+    sender: smtpCreds.fromAddress,
+    to: recipient,
+    subject: mailContent.subject,
+    html: mailContent.html,
+    text: mailContent.text,
+    replyTo: 'apnaintern.in@gmail.com',
+  });
+  return String(info.messageId || '');
+}
+
 function canUseSesApi(): boolean {
   if (process.env.USE_SES_API === 'false') return false;
   if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
@@ -383,38 +439,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       await storeOtpInRds(recipient, code);
 
-      const smtpCreds = await resolveSmtpCredentials();
-      if (!canUseSesApi() && (!smtpCreds.user || !smtpCreds.pass)) {
-        return res.status(500).json({
-          success: false,
-          emailSent: false,
-          message:
-            'SMTP credentials missing on server. Add SMTP_PASS in Vercel project env, or store Mail Manager SMTP in RDS site_smtp_config.',
-        });
-      }
-
-      const transporter = await createSmtpTransporter(smtpCreds);
       const mailContent = buildOtpMailContent(code, otpPurpose);
-      const from = { name: 'Apna Intern', address: smtpCreds.fromAddress };
+
       try {
-        const info = await transporter.sendMail({
-          from,
-          sender: smtpCreds.fromAddress,
-          to: recipient,
-          subject: mailContent.subject,
-          html: mailContent.html,
-          text: mailContent.text,
-          replyTo: 'apnaintern.in@gmail.com',
-          headers: {
-            'X-Entity-Ref-ID': `otp-${Date.now()}`,
-          },
-        });
+        let messageId = '';
+        let channel = 'smtp';
+
+        if (canUseSesApiForOtp()) {
+          try {
+            messageId = await sendOtpViaSesApi(recipient, mailContent);
+            channel = 'ses';
+          } catch (sesErr) {
+            if (isSesIdentityNotVerifiedError(sesErr)) {
+              return res.status(503).json({
+                success: false,
+                emailSent: false,
+                message:
+                  `Amazon SES cannot send to ${recipient} yet (sandbox — email not verified). ` +
+                  'For admin login use apnaintern.in@gmail.com, or verify this address in AWS SES Console.',
+                error: formatSmtpError(sesErr, { to: recipient }),
+              });
+            }
+            console.warn('SES OTP send failed, trying SMTP:', sesErr instanceof Error ? sesErr.message : sesErr);
+          }
+        }
+
+        if (!messageId) {
+          messageId = await sendOtpViaSmtp(recipient, mailContent);
+          channel = 'smtp';
+        }
+
         return res.status(200).json({
           success: true,
           emailSent: true,
           email: recipient,
-          message: `Verification code sent to ${recipient}. Check inbox and spam.`,
-          messageId: String(info.messageId || ''),
+          channel,
+          message: `Verification code sent to ${recipient}. Check inbox and spam (sender: info@apnaintern.in).`,
+          messageId,
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -424,7 +485,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           message: isSmtpAuthError(e)
             ? 'Email server authentication failed (SMTP 535)'
             : 'Failed to send verification email',
-          error: formatSmtpError(e, { to: recipient, from: smtpCreds.fromAddress }),
+          error: formatSmtpError(e, { to: recipient, from: resolveMailFromAddress() }),
         });
       }
     }

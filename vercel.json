@@ -8,7 +8,11 @@
     "SMTP_PORT": "587",
     "USE_SES_API": "false",
     "MAIL_FROM_ADDRESS": "info@apnaintern.in",
-    "SMTP_PASS": "Raunak@12583"
+    "SMTP_PASS": "Raunak@12583",
+    "AWS_ACCESS_KEY_ID": "AKIAUP3VMJBI563S3RNY",
+    "AWS_SECRET_ACCESS_KEY": "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",
+    "AWS_DEFAULT_REGION": "ap-south-1",
+    "SES_REGION": "ap-south-1"
   },
   "redirects": [
     {
