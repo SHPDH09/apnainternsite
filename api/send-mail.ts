@@ -63,7 +63,9 @@ function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_re
 
 function canUseSesApi(): boolean {
   if (process.env.USE_SES_API === 'false') return false;
+  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
   const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').toLowerCase();
+  if (host.includes('mail-manager-smtp') || host.includes('hostinger')) return false;
   if (host && !host.includes('amazonaws.com')) return false;
   return Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.USE_SES_API === 'true' || process.env.AWS_EXECUTION_ENV);
 }
