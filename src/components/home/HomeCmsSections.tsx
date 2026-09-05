@@ -42,12 +42,14 @@ import {
   type SiteTestimonial,
 } from "@/lib/siteHomeCmsApi";
 import { cn } from "@/lib/utils";
+import { StorageImage } from "@/components/StorageImage";
 
 type GalleryImage = {
   id: string;
   title?: string | null;
   caption?: string | null;
   image_url: string;
+  image_path?: string | null;
 };
 
 const SectionHead = ({
@@ -145,8 +147,10 @@ export function GalleryLightbox({ images, initialIndex = 0, open, onOpenChange }
           </Button>
 
           <div className="flex min-h-[50vh] max-h-[75vh] items-center justify-center bg-slate-100 p-4 md:p-8">
-            <img
-              src={current.image_url}
+            <StorageImage
+              bucket="logos"
+              path={current.image_path}
+              url={current.image_url}
               alt={current.title || "Gallery image"}
               className="max-h-[65vh] max-w-full object-contain"
             />
@@ -203,6 +207,7 @@ export function GalleryLightbox({ images, initialIndex = 0, open, onOpenChange }
 type FullImageSlide = {
   id: string;
   imageUrl: string;
+  imagePath?: string | null;
   title?: string | null;
   subtitle?: string | null;
 };
@@ -265,12 +270,12 @@ function FullImageBannerSlider({
                 )}
                 onClick={() => onSlideClick?.(i)}
               >
-                <img
-                  src={slide.imageUrl}
+                <StorageImage
+                  bucket="logos"
+                  path={slide.imagePath}
+                  url={slide.imageUrl}
                   alt={slide.title || "Slide"}
                   className="h-full w-full object-contain"
-                  loading={i === 0 ? "eager" : "lazy"}
-                  draggable={false}
                 />
               </button>
             );
@@ -358,12 +363,14 @@ export function HomeGallerySection({
       .map((p) => ({
         id: `offline-${p.id}`,
         imageUrl: p.image_url as string,
+        imagePath: p.image_path,
         title: p.title,
         subtitle: [p.location, p.duration].filter(Boolean).join(" · ") || p.description,
       }));
     const gallerySlides: FullImageSlide[] = galleryImages.map((img) => ({
       id: `gallery-${img.id}`,
       imageUrl: img.image_url,
+      imagePath: img.image_path,
       title: img.title,
       subtitle: img.caption,
     }));

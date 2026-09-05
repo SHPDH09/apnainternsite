@@ -47,24 +47,49 @@ async function probeBlogTable(client: SupabaseClient): Promise<boolean> {
   return !isSiteBlogTableMissing(error);
 }
 
-/** Ensure site_blog_posts exists — RPC, REST bootstrap API, then verify. */
+/** Ensure site_blog_posts exists — RPC, send-mail (Vercel), dedicated API, then verify. */
 export async function ensureSiteBlogStorage(client: SupabaseClient): Promise<void> {
   if (await probeBlogTable(client)) return;
+
+  const { data: sessionData } = await client.auth.getSession();
+  const token = sessionData.session?.access_token?.trim();
+  const origin =
+    typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+
+  const bootstrapErrors: string[] = [];
+
+  if (token && typeof fetch !== "undefined") {
+    try {
+      const mailRes = await fetch(`${origin}/api/send-mail`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "ensure_blog_cms" }),
+      });
+      if (mailRes.ok) {
+        await new Promise((r) => setTimeout(r, 400));
+        if (await probeBlogTable(client)) return;
+      } else {
+        const body = (await mailRes.json().catch(() => ({}))) as { message?: string };
+        bootstrapErrors.push(body.message || `send-mail ensure_blog_cms HTTP ${mailRes.status}`);
+      }
+    } catch (err) {
+      bootstrapErrors.push(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   try {
     await client.rpc("admin_ensure_site_cms_tables");
   } catch {
-    /* Lambda may not expose TS RPC yet */
+    /* optional */
   }
 
   if (await probeBlogTable(client)) return;
 
-  try {
-    const { data: sessionData } = await client.auth.getSession();
-    const token = sessionData.session?.access_token?.trim();
-    if (token && typeof fetch !== "undefined") {
-      const origin =
-        typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+  if (token && typeof fetch !== "undefined") {
+    try {
       const res = await fetch(`${origin}/api/ensure-blog-cms`, {
         method: "POST",
         headers: {
@@ -72,20 +97,23 @@ export async function ensureSiteBlogStorage(client: SupabaseClient): Promise<voi
           "Content-Type": "application/json",
         },
       });
-      if (!res.ok) {
+      if (res.ok) {
+        await new Promise((r) => setTimeout(r, 400));
+        if (await probeBlogTable(client)) return;
+      } else {
         const body = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(body.message || `ensure-blog-cms HTTP ${res.status}`);
+        bootstrapErrors.push(body.message || `ensure-blog-cms HTTP ${res.status}`);
       }
+    } catch (err) {
+      bootstrapErrors.push(err instanceof Error ? err.message : String(err));
     }
-  } catch (err) {
-    console.warn("[siteBlogApi] ensure-blog-cms:", err);
   }
 
-  await new Promise((r) => setTimeout(r, 800));
   if (await probeBlogTable(client)) return;
 
   throw new Error(
-    "site_blog_posts table is missing on the database. API bootstrap did not complete."
+    bootstrapErrors.join("; ") ||
+      "site_blog_posts table is missing on the database. Set DATABASE_URL on Vercel or redeploy Lambda."
   );
 }
 

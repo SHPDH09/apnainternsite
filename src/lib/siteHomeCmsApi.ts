@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { publicStorageObjectUrl, resolveStorageUrl } from "@/lib/storageUrl";
+import { publicStorageObjectUrl, resolveStorageUrl, storageObjectUrlCandidates } from "@/lib/storageUrl";
 
 const CMS_BUCKET = "logos";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -85,9 +85,8 @@ function resolveMediaUrl(
   path: string | null | undefined,
   url: string | null | undefined
 ): string {
-  if (path && String(path).trim()) {
-    return publicStorageObjectUrl(bucket, String(path)) || resolveStorageUrl(url || "") || url || "";
-  }
+  const candidates = storageObjectUrlCandidates(bucket, path, url);
+  if (candidates.length > 0) return candidates[0];
   return resolveStorageUrl(url || "") || url || "";
 }
 

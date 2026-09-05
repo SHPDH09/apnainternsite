@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { publicStorageObjectUrl, resolveStorageUrl } from "@/lib/storageUrl";
+import { publicStorageObjectUrl, resolveStorageUrl, storageObjectUrlCandidates } from "@/lib/storageUrl";
 
 const GALLERY_BUCKET = "logos";
 const CONSULT_BUCKET = "consent-forms";
@@ -37,13 +37,10 @@ export async function fetchPublicGalleryImages(
     .order("sort_order", { ascending: true });
   if (error) throw error;
   const rows = ((data || []) as SiteGalleryImage[]).map((row) => {
-    const fromPath =
-      row.image_path != null && String(row.image_path).trim() !== ""
-        ? publicStorageObjectUrl(GALLERY_BUCKET, String(row.image_path))
-        : null;
+    const candidates = storageObjectUrlCandidates(GALLERY_BUCKET, row.image_path, row.image_url);
     return {
       ...row,
-      image_url: fromPath || resolveStorageUrl(row.image_url) || row.image_url,
+      image_url: candidates[0] || resolveStorageUrl(row.image_url) || row.image_url,
     };
   });
   return rows.sort((a, b) => {
@@ -63,13 +60,10 @@ export async function fetchAdminGalleryImages(
     .order("created_at", { ascending: false });
   if (error) throw error;
   return ((data || []) as SiteGalleryImage[]).map((row) => {
-    const fromPath =
-      row.image_path != null && String(row.image_path).trim() !== ""
-        ? publicStorageObjectUrl(GALLERY_BUCKET, String(row.image_path))
-        : null;
+    const candidates = storageObjectUrlCandidates(GALLERY_BUCKET, row.image_path, row.image_url);
     return {
       ...row,
-      image_url: fromPath || resolveStorageUrl(row.image_url) || row.image_url,
+      image_url: candidates[0] || resolveStorageUrl(row.image_url) || row.image_url,
     };
   });
 }

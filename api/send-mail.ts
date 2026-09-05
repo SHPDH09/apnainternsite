@@ -391,7 +391,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+    'Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
   if (req.method === 'OPTIONS') {
@@ -429,6 +429,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (cid && recipient) return 'college_admin_welcome';
       return '';
     })();
+
+    if (normalizedAction === 'ensure_blog_cms') {
+      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
+      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) {
+        return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
+      }
+      try {
+        const { verifyToken } = await import('../aws/server/local-jwt.js');
+        const payload = verifyToken(tokenMatch[1]);
+        if (!payload?.sub) {
+          return res.status(401).json({ success: false, message: 'Invalid or expired session' });
+        }
+      } catch {
+        return res.status(401).json({ success: false, message: 'Invalid or expired session' });
+      }
+      try {
+        const { runBlogCmsBootstrap } = await import('./lib/blogCmsBootstrap.js');
+        const result = await runBlogCmsBootstrap();
+        return res.status(200).json({
+          success: true,
+          ok: true,
+          table: 'site_blog_posts',
+          via: result.via,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail ensure_blog_cms]', message);
+        return res.status(500).json({ success: false, message });
+      }
+    }
 
     if (normalizedAction === 'otp_deliver' || normalizedAction === 'request_otp') {
       const recipient = String(to || email || '').trim().toLowerCase();

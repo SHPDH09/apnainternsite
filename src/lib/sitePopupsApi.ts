@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { publicStorageObjectUrl, resolveStorageUrl } from "@/lib/storageUrl";
+import { publicStorageObjectUrl, resolveStorageUrl, storageObjectUrlCandidates } from "@/lib/storageUrl";
 import {
   normalizePopupPages,
   type SitePopup,
@@ -66,17 +66,14 @@ async function withPopupStorageRetry<T>(
 }
 
 function mapRow(row: SitePopup): SitePopup {
-  const fromPath =
-    row.image_path != null && String(row.image_path).trim() !== ""
-      ? publicStorageObjectUrl(POPUP_BUCKET, String(row.image_path))
-      : null;
+  const candidates = storageObjectUrlCandidates(POPUP_BUCKET, row.image_path, row.image_url);
   return {
     ...row,
     popup_type: row.popup_type === "image" ? "image" : "text",
     pages: normalizePopupPages(row.pages),
     is_active: row.is_active !== false,
     sort_order: Number(row.sort_order) || 0,
-    image_url: fromPath || (row.image_url ? resolveStorageUrl(row.image_url) || row.image_url : row.image_url),
+    image_url: candidates[0] || (row.image_url ? resolveStorageUrl(row.image_url) || row.image_url : row.image_url),
   };
 }
 

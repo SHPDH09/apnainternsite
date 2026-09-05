@@ -13,6 +13,7 @@ import { Info, X } from "lucide-react";
 import { RAZORPAY_CHECKOUT_END, RAZORPAY_CHECKOUT_START } from "@/lib/clientRazorpayPayment";
 import { fetchPublicSitePopups } from "@/lib/sitePopupsApi";
 import { isPopupLiveForLocation, type SitePopup } from "@/lib/sitePopups";
+import { StorageImage } from "@/components/StorageImage";
 
 const DISMISS_PREFIX = "site-popup-dismissed:";
 
@@ -126,15 +127,19 @@ export function SitePopupsHost() {
           {isImage ? (
             ctaHref ? (
               <a href={ctaHref} target="_blank" rel="noopener noreferrer" className="block">
-                <img
-                  src={current.image_url || ""}
+                <StorageImage
+                  bucket="logos"
+                  path={current.image_path}
+                  url={current.image_url}
                   alt={current.title || "Popup"}
                   className="w-full max-h-[60vh] object-contain rounded-xl"
                 />
               </a>
             ) : (
-              <img
-                src={current.image_url || ""}
+              <StorageImage
+                bucket="logos"
+                path={current.image_path}
+                url={current.image_url}
                 alt={current.title || "Popup"}
                 className="w-full max-h-[60vh] object-contain rounded-xl"
               />
