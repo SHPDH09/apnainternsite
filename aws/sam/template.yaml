@@ -23,6 +23,12 @@ Parameters:
   SmtpPass:
     Type: String
     NoEcho: true
+  SmtpHost:
+    Type: String
+    Default: smtp.hostinger.com
+  MailFromAddress:
+    Type: String
+    Default: info@apnaintern.in
   GeminiApiKey:
     Type: String
     Default: ""
@@ -116,14 +122,14 @@ Resources:
           RDS_RPC_OPEN: "false"
           RAZORPAY_KEY_ID: !Ref RazorpayKeyId
           RAZORPAY_KEY_SECRET: !Ref RazorpayKeySecret
-          SMTP_HOST: email-smtp.ap-south-1.amazonaws.com
+          SMTP_HOST: !Ref SmtpHost
           SMTP_PORT: "587"
           SMTP_USER: !Ref SmtpUser
           SMTP_PASS: !Ref SmtpPass
-          MAIL_FROM: !Sub "Apna Intern <noreply@apnaintern.in>"
-          MAIL_FROM_ADDRESS: noreply@apnaintern.in
+          MAIL_FROM: !Sub "Apna Intern <${MailFromAddress}>"
+          MAIL_FROM_ADDRESS: !Ref MailFromAddress
           SES_REGION: ap-south-1
-          USE_SES_API: "true"
+          USE_SES_API: "false"
           GEMINI_API_KEY: !Ref GeminiApiKey
           S3_BUCKET_CONSENT_FORMS: !Ref S3BucketConsentForms
           S3_BUCKET_LOGOS: !Ref S3BucketLogos

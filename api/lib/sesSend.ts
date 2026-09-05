@@ -19,6 +19,10 @@ function resolveFromName(): string {
 }
 
 export function canUseSesApi(): boolean {
+  if (process.env.USE_SES_API === 'false') return false;
+  const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').toLowerCase();
+  // Gmail / Hostinger / other mailbox SMTP — nodemailer only (not SES API).
+  if (host && !host.includes('amazonaws.com')) return false;
   return Boolean(
     process.env.AWS_LAMBDA_FUNCTION_NAME ||
       process.env.USE_SES_API === 'true' ||

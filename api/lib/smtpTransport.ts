@@ -27,7 +27,7 @@ export function resolveMailFromAddress(): string {
   return (
     process.env.MAIL_FROM_ADDRESS?.trim() ||
     process.env.SES_FROM_ADDRESS?.trim() ||
-    "noreply@apnaintern.in"
+    "info@apnaintern.in"
   );
 }
 

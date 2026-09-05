@@ -38,6 +38,8 @@ const rzpId = e.RAZORPAY_KEY_ID || e.VITE_RAZORPAY_KEY_ID || "";
 const rzpSecret = e.RAZORPAY_KEY_SECRET || "";
 const smtpUser = e.SMTP_USER || "";
 const smtpPass = e.SMTP_PASS || "";
+const smtpHost = e.SMTP_HOST || "smtp.hostinger.com";
+const mailFromAddress = e.MAIL_FROM_ADDRESS || "info@apnaintern.in";
 const gemini = e.GEMINI_API_KEY || e.VITE_GEMINI_API_KEY || "";
 
 const missing = [];
@@ -64,6 +66,8 @@ const params = [
   `RazorpayKeySecret=${escParam(rzpSecret)}`,
   `SmtpUser=${escParam(smtpUser)}`,
   `SmtpPass=${escParam(smtpPass)}`,
+  `SmtpHost=${escParam(smtpHost)}`,
+  `MailFromAddress=${escParam(mailFromAddress)}`,
   // SAM rejects empty ParameterValue=; use placeholder when unset.
   `GeminiApiKey=${escParam(gemini || "unset")}`,
   `S3BucketConsentForms=${escParam(e.S3_BUCKET_CONSENT_FORMS || "ezyintern-staging-consent-forms")}`,

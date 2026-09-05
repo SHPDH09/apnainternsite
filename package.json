@@ -46,6 +46,7 @@
     "aws:ses:verify-email": "node aws/scripts/ses-verify-email.mjs",
     "aws:ses:verify": "node aws/scripts/ses-verify-email.mjs",
     "aws:ses:checklist": "node aws/scripts/ses-production-checklist.mjs",
+    "aws:lambda:smtp-env": "node aws/scripts/lambda-smtp-env-reference.mjs",
     "aws:s3:provision": "bash aws/scripts/provision-s3-storage.sh",
     "aws:s3:sync": "bash aws/scripts/sync-storage-to-s3.sh",
     "aws:s3:sync:dry": "bash aws/scripts/sync-storage-to-s3.sh --dry-run",
