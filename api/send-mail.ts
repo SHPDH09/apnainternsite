@@ -451,17 +451,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             channel = 'ses';
           } catch (sesErr) {
             if (isSesIdentityNotVerifiedError(sesErr)) {
-              return res.status(503).json({
-                success: false,
-                emailSent: false,
-                message:
-                  `Amazon SES cannot send to ${recipient} yet (sandbox — email not verified). ` +
-                  'For admin login use apnaintern.in@gmail.com, or verify this address in AWS SES Console.',
-                error: formatSmtpError(sesErr, { to: recipient }),
-              });
+              // SES sandbox — try SMTP fallback; flag so UI can warn about one-time production access.
+              console.warn('SES sandbox blocked recipient, trying SMTP:', recipient);
+            } else {
+              console.warn('SES OTP send failed, trying SMTP:', sesErr instanceof Error ? sesErr.message : sesErr);
             }
-            console.warn('SES OTP send failed, trying SMTP:', sesErr instanceof Error ? sesErr.message : sesErr);
           }
+        }
+
+        let sesSandboxLimited = false;
+        if (!messageId && canUseSesApiForOtp()) {
+          sesSandboxLimited = true;
         }
 
         if (!messageId) {
@@ -469,12 +469,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           channel = 'smtp';
         }
 
+        const deliveryNote = sesSandboxLimited
+          ? ' Amazon SES is still in sandbox — request Production Access once in AWS Console so OTP reaches all users (no per-email verification).'
+          : '';
+
         return res.status(200).json({
           success: true,
           emailSent: true,
           email: recipient,
           channel,
-          message: `Verification code sent to ${recipient}. Check inbox and spam (sender: info@apnaintern.in).`,
+          sesSandboxLimited,
+          message: `Verification code sent to ${recipient}. Check inbox and spam (sender: info@apnaintern.in).${deliveryNote}`,
           messageId,
         });
       } catch (e) {

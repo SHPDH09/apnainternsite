@@ -7,7 +7,7 @@ import { PASSWORD_RESETS_SCHEMA_HINT, passwordResetInsertRow } from "@/lib/passw
 export type OtpPurpose = "login" | "password_reset" | "security";
 
 type DeliverResult =
-  | { ok: true; email: string; devOtp?: string; viaServer?: boolean }
+  | { ok: true; email: string; devOtp?: string; viaServer?: boolean; sesSandboxLimited?: boolean }
   | { ok: false; error: Error };
 
 type OtpApiJson = {
@@ -17,6 +17,7 @@ type OtpApiJson = {
   message?: string;
   error?: string;
   devOtp?: string;
+  sesSandboxLimited?: boolean;
 };
 
 /** Production OTP — always use apnaintern.in mail API (ezyintern.in send-mail crashes). */
@@ -47,7 +48,10 @@ function formatOtpDeliveryError(message: string, insertError?: string): string {
 async function deliverOtpViaServer(
   email: string,
   purpose: OtpPurpose
-): Promise<{ ok: true; email: string } | { ok: false; error: Error }> {
+): Promise<
+  | { ok: true; email: string; sesSandboxLimited?: boolean }
+  | { ok: false; error: Error }
+> {
   const res = await fetch(getOtpDeliverApiUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -68,10 +72,17 @@ async function deliverOtpViaServer(
 
   const detail = (body.error || body.message || "").trim();
   if (!res.ok || body.success !== true || body.emailSent !== true) {
-    return { ok: false, error: new Error(detail || `OTP request failed (${res.status})`) };
+    const sandboxHint =
+      body.message?.includes('sandbox') || body.error?.includes('not verified')
+        ? ' OTP sab users ke liye bhejne ke liye AWS Console → SES → Request production access (sirf ek baar).'
+        : '';
+    return {
+      ok: false,
+      error: new Error((detail || `OTP request failed (${res.status})`) + sandboxHint),
+    };
   }
 
-  return { ok: true, email: body.email || email };
+  return { ok: true, email: body.email || email, sesSandboxLimited: body.sesSandboxLimited };
 }
 
 async function deliverOtpViaClient(
@@ -138,7 +149,7 @@ export async function deliverOtpEmail(
         if (opts?.devSessionKey && typeof window !== "undefined") {
           sessionStorage.removeItem(opts.devSessionKey);
         }
-        return { ok: true, email: server.email, viaServer: true };
+        return { ok: true, email: server.email, viaServer: true, sesSandboxLimited: server.sesSandboxLimited };
       }
       return server;
     } catch (err: unknown) {
