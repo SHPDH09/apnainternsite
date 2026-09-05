@@ -50,6 +50,7 @@ import {
   estimateReadMinutes,
   fetchAdminBlogPosts,
   formatBlogDate,
+  formatSiteBlogError,
   isBlogPostPublic,
   slugifyBlogTitle,
   updateBlogPost,
@@ -170,7 +171,7 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
     try {
       setRows(await fetchAdminBlogPosts(client));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load blog posts.");
+      toast.error(formatSiteBlogError(err));
     } finally {
       setLoading(false);
     }
@@ -230,7 +231,12 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
   };
 
   const handleSave = async () => {
-    if (!currentUserId) {
+    let userId = currentUserId?.trim() || "";
+    if (!userId) {
+      const { data: sessionData } = await client.auth.getSession();
+      userId = sessionData.session?.user?.id?.trim() || "";
+    }
+    if (!userId) {
       toast.error("Sign in to save blog posts.");
       return;
     }
@@ -274,13 +280,13 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
         await updateBlogPost(client, editor.id, payload);
         toast.success("Blog post updated.");
       } else {
-        await createBlogPost(client, currentUserId, payload);
+        await createBlogPost(client, userId, payload);
         toast.success("Blog post created.");
       }
       setEditorOpen(false);
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Save failed.");
+      toast.error(formatSiteBlogError(err));
     } finally {
       setSaving(false);
     }
@@ -293,7 +299,7 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
       toast.success("Deleted.");
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Delete failed.");
+      toast.error(formatSiteBlogError(err));
     }
   };
 

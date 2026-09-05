@@ -4,6 +4,62 @@ import { publicStorageObjectUrl, resolveStorageUrl } from "@/lib/storageUrl";
 const BLOG_BUCKET = "logos";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
+function blogErrorText(error: unknown): string {
+  if (error && typeof error === "object") {
+    const e = error as { message?: string; details?: string; hint?: string; code?: string };
+    return [e.message, e.details, e.hint, e.code].filter(Boolean).join(" — ");
+  }
+  return error instanceof Error ? error.message : String(error ?? "");
+}
+
+export function isSiteBlogTableMissing(error: unknown): boolean {
+  const msg = blogErrorText(error);
+  return (
+    /42P01|undefined_table/i.test(msg) ||
+    /relation ["']?public\.site_blog_posts["']? does not exist/i.test(msg) ||
+    /Could not find the table ['"]public\.site_blog_posts['"]/i.test(msg)
+  );
+}
+
+export function formatSiteBlogError(error: unknown): string {
+  if (isSiteBlogTableMissing(error)) {
+    return "Blog storage is initializing. Wait a moment and try Save again.";
+  }
+  const msg = blogErrorText(error);
+  if (/row-level security|42501/i.test(msg)) {
+    return "Permission denied — sign in again as admin, then retry.";
+  }
+  if (/foreign key|23503/i.test(msg) && /created_by/i.test(msg)) {
+    return "Could not link author record. Retry Save — this has been fixed server-side.";
+  }
+  if (/duplicate key|23505/i.test(msg) && /slug/i.test(msg)) {
+    return "This URL slug is already used. Change the slug and save again.";
+  }
+  return msg || "Blog save failed.";
+}
+
+async function ensureSiteCmsTables(client: SupabaseClient): Promise<void> {
+  try {
+    await client.rpc("admin_ensure_site_cms_tables");
+  } catch {
+    // Older API builds rely on REST withCmsRetry during the next insert.
+  }
+}
+
+async function withBlogStorageRetry<T>(
+  client: SupabaseClient,
+  run: () => Promise<T>
+): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (!isSiteBlogTableMissing(err)) throw err;
+    await ensureSiteCmsTables(client);
+    await new Promise((r) => setTimeout(r, 600));
+    return await run();
+  }
+}
+
 export type BlogPostStatus = "draft" | "scheduled" | "published";
 export type BlogPostType = "blog" | "vlog";
 
@@ -139,12 +195,13 @@ export async function fetchPublicBlogPosts(
   client: SupabaseClient,
   opts?: { featuredOnly?: boolean; limit?: number; postType?: BlogPostType }
 ): Promise<SiteBlogPost[]> {
+  await ensureSiteCmsTables(client);
   let query = client.from("site_blog_posts").select(BLOG_SELECT).eq("is_active", true);
 
   if (opts?.featuredOnly) query = query.eq("is_featured", true);
   if (opts?.postType) query = query.eq("post_type", opts.postType);
 
-  const { data, error } = await query;
+  const { data, error } = await withBlogStorageRetry(client, () => query);
   if (error) throw error;
 
   let rows = sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl)).filter(isBlogPostPublic);
@@ -159,12 +216,14 @@ export async function fetchPublicBlogPostBySlug(
   const normalized = slug.trim().toLowerCase();
   if (!normalized) return null;
 
-  const { data, error } = await client
-    .from("site_blog_posts")
-    .select(BLOG_SELECT)
-    .eq("is_active", true)
-    .eq("slug", normalized)
-    .maybeSingle();
+  const { data, error } = await withBlogStorageRetry(client, () =>
+    client
+      .from("site_blog_posts")
+      .select(BLOG_SELECT)
+      .eq("is_active", true)
+      .eq("slug", normalized)
+      .maybeSingle()
+  );
 
   if (error) throw error;
   if (!data) return null;
@@ -173,7 +232,10 @@ export async function fetchPublicBlogPostBySlug(
 }
 
 export async function fetchAdminBlogPosts(client: SupabaseClient): Promise<SiteBlogPost[]> {
-  const { data, error } = await client.from("site_blog_posts").select("*").order("updated_at", { ascending: false });
+  await ensureSiteCmsTables(client);
+  const { data, error } = await withBlogStorageRetry(client, () =>
+    client.from("site_blog_posts").select("*").order("updated_at", { ascending: false })
+  );
   if (error) throw error;
   return sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl));
 }
@@ -203,7 +265,7 @@ function resolvePublishFields(input: SiteBlogPostInput): {
 
 export async function createBlogPost(
   client: SupabaseClient,
-  createdBy: string,
+  _createdBy: string,
   input: SiteBlogPostInput
 ): Promise<SiteBlogPost> {
   const title = input.title.trim();
@@ -216,29 +278,33 @@ export async function createBlogPost(
   const now = new Date().toISOString();
   const publish = resolvePublishFields(input);
 
-  const { data, error } = await client
-    .from("site_blog_posts")
-    .insert({
-      title,
-      slug,
-      excerpt: input.excerpt?.trim() || null,
-      content,
-      author_name: input.author_name?.trim() || "Apna Intern",
-      post_type: input.post_type || "blog",
-      status: publish.status,
-      published_at: publish.published_at,
-      scheduled_at: publish.scheduled_at,
-      meta_title: input.meta_title?.trim() || null,
-      meta_description: input.meta_description?.trim() || null,
-      tags: normalizeTags(input.tags),
-      is_active: input.is_active !== false,
-      is_featured: input.is_featured === true,
-      sort_order: input.sort_order ?? 0,
-      created_by: createdBy && /^[0-9a-f-]{36}$/i.test(createdBy) ? createdBy : null,
-      updated_at: now,
-    })
-    .select("*")
-    .single();
+  await ensureSiteCmsTables(client);
+  const { data, error } = await withBlogStorageRetry(client, () =>
+    client
+      .from("site_blog_posts")
+      .insert({
+        title,
+        slug,
+        excerpt: input.excerpt?.trim() || null,
+        content,
+        author_name: input.author_name?.trim() || "Apna Intern",
+        post_type: input.post_type || "blog",
+        status: publish.status,
+        published_at: publish.published_at,
+        scheduled_at: publish.scheduled_at,
+        meta_title: input.meta_title?.trim() || null,
+        meta_description: input.meta_description?.trim() || null,
+        tags: normalizeTags(input.tags),
+        is_active: input.is_active !== false,
+        is_featured: input.is_featured === true,
+        sort_order: input.sort_order ?? 0,
+        // Plain uuid column (no FK) — avoids save failures when auth.users row is absent.
+        created_by: null,
+        updated_at: now,
+      })
+      .select("*")
+      .single()
+  );
 
   if (error) throw error;
   return mapCoverUrl(data as SiteBlogPost);
@@ -288,7 +354,10 @@ export async function updateBlogPost(
     if (base) payload.slug = await ensureUniqueSlug(client, base, id);
   }
 
-  const { error } = await client.from("site_blog_posts").update(payload).eq("id", id);
+  await ensureSiteCmsTables(client);
+  const { error } = await withBlogStorageRetry(client, () =>
+    client.from("site_blog_posts").update(payload).eq("id", id)
+  );
   if (error) throw error;
 }
 
@@ -348,7 +417,10 @@ export async function deleteBlogPost(client: SupabaseClient, row: SiteBlogPost):
   if (row.cover_image_path) {
     await client.storage.from(BLOG_BUCKET).remove([row.cover_image_path]);
   }
-  const { error } = await client.from("site_blog_posts").delete().eq("id", row.id);
+  await ensureSiteCmsTables(client);
+  const { error } = await withBlogStorageRetry(client, () =>
+    client.from("site_blog_posts").delete().eq("id", row.id)
+  );
   if (error) throw error;
 }
 

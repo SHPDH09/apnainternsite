@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS public.site_blog_posts (
   is_active boolean NOT NULL DEFAULT true,
   is_featured boolean NOT NULL DEFAULT false,
   sort_order integer NOT NULL DEFAULT 0,
-  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by uuid,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
