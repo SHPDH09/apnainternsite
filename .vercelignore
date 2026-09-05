@@ -1,9 +1,15 @@
-# Cloudflare Workers — not used by Vercel; avoid any framework/build detection noise.
+# Cloudflare Workers — not used by Vercel.
 wrangler.toml
 wrangler.jsonc
 cloudflare/
 .wranglerignore
 
-# API routes run on AWS Lambda (same as Cloudflare Workers proxy). Vercel serves static SPA only.
-api/
+# Most API routes run on AWS Lambda (see vercel.json rewrites).
+# Whitelist OTP mail handlers so Vercel serverless can use SES Mail Manager SMTP.
+api/*
+!api/send-mail.ts
+!api/auth/
+!api/lib/
+!api/types/
+
 aws/
