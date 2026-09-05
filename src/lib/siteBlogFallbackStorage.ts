@@ -102,7 +102,7 @@ function toEnvelope(posts: FallbackBlogPost[]): string {
 
 function isStorageReadUnavailable(error: unknown): boolean {
   const msg = blogErrorText(error);
-  return /not found|404|does not exist|not implemented|not_found|storage route not implemented/i.test(
+  return /not found|404|does not exist|not implemented|not_found|storage route not implemented|403|401|forbidden|permission denied/i.test(
     msg
   );
 }
@@ -116,7 +116,11 @@ async function readEnvelope(client: SupabaseClient): Promise<FallbackBlogPost[]>
       if (res.status !== 404) {
         const body = await res.text().catch(() => "");
         if (/not implemented|not_found/i.test(body)) return [];
-        throw new Error(`Blog fallback read failed (HTTP ${res.status})`);
+        if (res.status === 403 || res.status === 401) {
+          /* fall through to storage client download */
+        } else {
+          throw new Error(`Blog fallback read failed (HTTP ${res.status})`);
+        }
       }
     } catch (err) {
       if (isStorageReadUnavailable(err)) return [];
@@ -150,12 +154,26 @@ export async function siteBlogFallbackAvailable(client: SupabaseClient): Promise
     return true;
   } catch (err) {
     const msg = blogErrorText(err);
-    if (/bucket not found|403|401|permission/i.test(msg)) {
+    if (/bucket not found/i.test(msg)) {
       fallbackReady = false;
       return false;
     }
-    fallbackReady = true;
-    return true;
+    // If read fails but upload works, blog CMS can still save via S3 JSON fallback.
+    try {
+      const probe = new Blob(['{"__apna_site_blog_probe__":true}'], { type: "application/json" });
+      const { error } = await client.storage
+        .from("logos")
+        .upload(`${FALLBACK_OBJECT_PATH}.probe`, probe, { upsert: true, contentType: "application/json" });
+      if (!error) {
+        await client.storage.from("logos").remove([`${FALLBACK_OBJECT_PATH}.probe`]).catch(() => undefined);
+        fallbackReady = true;
+        return true;
+      }
+    } catch {
+      /* ignore probe errors */
+    }
+    fallbackReady = false;
+    return false;
   }
 }
 
@@ -191,7 +209,38 @@ export async function updateFallbackBlogPost(
 ): Promise<void> {
   const rows = await readEnvelope(client);
   const idx = rows.findIndex((r) => r.id === id);
-  if (idx < 0) throw new Error("Blog post not found.");
+  if (idx < 0) {
+    const title = String(patch.title || "").trim();
+    const content = String(patch.content || "").trim();
+    if (!title || !content) {
+      throw new Error("Blog post not found.");
+    }
+    await createFallbackBlogPost(client, {
+      id,
+      title,
+      slug: String(patch.slug || slugifyFallbackSlug(title, id)),
+      excerpt: patch.excerpt ?? null,
+      content,
+      cover_image_url: patch.cover_image_url ?? null,
+      cover_image_path: patch.cover_image_path ?? null,
+      author_name: patch.author_name ?? "Apna Intern",
+      post_type: patch.post_type === "vlog" ? "vlog" : "blog",
+      status:
+        patch.status === "published" || patch.status === "scheduled" ? patch.status : "draft",
+      published_at: patch.published_at ?? null,
+      scheduled_at: patch.scheduled_at ?? null,
+      meta_title: patch.meta_title ?? null,
+      meta_description: patch.meta_description ?? null,
+      tags: Array.isArray(patch.tags) ? patch.tags : [],
+      is_active: patch.is_active !== false,
+      is_featured: patch.is_featured === true,
+      sort_order: Number(patch.sort_order) || 0,
+      created_by: patch.created_by ?? null,
+      created_at: patch.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    return;
+  }
   rows[idx] = normalizePost({
     ...rows[idx],
     ...patch,
@@ -199,6 +248,25 @@ export async function updateFallbackBlogPost(
     updated_at: new Date().toISOString(),
   });
   await writeEnvelope(client, rows);
+}
+
+function slugifyFallbackSlug(title: string, id: string): string {
+  const base = title
+    .trim()
+    .toLowerCase()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return base || id.slice(0, 8);
+}
+
+export async function findFallbackBlogPostById(
+  client: SupabaseClient,
+  id: string
+): Promise<FallbackBlogPost | null> {
+  const rows = await readEnvelope(client);
+  return rows.find((r) => r.id === id) || null;
 }
 
 export async function deleteFallbackBlogPost(client: SupabaseClient, id: string): Promise<void> {
