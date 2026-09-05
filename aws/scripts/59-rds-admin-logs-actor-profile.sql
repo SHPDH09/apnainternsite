@@ -1,24 +1,17 @@
--- Create Admin Logs table
-CREATE TABLE IF NOT EXISTS public.admin_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  admin_email TEXT,
-  action_type TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id TEXT,
-  description TEXT,
-  metadata JSONB,
-  actor_role TEXT,
-  actor_name TEXT,
-  actor_tag TEXT,
-  registration_source TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- Admin activity logs: actor identity columns + admin read access
+ALTER TABLE public.admin_logs
+  ADD COLUMN IF NOT EXISTS actor_role TEXT,
+  ADD COLUMN IF NOT EXISTS actor_name TEXT,
+  ADD COLUMN IF NOT EXISTS actor_tag TEXT,
+  ADD COLUMN IF NOT EXISTS registration_source TEXT;
 
--- RLS Policies
-ALTER TABLE public.admin_logs ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS admin_logs_user_id_created_at_idx
+  ON public.admin_logs (user_id, created_at DESC);
 
--- Admins and super admins can view all logs
+CREATE INDEX IF NOT EXISTS admin_logs_actor_role_idx
+  ON public.admin_logs (actor_role);
+
+-- Admins and super admins can read all audit logs
 DROP POLICY IF EXISTS "Super admins view all logs" ON public.admin_logs;
 DROP POLICY IF EXISTS "Admins view all logs" ON public.admin_logs;
 CREATE POLICY "Admins view all logs" ON public.admin_logs
@@ -27,7 +20,7 @@ CREATE POLICY "Admins view all logs" ON public.admin_logs
     OR public.has_role(auth.uid(), 'admin')
   );
 
--- Dashboard users can insert audit logs
+-- Admins, college admins, and staff dashboard users can insert logs
 DROP POLICY IF EXISTS "Admins can insert logs" ON public.admin_logs;
 DROP POLICY IF EXISTS "Dashboard users can insert logs" ON public.admin_logs;
 CREATE POLICY "Dashboard users can insert logs" ON public.admin_logs
@@ -42,7 +35,3 @@ CREATE POLICY "Dashboard users can insert logs" ON public.admin_logs
       WHERE id = auth.uid()
     )
   );
-
--- Grant permissions
-GRANT ALL ON public.admin_logs TO authenticated;
-GRANT ALL ON public.admin_logs TO service_role;
