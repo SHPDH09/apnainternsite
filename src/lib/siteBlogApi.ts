@@ -284,17 +284,34 @@ export async function fetchPublicBlogPosts(
   client: SupabaseClient,
   opts?: { featuredOnly?: boolean; limit?: number; postType?: BlogPostType }
 ): Promise<SiteBlogPost[]> {
-  await ensureSiteBlogStorage(client);
+  try {
+    await ensureSiteBlogStorage(client);
+  } catch {
+    resetSiteBlogStorageCache();
+  }
 
-  let fallbackRows = sortBlogPosts((await fetchFallbackPublicBlogPosts(client)).map(mapCoverUrl)).filter(
-    isBlogPostPublic
-  );
+  let fallbackRows: SiteBlogPost[] = [];
+  try {
+    fallbackRows = sortBlogPosts((await fetchFallbackPublicBlogPosts(client)).map(mapCoverUrl)).filter(
+      isBlogPostPublic
+    );
+  } catch {
+    fallbackRows = [];
+  }
 
-  if (!(await siteBlogTableAvailable(client))) {
-    if (opts?.featuredOnly) fallbackRows = fallbackRows.filter((p) => p.is_featured);
-    if (opts?.postType) fallbackRows = fallbackRows.filter((p) => p.post_type === opts.postType);
-    if (opts?.limit && opts.limit > 0) fallbackRows = fallbackRows.slice(0, opts.limit);
-    return fallbackRows;
+  let tableReady = false;
+  try {
+    tableReady = await siteBlogTableAvailable(client);
+  } catch {
+    tableReady = false;
+  }
+
+  if (!tableReady) {
+    let rows = fallbackRows;
+    if (opts?.featuredOnly) rows = rows.filter((p) => p.is_featured);
+    if (opts?.postType) rows = rows.filter((p) => p.post_type === opts.postType);
+    if (opts?.limit && opts.limit > 0) rows = rows.slice(0, opts.limit);
+    return rows;
   }
 
   let query = client.from("site_blog_posts").select(BLOG_SELECT).eq("is_active", true);
@@ -314,12 +331,12 @@ export async function fetchPublicBlogPosts(
   } catch (err) {
     if (isSiteBlogTableMissing(err)) {
       resetSiteBlogStorageCache();
-      if (opts?.featuredOnly) fallbackRows = fallbackRows.filter((p) => p.is_featured);
-      if (opts?.postType) fallbackRows = fallbackRows.filter((p) => p.post_type === opts.postType);
-      if (opts?.limit && opts.limit > 0) fallbackRows = fallbackRows.slice(0, opts.limit);
-      return fallbackRows;
     }
-    throw err;
+    let rows = fallbackRows;
+    if (opts?.featuredOnly) rows = rows.filter((p) => p.is_featured);
+    if (opts?.postType) rows = rows.filter((p) => p.post_type === opts.postType);
+    if (opts?.limit && opts.limit > 0) rows = rows.slice(0, opts.limit);
+    return rows;
   }
 }
 
@@ -330,8 +347,20 @@ export async function fetchPublicBlogPostBySlug(
   const normalized = slug.trim().toLowerCase();
   if (!normalized) return null;
 
-  await ensureSiteBlogStorage(client);
-  if (!(await siteBlogTableAvailable(client))) {
+  try {
+    await ensureSiteBlogStorage(client);
+  } catch {
+    resetSiteBlogStorageCache();
+  }
+
+  let tableReady = false;
+  try {
+    tableReady = await siteBlogTableAvailable(client);
+  } catch {
+    tableReady = false;
+  }
+
+  if (!tableReady) {
     const post = (await fetchFallbackPublicBlogPosts(client))
       .map(mapCoverUrl)
       .find((p) => p.slug.toLowerCase() === normalized);
@@ -347,8 +376,24 @@ export async function fetchPublicBlogPostBySlug(
       .maybeSingle()
   );
 
-  if (error) throw error;
-  if (!data) return null;
+  if (error) {
+    if (isSiteBlogTableMissing(error)) {
+      const post = (await fetchFallbackPublicBlogPosts(client))
+        .map(mapCoverUrl)
+        .find((p) => p.slug.toLowerCase() === normalized);
+      return post && isBlogPostPublic(post) ? post : null;
+    }
+    const post = (await fetchFallbackPublicBlogPosts(client))
+      .map(mapCoverUrl)
+      .find((p) => p.slug.toLowerCase() === normalized);
+    return post && isBlogPostPublic(post) ? post : null;
+  }
+  if (!data) {
+    const post = (await fetchFallbackPublicBlogPosts(client))
+      .map(mapCoverUrl)
+      .find((p) => p.slug.toLowerCase() === normalized);
+    return post && isBlogPostPublic(post) ? post : null;
+  }
   const post = mapCoverUrl(data as SiteBlogPost);
   return isBlogPostPublic(post) ? post : null;
 }

@@ -120,7 +120,10 @@ const Index = () => {
       fetchPublicMous(supabase).catch(() => [] as SiteMou[]),
       fetchPublicOfflinePrograms(supabase).catch(() => [] as SiteOfflineProgram[]),
       fetchPublicTestimonials(supabase).catch(() => [] as SiteTestimonial[]),
-      fetchPublicBlogPosts(supabase, { limit: 3, featuredOnly: false }).catch(() => [] as SiteBlogPost[]),
+      fetchPublicBlogPosts(supabase, { limit: 3, featuredOnly: false }).catch((err) => {
+        console.warn("[Index] blog fetch failed:", err);
+        return [] as SiteBlogPost[];
+      }),
     ]).then(([certs, team, mouRows, offline, reviews, blogs]) => {
       setSampleCerts(certs);
       setExpertTeam(team);

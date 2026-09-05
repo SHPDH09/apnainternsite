@@ -108,23 +108,25 @@ function isStorageReadUnavailable(error: unknown): boolean {
 }
 
 async function readEnvelope(client: SupabaseClient): Promise<FallbackBlogPost[]> {
-  const publicUrl = publicStorageObjectUrl("logos", FALLBACK_OBJECT_PATH);
-  if (publicUrl) {
+  const candidates: string[] = [];
+  if (typeof window !== "undefined") {
+    const origin = window.location.origin.replace(/\/$/, "");
+    candidates.push(`${origin}/storage/v1/object/public/logos/${FALLBACK_OBJECT_PATH}`);
+  }
+  const viaHelper = publicStorageObjectUrl("logos", FALLBACK_OBJECT_PATH);
+  if (viaHelper && !candidates.includes(viaHelper)) candidates.push(viaHelper);
+
+  for (const publicUrl of candidates) {
     try {
       const res = await fetch(publicUrl, { cache: "no-store" });
       if (res.ok) return parseEnvelope(await res.text());
       if (res.status !== 404) {
         const body = await res.text().catch(() => "");
-        if (/not implemented|not_found/i.test(body)) return [];
-        if (res.status === 403 || res.status === 401) {
-          /* fall through to storage client download */
-        } else {
-          throw new Error(`Blog fallback read failed (HTTP ${res.status})`);
-        }
+        if (/not implemented|not_found/i.test(body)) continue;
+        if (res.status === 403 || res.status === 401) continue;
       }
     } catch (err) {
-      if (isStorageReadUnavailable(err)) return [];
-      throw err;
+      if (!isStorageReadUnavailable(err)) continue;
     }
   }
 
