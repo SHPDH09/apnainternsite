@@ -41,6 +41,18 @@ if (databaseUrl) {
   lines.push(`DATABASE_URL=${databaseUrl.replace(/^["']|["']$/g, "")}`);
 }
 
+const smtpHost = process.env.SMTP_HOST?.trim();
+const smtpUser = process.env.SMTP_USER?.trim();
+const smtpPass = process.env.SMTP_PASS?.trim();
+const mailFrom = process.env.MAIL_FROM?.trim();
+const mailFromAddress = process.env.MAIL_FROM_ADDRESS?.trim();
+if (smtpHost) lines.push(`SMTP_HOST=${smtpHost}`);
+if (smtpUser) lines.push(`SMTP_USER=${smtpUser}`);
+if (smtpPass) lines.push(`SMTP_PASS=${smtpPass}`);
+if (mailFrom) lines.push(`MAIL_FROM=${mailFrom}`);
+if (mailFromAddress) lines.push(`MAIL_FROM_ADDRESS=${mailFromAddress}`);
+if (smtpPass) lines.push("USE_SES_API=false");
+
 if (lines.length === 1) {
   console.log("[cloud-agent-env] No AWS/RDS secrets in environment — skip .env.awsrds.local");
   process.exit(0);

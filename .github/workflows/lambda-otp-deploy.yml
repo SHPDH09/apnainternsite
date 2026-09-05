@@ -1,0 +1,82 @@
+# Deploy OTP/mail API to Lambda + refresh Hostinger SMTP env (GitHub secrets required).
+
+name: Lambda OTP Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "aws/lambda/**"
+      - "aws/scripts/bundle-lambda.mjs"
+      - "aws/scripts/update-lambda-mail-env.mjs"
+      - ".github/workflows/lambda-otp-deploy.yml"
+
+concurrency:
+  group: lambda-otp-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bundle Lambda
+        run: node aws/scripts/bundle-lambda.mjs
+
+      - name: Deploy Lambda code
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-1' }}
+        run: |
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "::error::AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY GitHub secrets are required for Lambda deploy"
+            exit 1
+          fi
+          cd aws/lambda/dist && zip -r /tmp/lambda.zip . && cd -
+          aws lambda update-function-code \
+            --function-name ezyintern-api-staging \
+            --zip-file fileb:///tmp/lambda.zip \
+            --region "${AWS_DEFAULT_REGION}"
+          aws lambda wait function-updated \
+            --function-name ezyintern-api-staging \
+            --region "${AWS_DEFAULT_REGION}"
+
+      - name: Update Lambda Hostinger SMTP env
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-1' }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || 'smtp.hostinger.com' }}
+          SMTP_USER: ${{ secrets.SMTP_USER || 'info@apnaintern.in' }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM_ADDRESS: ${{ secrets.MAIL_FROM_ADDRESS || 'info@apnaintern.in' }}
+        run: |
+          if [ -z "${SMTP_PASS:-}" ]; then
+            echo "::error::SMTP_PASS GitHub secret is required (Hostinger mailbox password)"
+            exit 1
+          fi
+          node aws/scripts/update-lambda-mail-env.mjs
+
+      - name: Smoke test login_otp mail API
+        run: |
+          API="https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/send-mail"
+          body='{"action":"login_otp","otp":"111222","to":"apnaintern.in@gmail.com","email":"apnaintern.in@gmail.com","purpose":"login"}'
+          res=$(curl -sS -w "\n%{http_code}" -X POST "$API" -H "Content-Type: application/json" -d "$body")
+          code=$(echo "$res" | tail -n1)
+          json=$(echo "$res" | sed '$d')
+          echo "$json"
+          echo "$json" | grep -q '"emailSent":true' || echo "$json" | grep -q '"success":true'
+          test "$code" = "200"

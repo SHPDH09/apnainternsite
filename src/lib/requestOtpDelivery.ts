@@ -164,7 +164,15 @@ export async function deliverOtpEmail(
       };
     }
     lastServerJson = server.json;
-    insertError = undefined;
+    // Server mail often fails on stale Lambda SMTP — fall back to browser insert + /api/send-mail.
+    const clientFallback = await requestOtpViaClient(client, email, purpose, generatedOtp, mailAction);
+    if (clientFallback.ok) {
+      return { ok: true, email, devOtp: localDev ? generatedOtp : undefined };
+    }
+    insertError = clientFallback.insertError;
+    if (!insertError && clientFallback.mailError) {
+      lastServerJson = { error: clientFallback.mailError, ...lastServerJson };
+    }
   } else {
     const clientAttempt = await requestOtpViaClient(client, email, purpose, generatedOtp, mailAction);
     if (clientAttempt.ok) {
