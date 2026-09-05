@@ -39,13 +39,15 @@ async function sendOtpEmail(
     return;
   }
 
-  const { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } = await import('../lib/smtpTransport.js');
-  const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
-  if (!SMTP_USER || !SMTP_PASS) {
-    throw new Error('SMTP Credentials missing');
+  const { createSmtpTransporter, resolveSmtpCredentials, sesMailHeaders } = await import('../lib/smtpTransport.js');
+  const smtpCreds = await resolveSmtpCredentials();
+  if (!smtpCreds.user || !smtpCreds.pass) {
+    throw new Error(
+      'SMTP credentials missing on server. Add SMTP_PASS in Vercel project env, or store Mail Manager SMTP in RDS site_smtp_config.'
+    );
   }
 
-  const transporter = await createSmtpTransporter();
+  const transporter = await createSmtpTransporter(smtpCreds);
   await transporter.sendMail({
     ...sesMailHeaders('Apna Intern Security'),
     to: normalizedEmail,

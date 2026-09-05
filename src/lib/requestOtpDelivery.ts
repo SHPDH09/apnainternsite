@@ -76,7 +76,7 @@ async function requestOtpViaServer(
   email: string,
   purpose: OtpPurpose
 ): Promise<{ ok: true; json: ServerOtpJson } | { ok: false; json: ServerOtpJson; status: number }> {
-  const serverRes = await fetch(siteApiUrl("/api/auth/forgot-password"), {
+  const serverRes = await fetch(siteApiUrl("/api/request-otp"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "request_otp", email, purpose }),
