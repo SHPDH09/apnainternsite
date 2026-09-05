@@ -66,14 +66,17 @@ export async function deliverOtpEmail(
     });
     const serverJson = (await serverRes.json().catch(() => ({}))) as {
       success?: boolean;
+      emailSent?: boolean;
       message?: string;
       hint?: string;
+      error?: string;
       devOtp?: string;
     };
 
-    if (!serverRes.ok || !serverJson.success) {
+    if (!serverRes.ok || !serverJson.success || serverJson.emailSent === false) {
       const detail = [
         insertError?.message,
+        serverJson.error,
         serverJson.message,
         serverJson.hint,
         PASSWORD_RESETS_SCHEMA_HINT,

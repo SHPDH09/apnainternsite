@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { query } from '../../aws/server/db.js';
 import { useRds } from '../lib/useRds.js';
 import { buildOtpMailContent, resolveOtpMailPurpose, type OtpMailPurpose } from '../lib/otpMailTemplate.js';
+import { formatSmtpError, isSesIdentityNotVerifiedError } from '../lib/smtpErrors.js';
 
 type Action = 'request_otp' | 'reset_password';
 
@@ -26,13 +27,24 @@ async function sendOtpEmail(
   generatedOtp: string,
   purpose: OtpMailPurpose
 ): Promise<void> {
+  const mailContent = buildOtpMailContent(generatedOtp, purpose);
+
+  const { canUseSesApi, sendEmailViaSesApi } = await import('../lib/sesSend.js');
+  if (canUseSesApi()) {
+    await sendEmailViaSesApi({
+      to: normalizedEmail,
+      subject: mailContent.subject,
+      html: mailContent.html,
+    });
+    return;
+  }
+
   const { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } = await import('../lib/smtpTransport.js');
   const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
   if (!SMTP_USER || !SMTP_PASS) {
     throw new Error('SMTP Credentials missing');
   }
 
-  const mailContent = buildOtpMailContent(generatedOtp, purpose);
   const transporter = await createSmtpTransporter();
   await transporter.sendMail({
     ...sesMailHeaders('Apna Intern Security'),
@@ -65,14 +77,23 @@ async function handleWithRds(
       if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_OTP_WITHOUT_SMTP === 'true') {
         return res.status(200).json({
           success: true,
+          emailSent: false,
           message: 'OTP stored (email skipped — SMTP missing or failed)',
           devOtp: generatedOtp,
         });
       }
-      throw mailErr;
+      const msg = mailErr instanceof Error ? mailErr.message : String(mailErr);
+      return res.status(isSesIdentityNotVerifiedError(mailErr) ? 503 : 500).json({
+        success: false,
+        emailSent: false,
+        message: isSesIdentityNotVerifiedError(mailErr)
+          ? 'Verification email could not be delivered — Amazon SES sandbox blocks unverified recipients'
+          : 'Failed to send verification email',
+        error: formatSmtpError(mailErr, { to: normalizedEmail }),
+      });
     }
 
-    return res.status(200).json({ success: true, message: 'OTP sent successfully' });
+    return res.status(200).json({ success: true, emailSent: true, message: 'OTP sent successfully' });
   }
 
   if (action === 'reset_password') {

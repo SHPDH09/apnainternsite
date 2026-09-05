@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { formatSmtpError, isSesIdentityNotVerifiedError } from './lib/smtpErrors.js';
 import { buildOtpMailContent, resolveOtpMailPurpose } from './lib/otpMailTemplate.js';
+import { deliverOutbound } from './lib/deliverOutbound.js';
 
 /** Inlined — importing api/lib/*.ts crashes this Vercel function (FUNCTION_INVOCATION_FAILED). */
 type MailFrom = { name: string; address: string };
@@ -505,23 +506,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (fastOtpMail) {
       try {
-        await transporter.sendMail(mailOptions);
+        await deliverOutbound(mailOptions, transporter, {
+          fast: true,
+          sendWithRetry: sendMailWithRetry,
+        });
       } catch (e) {
         if (isSmtpRateLimitError(e)) {
           return res.status(429).json({
             success: false,
+            emailSent: false,
             message: 'SMTP rate limit. Wait a few minutes or use password sign-in.',
             error: e instanceof Error ? e.message : String(e),
           });
         }
-        throw e;
+        const toAddr = String(mailOptions.to || '').trim();
+        return res.status(isSesIdentityNotVerifiedError(e) ? 503 : 500).json({
+          success: false,
+          emailSent: false,
+          message: isSesIdentityNotVerifiedError(e)
+            ? 'Verification email could not be delivered — recipient not verified in Amazon SES'
+            : 'Failed to send verification email',
+          error: formatSmtpError(e, { to: toAddr, from: resolveMailFromAddress() }),
+        });
       }
     } else {
-      await sendMailWithRetry(transporter, mailOptions, 3, {
+      await deliverOutbound(mailOptions, transporter, {
         bulk: normalizedAction === 'bulk_custom_mail',
+        sendWithRetry: sendMailWithRetry,
       });
     }
-    return res.status(200).json({ success: true, message: 'Email sent successfully!' });
+    return res.status(200).json({
+      success: true,
+      emailSent: true,
+      message: 'Email sent successfully!',
+    });
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error('send-mail error:', err);

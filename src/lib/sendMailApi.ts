@@ -11,16 +11,34 @@ export function getSendMailApiUrl(): string {
   return siteApiUrl("/api/send-mail");
 }
 
+type SendMailJson = {
+  success?: boolean;
+  emailSent?: boolean;
+  message?: string;
+  error?: string;
+  warning?: string;
+  devOtp?: string;
+};
+
 export async function assertSendMailOk(res: Response): Promise<void> {
-  if (res.ok) return;
   const text = await res.text().catch(() => "");
-  let detail = "";
+  let body: SendMailJson = {};
   try {
-    const j = JSON.parse(text) as { message?: string; error?: string };
-    // Prefer `error` — handler sets generic message + SMTP/nodemailer detail in error
-    detail = (j.error || j.message || "").trim();
+    body = JSON.parse(text) as SendMailJson;
   } catch {
-    if (text.trim()) detail = text.replace(/<[^>]+>/g, "").slice(0, 280).trim();
+    if (!res.ok) {
+      throw new Error(text.trim().slice(0, 280) || `Email request failed (${res.status})`);
+    }
+    return;
   }
-  throw new Error(detail || `Email request failed (${res.status})`);
+
+  const detail = (body.error || body.message || "").trim();
+  const emailPending =
+    body.emailSent === false ||
+    Boolean(body.warning) ||
+    (Boolean(body.devOtp) && import.meta.env.PROD);
+
+  if (!res.ok || body.success === false || emailPending) {
+    throw new Error(detail || `Email request failed (${res.status})`);
+  }
 }

@@ -44,6 +44,8 @@
     "aws:rds:import:csv": "bash -c 'set -a && [ -f .env.awsrds.local ] && . ./.env.awsrds.local; set +a; bash aws/scripts/import-csv-tables.sh'",
     "aws:rds:verify": "node aws/scripts/run-rds-verify.mjs",
     "aws:ses:verify-email": "node aws/scripts/ses-verify-email.mjs",
+    "aws:ses:verify": "node aws/scripts/ses-verify-email.mjs",
+    "aws:ses:checklist": "node aws/scripts/ses-production-checklist.mjs",
     "aws:s3:provision": "bash aws/scripts/provision-s3-storage.sh",
     "aws:s3:sync": "bash aws/scripts/sync-storage-to-s3.sh",
     "aws:s3:sync:dry": "bash aws/scripts/sync-storage-to-s3.sh --dry-run",
@@ -53,6 +55,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",
+    "@aws-sdk/client-sesv2": "^3.1127.0",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
