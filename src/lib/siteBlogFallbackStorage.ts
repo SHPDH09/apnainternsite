@@ -117,7 +117,7 @@ async function readEnvelope(client: SupabaseClient): Promise<FallbackBlogPost[]>
 
   const { data, error } = await client.storage.from("logos").download(FALLBACK_OBJECT_PATH);
   if (error) {
-    if (/not found|404|does not exist/i.test(error.message)) return [];
+    if (/not found|404|does not exist|not implemented|not_found/i.test(error.message)) return [];
     throw error;
   }
   const text = await data.text();
@@ -182,7 +182,38 @@ export async function updateFallbackBlogPost(
 ): Promise<void> {
   const rows = await readEnvelope(client);
   const idx = rows.findIndex((r) => r.id === id);
-  if (idx < 0) throw new Error("Blog post not found.");
+  if (idx < 0) {
+    const title = String(patch.title || "").trim();
+    const content = String(patch.content || "").trim();
+    if (!title || !content) {
+      throw new Error("Blog post not found.");
+    }
+    await createFallbackBlogPost(client, {
+      id,
+      title,
+      slug: String(patch.slug || slugifyFallbackSlug(title, id)),
+      excerpt: patch.excerpt ?? null,
+      content,
+      cover_image_url: patch.cover_image_url ?? null,
+      cover_image_path: patch.cover_image_path ?? null,
+      author_name: patch.author_name ?? "Apna Intern",
+      post_type: patch.post_type === "vlog" ? "vlog" : "blog",
+      status:
+        patch.status === "published" || patch.status === "scheduled" ? patch.status : "draft",
+      published_at: patch.published_at ?? null,
+      scheduled_at: patch.scheduled_at ?? null,
+      meta_title: patch.meta_title ?? null,
+      meta_description: patch.meta_description ?? null,
+      tags: Array.isArray(patch.tags) ? patch.tags : [],
+      is_active: patch.is_active !== false,
+      is_featured: patch.is_featured === true,
+      sort_order: Number(patch.sort_order) || 0,
+      created_by: patch.created_by ?? null,
+      created_at: patch.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    return;
+  }
   rows[idx] = normalizePost({
     ...rows[idx],
     ...patch,
@@ -190,6 +221,25 @@ export async function updateFallbackBlogPost(
     updated_at: new Date().toISOString(),
   });
   await writeEnvelope(client, rows);
+}
+
+function slugifyFallbackSlug(title: string, id: string): string {
+  const base = title
+    .trim()
+    .toLowerCase()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return base || id.slice(0, 8);
+}
+
+export async function findFallbackBlogPostById(
+  client: SupabaseClient,
+  id: string
+): Promise<FallbackBlogPost | null> {
+  const rows = await readEnvelope(client);
+  return rows.find((r) => r.id === id) || null;
 }
 
 export async function deleteFallbackBlogPost(client: SupabaseClient, id: string): Promise<void> {
