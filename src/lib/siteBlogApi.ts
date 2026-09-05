@@ -1,5 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { publicStorageObjectUrl, resolveStorageUrl } from "@/lib/storageUrl";
+import {
+  createFallbackBlogPost,
+  deleteFallbackBlogPost,
+  fetchFallbackAdminBlogPosts,
+  fetchFallbackPublicBlogPosts,
+  isSiteBlogTableMissingError,
+  siteBlogFallbackAvailable,
+  siteBlogTableAvailable,
+  resetSiteBlogStorageCache,
+  updateFallbackBlogPost,
+} from "@/lib/siteBlogFallbackStorage";
 
 const BLOG_BUCKET = "logos";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -13,17 +24,12 @@ function blogErrorText(error: unknown): string {
 }
 
 export function isSiteBlogTableMissing(error: unknown): boolean {
-  const msg = blogErrorText(error);
-  return (
-    /42P01|undefined_table/i.test(msg) ||
-    /relation ["']?public\.site_blog_posts["']? does not exist/i.test(msg) ||
-    /Could not find the table ['"]public\.site_blog_posts['"]/i.test(msg)
-  );
+  return isSiteBlogTableMissingError(error);
 }
 
 export function formatSiteBlogError(error: unknown): string {
   if (isSiteBlogTableMissing(error)) {
-    return "Blog table is not ready yet. Wait a few seconds and click Save again — if this persists, redeploy the site API.";
+    return "Blog table is not ready yet — saving to cloud storage instead. Retry if Save fails.";
   }
   const msg = blogErrorText(error);
   if (/row-level security|42501/i.test(msg)) {
@@ -41,15 +47,9 @@ export function formatSiteBlogError(error: unknown): string {
   return msg || "Blog save failed.";
 }
 
-async function probeBlogTable(client: SupabaseClient): Promise<boolean> {
-  const { error } = await client.from("site_blog_posts").select("id").limit(1);
-  if (!error) return true;
-  return !isSiteBlogTableMissing(error);
-}
-
-/** Ensure site_blog_posts exists — RPC, Lambda ensure-blog-cms, send-mail fallback, then verify. */
+/** Ensure blog storage — RDS table preferred; S3 JSON fallback when table bootstrap unavailable. */
 export async function ensureSiteBlogStorage(client: SupabaseClient): Promise<void> {
-  if (await probeBlogTable(client)) return;
+  if (await siteBlogTableAvailable(client)) return;
 
   const { data: sessionData } = await client.auth.getSession();
   const token = sessionData.session?.access_token?.trim();
@@ -58,12 +58,17 @@ export async function ensureSiteBlogStorage(client: SupabaseClient): Promise<voi
 
   const bootstrapErrors: string[] = [];
 
+  const recheckTable = async (): Promise<boolean> => {
+    resetSiteBlogStorageCache();
+    return siteBlogTableAvailable(client);
+  };
+
   if (token) {
     try {
       const { error } = await client.rpc("admin_ensure_site_cms_tables");
       if (!error) {
         await new Promise((r) => setTimeout(r, 500));
-        if (await probeBlogTable(client)) return;
+        if (await recheckTable()) return;
       } else {
         bootstrapErrors.push(blogErrorText(error));
       }
@@ -73,53 +78,43 @@ export async function ensureSiteBlogStorage(client: SupabaseClient): Promise<voi
   }
 
   if (token && typeof fetch !== "undefined") {
-    try {
-      const res = await fetch(`${origin}/api/ensure-blog-cms`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-      if (res.ok) {
-        await new Promise((r) => setTimeout(r, 600));
-        if (await probeBlogTable(client)) return;
-      } else {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        bootstrapErrors.push(body.message || `ensure-blog-cms HTTP ${res.status}`);
+    for (const [label, url, body] of [
+      ["ensure-blog-cms", `${origin}/api/ensure-blog-cms`, undefined],
+      [
+        "send-mail ensure_blog_cms",
+        `${origin}/api/send-mail`,
+        JSON.stringify({ action: "ensure_blog_cms" }),
+      ],
+    ] as const) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          ...(body ? { body } : {}),
+        });
+        if (res.ok) {
+          await new Promise((r) => setTimeout(r, 600));
+          if (await recheckTable()) return;
+        } else {
+          const json = (await res.json().catch(() => ({}))) as { message?: string };
+          bootstrapErrors.push(json.message || `${label} HTTP ${res.status}`);
+        }
+      } catch (err) {
+        bootstrapErrors.push(err instanceof Error ? err.message : String(err));
       }
-    } catch (err) {
-      bootstrapErrors.push(err instanceof Error ? err.message : String(err));
     }
   }
 
-  if (token && typeof fetch !== "undefined") {
-    try {
-      const mailRes = await fetch(`${origin}/api/send-mail`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ action: "ensure_blog_cms" }),
-      });
-      if (mailRes.ok) {
-        await new Promise((r) => setTimeout(r, 600));
-        if (await probeBlogTable(client)) return;
-      } else {
-        const body = (await mailRes.json().catch(() => ({}))) as { message?: string };
-        bootstrapErrors.push(body.message || `send-mail ensure_blog_cms HTTP ${mailRes.status}`);
-      }
-    } catch (err) {
-      bootstrapErrors.push(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  if (await probeBlogTable(client)) return;
+  if (await recheckTable()) return;
+  resetSiteBlogStorageCache();
+  if (await siteBlogFallbackAvailable(client)) return;
 
   throw new Error(
     bootstrapErrors.join("; ") ||
-      "site_blog_posts table is missing on the database. Redeploy Lambda and retry Save."
+      "Blog storage is unavailable. Retry Save in a moment or redeploy Lambda."
   );
 }
 
@@ -265,11 +260,16 @@ async function ensureUniqueSlug(
   let suffix = 0;
   while (suffix < 100) {
     const candidate = suffix === 0 ? slug : `${slug}-${suffix}`;
-    let query = client.from("site_blog_posts").select("id").eq("slug", candidate).limit(1);
-    if (excludeId) query = query.neq("id", excludeId);
-    const { data, error } = await query;
-    if (error) throw error;
-    if (!data?.length) return candidate;
+    if (!(await siteBlogTableAvailable(client))) {
+      const rows = await fetchFallbackAdminBlogPosts(client);
+      if (!rows.some((r) => r.slug === candidate && r.id !== excludeId)) return candidate;
+    } else {
+      let query = client.from("site_blog_posts").select("id").eq("slug", candidate).limit(1);
+      if (excludeId) query = query.neq("id", excludeId);
+      const { data, error } = await query;
+      if (error) throw error;
+      if (!data?.length) return candidate;
+    }
     suffix += 1;
   }
   return `${slug}-${Date.now()}`;
@@ -280,6 +280,15 @@ export async function fetchPublicBlogPosts(
   opts?: { featuredOnly?: boolean; limit?: number; postType?: BlogPostType }
 ): Promise<SiteBlogPost[]> {
   await ensureSiteBlogStorage(client);
+  if (!(await siteBlogTableAvailable(client))) {
+    let rows = sortBlogPosts((await fetchFallbackPublicBlogPosts(client)).map(mapCoverUrl)).filter(
+      isBlogPostPublic
+    );
+    if (opts?.featuredOnly) rows = rows.filter((p) => p.is_featured);
+    if (opts?.postType) rows = rows.filter((p) => p.post_type === opts.postType);
+    if (opts?.limit && opts.limit > 0) rows = rows.slice(0, opts.limit);
+    return rows;
+  }
   let query = client.from("site_blog_posts").select(BLOG_SELECT).eq("is_active", true);
 
   if (opts?.featuredOnly) query = query.eq("is_featured", true);
@@ -300,6 +309,14 @@ export async function fetchPublicBlogPostBySlug(
   const normalized = slug.trim().toLowerCase();
   if (!normalized) return null;
 
+  await ensureSiteBlogStorage(client);
+  if (!(await siteBlogTableAvailable(client))) {
+    const post = (await fetchFallbackPublicBlogPosts(client))
+      .map(mapCoverUrl)
+      .find((p) => p.slug.toLowerCase() === normalized);
+    return post && isBlogPostPublic(post) ? post : null;
+  }
+
   const { data, error } = await withBlogStorageRetry(client, () =>
     client
       .from("site_blog_posts")
@@ -317,6 +334,9 @@ export async function fetchPublicBlogPostBySlug(
 
 export async function fetchAdminBlogPosts(client: SupabaseClient): Promise<SiteBlogPost[]> {
   await ensureSiteBlogStorage(client);
+  if (!(await siteBlogTableAvailable(client))) {
+    return sortBlogPosts((await fetchFallbackAdminBlogPosts(client)).map(mapCoverUrl));
+  }
   const { data, error } = await withBlogStorageRetry(client, () =>
     client.from("site_blog_posts").select("*").order("updated_at", { ascending: false })
   );
@@ -363,6 +383,32 @@ export async function createBlogPost(
   const publish = resolvePublishFields(input);
 
   await ensureSiteBlogStorage(client);
+
+  if (!(await siteBlogTableAvailable(client))) {
+    const created = await createFallbackBlogPost(client, {
+      id: crypto.randomUUID(),
+      title,
+      slug,
+      excerpt: input.excerpt?.trim() || null,
+      content,
+      author_name: input.author_name?.trim() || "Apna Intern",
+      post_type: input.post_type || "blog",
+      status: publish.status,
+      published_at: publish.published_at,
+      scheduled_at: publish.scheduled_at,
+      meta_title: input.meta_title?.trim() || null,
+      meta_description: input.meta_description?.trim() || null,
+      tags: normalizeTags(input.tags),
+      is_active: input.is_active !== false,
+      is_featured: input.is_featured === true,
+      sort_order: input.sort_order ?? 0,
+      created_by: null,
+      created_at: now,
+      updated_at: now,
+    });
+    return mapCoverUrl(created);
+  }
+
   const { data, error } = await withBlogStorageRetry(client, () =>
     client
       .from("site_blog_posts")
@@ -439,6 +485,10 @@ export async function updateBlogPost(
   }
 
   await ensureSiteBlogStorage(client);
+  if (!(await siteBlogTableAvailable(client))) {
+    await updateFallbackBlogPost(client, id, payload as Partial<SiteBlogPost>);
+    return;
+  }
   const { error } = await withBlogStorageRetry(client, () =>
     client.from("site_blog_posts").update(payload).eq("id", id)
   );
@@ -502,6 +552,10 @@ export async function deleteBlogPost(client: SupabaseClient, row: SiteBlogPost):
     await client.storage.from(BLOG_BUCKET).remove([row.cover_image_path]);
   }
   await ensureSiteBlogStorage(client);
+  if (!(await siteBlogTableAvailable(client))) {
+    await deleteFallbackBlogPost(client, row.id);
+    return;
+  }
   const { error } = await withBlogStorageRetry(client, () =>
     client.from("site_blog_posts").delete().eq("id", row.id)
   );
