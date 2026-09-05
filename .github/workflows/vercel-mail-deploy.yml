@@ -8,6 +8,7 @@ on:
     paths:
       - "api/**"
       - "vercel.json"
+      - ".vercelignore"
       - ".github/workflows/vercel-mail-deploy.yml"
   workflow_dispatch:
 

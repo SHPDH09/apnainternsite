@@ -5,11 +5,11 @@ cloudflare/
 .wranglerignore
 
 # Most API routes run on AWS Lambda (see vercel.json rewrites).
-# Whitelist OTP mail handlers so Vercel serverless can use SES Mail Manager SMTP.
-api/*
+# Whitelist OTP mail handlers + their RDS/SMTP dependencies.
+api/**
 !api/send-mail.ts
-!api/auth/
-!api/lib/
-!api/types/
+!api/auth/forgot-password.ts
+!api/lib/**
 
-aws/
+aws/**
+!aws/server/db.ts
