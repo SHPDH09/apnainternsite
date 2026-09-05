@@ -47,6 +47,7 @@ import {
   blogStatusLabel,
   createBlogPost,
   deleteBlogPost,
+  ensureSiteBlogStorage,
   estimateReadMinutes,
   fetchAdminBlogPosts,
   formatBlogDate,
@@ -180,6 +181,16 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        await ensureSiteBlogStorage(client);
+      } catch (err) {
+        console.warn("[BlogManagementPanel] blog storage ensure:", err);
+      }
+    })();
+  }, [client]);
 
   const stats = useMemo(() => {
     const published = rows.filter((r) => r.status === "published").length;

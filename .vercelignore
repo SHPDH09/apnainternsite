@@ -11,7 +11,9 @@ api/**
 !api/otp-deliver.ts
 !api/request-otp.ts
 !api/auth/forgot-password.ts
+!api/ensure-blog-cms.ts
 !api/lib/**
 
 aws/**
 !aws/server/db.ts
+!aws/server/local-jwt.ts
