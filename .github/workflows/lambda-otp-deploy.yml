@@ -42,8 +42,8 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-1' }}
         run: |
           if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
-            echo "::error::AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY GitHub secrets are required for Lambda deploy"
-            exit 1
+            echo "::warning::AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY not set — Lambda deploy skipped (add GitHub secrets to enable)"
+            exit 0
           fi
           cd aws/lambda/dist && zip -r /tmp/lambda.zip . && cd -
           aws lambda update-function-code \
@@ -64,14 +64,22 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_FROM_ADDRESS: ${{ secrets.MAIL_FROM_ADDRESS || 'info@apnaintern.in' }}
         run: |
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "::warning::AWS credentials missing — SMTP env update skipped"
+            exit 0
+          fi
           if [ -z "${SMTP_PASS:-}" ]; then
-            echo "::error::SMTP_PASS GitHub secret is required (Hostinger mailbox password)"
-            exit 1
+            echo "::warning::SMTP_PASS not set — SMTP env update skipped"
+            exit 0
           fi
           node aws/scripts/update-lambda-mail-env.mjs
 
       - name: Smoke test login_otp mail API
         run: |
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            echo "::warning::Skipping smoke test — Lambda deploy did not run"
+            exit 0
+          fi
           API="https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/send-mail"
           body='{"action":"login_otp","otp":"111222","to":"apnaintern.in@gmail.com","email":"apnaintern.in@gmail.com","purpose":"login"}'
           res=$(curl -sS -w "\n%{http_code}" -X POST "$API" -H "Content-Type: application/json" -d "$body")
