@@ -20,7 +20,7 @@ jobs:
   apply-and-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[rds-apply]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[rds-apply]') || contains(github.event.head_commit.message, '[seed-smtp]')
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +41,20 @@ jobs:
             npm run aws:rds:apply-all
           else
             echo "::warning::DATABASE_URL GitHub secret is empty — skipping direct RDS apply"
+          fi
+
+      - name: Seed site SMTP config for Vercel/Lambda mail
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || 'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com' }}
+          SMTP_USER: ${{ secrets.SMTP_USER || 'inp-3u5sedrqj7kqwjazxwmph2th' }}
+          MAIL_FROM_ADDRESS: ${{ secrets.MAIL_FROM_ADDRESS || 'info@apnaintern.in' }}
+        run: |
+          if [ -n "${DATABASE_URL:-}" ] && [ -n "${SMTP_PASS:-}" ]; then
+            node scripts/seed-site-smtp-config.mjs
+          else
+            echo "::warning::DATABASE_URL or SMTP_PASS missing — skipped site_smtp_config seed"
           fi
 
       - name: Bundle Lambda and update (skip if AWS secrets missing)

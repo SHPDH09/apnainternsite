@@ -70,12 +70,25 @@ function canUseSesApi(): boolean {
   return Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.USE_SES_API === 'true' || process.env.AWS_EXECUTION_ENV);
 }
 
-function resolveSmtpHost(): string {
+const MAIL_MANAGER_SMTP_HOST = 'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
+const MAIL_MANAGER_SMTP_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+
+function isStaleSmtpConfig(host: string, user: string): boolean {
+  const h = host.toLowerCase();
+  const u = user.toLowerCase();
   return (
-    process.env.SMTP_HOST ||
-    process.env.SES_SMTP_HOST ||
-    'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com'
+    h.includes('hostinger') ||
+    h.includes('email-smtp.') ||
+    u === 'info@apnaintern.in' ||
+    (u.includes('@apnaintern.in') && !u.startsWith('inp-'))
   );
+}
+
+function resolveSmtpHost(): string {
+  const raw = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || MAIL_MANAGER_SMTP_HOST).trim();
+  const user = (process.env.SMTP_USER || '').trim();
+  if (isStaleSmtpConfig(raw, user)) return MAIL_MANAGER_SMTP_HOST;
+  return raw;
 }
 
 function resolveSmtpPort(): number {
@@ -105,22 +118,89 @@ function sesMailHeaders(label = 'Apna Intern'): { from: MailFrom; sender: string
   return { from, sender: from.address };
 }
 
-function getSmtpCredentials(): { user: string; pass: string } {
-  return {
-    user: process.env.SMTP_USER || '',
-    pass: process.env.SMTP_PASS || '',
-  };
+function readSmtpPassFromEnv(): string {
+  return (
+    process.env.SMTP_PASS ||
+    process.env.HOSTINGER_SMTP_PASS ||
+    process.env.MAIL_SMTP_PASS ||
+    process.env.EMAIL_SMTP_PASS ||
+    ''
+  ).trim();
 }
 
-async function createSmtpTransporter() {
+type SmtpCreds = { user: string; pass: string; host: string; port: number; fromAddress: string };
+
+let cachedDbSmtp: SmtpCreds | null | undefined;
+
+async function loadSmtpFromDatabase(): Promise<SmtpCreds | null> {
+  if (cachedDbSmtp !== undefined) return cachedDbSmtp;
+  cachedDbSmtp = null;
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) return null;
+  try {
+    const pg = await import('pg');
+    const pool = new pg.default.Pool({
+      connectionString: databaseUrl,
+      ssl: /rds\.amazonaws\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+      max: 1,
+      connectionTimeoutMillis: 8000,
+    });
+    const { rows } = await pool.query<{
+      smtp_host: string;
+      smtp_port: string;
+      smtp_user: string;
+      smtp_pass: string;
+      mail_from_address: string;
+    }>(
+      `SELECT smtp_host, smtp_port, smtp_user, smtp_pass, mail_from_address
+       FROM public.site_smtp_config WHERE id = 1 LIMIT 1`
+    );
+    await pool.end();
+    const row = rows[0];
+    if (!row?.smtp_pass?.trim()) return null;
+    cachedDbSmtp = {
+      user: row.smtp_user.trim(),
+      pass: row.smtp_pass.trim(),
+      host: row.smtp_host.trim(),
+      port: Number(row.smtp_port) || 587,
+      fromAddress: row.mail_from_address.trim() || 'info@apnaintern.in',
+    };
+    return cachedDbSmtp;
+  } catch (e) {
+    console.warn('site_smtp_config load failed:', e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+async function resolveSmtpCredentials(): Promise<SmtpCreds> {
+  let user = (process.env.SMTP_USER || '').trim();
+  let pass = readSmtpPassFromEnv();
+  let host = resolveSmtpHost();
+  let port = resolveSmtpPort();
+  let fromAddress = resolveMailFromAddress();
+
+  if (!pass) {
+    const db = await loadSmtpFromDatabase();
+    if (db) return db;
+  }
+
+  if (!user || isStaleSmtpConfig(host, user)) {
+    user = MAIL_MANAGER_SMTP_USER;
+    host = MAIL_MANAGER_SMTP_HOST;
+  }
+
+  return { user, pass, host, port, fromAddress };
+}
+
+async function createSmtpTransporter(creds?: SmtpCreds) {
   const nodemailer = (await import('nodemailer')).default;
-  const { user, pass } = getSmtpCredentials();
+  const resolved = creds || (await resolveSmtpCredentials());
+  const { user, pass, host, port } = resolved;
   if (!user || !pass) {
     throw new Error('SMTP credentials missing');
   }
-  const port = resolveSmtpPort();
   return nodemailer.createTransport({
-    host: resolveSmtpHost(),
+    host,
     port,
     secure: port === 465,
     auth: { user, pass },
@@ -277,16 +357,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
-    const { from: mailFrom, sender: mailSender } = sesMailHeaders('Apna Intern');
+    const smtpCreds = await resolveSmtpCredentials();
+    const { user: SMTP_USER, pass: SMTP_PASS } = smtpCreds;
+    const mailFrom = { name: 'Apna Intern', address: smtpCreds.fromAddress };
+    const mailSender = smtpCreds.fromAddress;
     const useSesApi = canUseSesApi();
 
     if (!useSesApi && (!SMTP_USER || !SMTP_PASS)) {
-      return res.status(500).json({ success: false, message: 'SMTP Credentials missing' });
+      return res.status(500).json({
+        success: false,
+        message:
+          'SMTP credentials missing on server. Add SMTP_PASS in Vercel project env, or store Mail Manager SMTP in RDS site_smtp_config.',
+      });
     }
 
-    const transporter =
-      useSesApi ? null : await createSmtpTransporter();
+    const transporter = useSesApi ? null : await createSmtpTransporter(smtpCreds);
 
     if (normalizedAction === 'bulk_custom_mail_batch') {
       const rawRecipients = body.recipients;

@@ -50,10 +50,12 @@ function formatOtpDeliveryError(insertError: string | undefined, server: ServerO
 
   if (isSmtpAuthMessage(primary)) {
     return (
-      "Email server login failed (SMTP 535). Production mail API still has stale SMTP credentials. " +
-      "Update Lambda env SMTP_HOST/SMTP_USER/SMTP_PASS to the SES Mail Manager ingress endpoint, " +
-      "or redeploy after GitHub Actions secrets (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, SMTP_PASS) are set."
+      "Email server login failed (SMTP 535). Update Mail Manager SMTP credentials on the server (Vercel SMTP_PASS or RDS site_smtp_config)."
     );
+  }
+
+  if (primary.toLowerCase().includes('smtp credentials missing')) {
+    return primary;
   }
 
   if (isSesSandboxMessage(primary)) {
@@ -199,7 +201,9 @@ export async function deliverOtpEmail(
         viaServer: true,
       };
     }
-    lastServerJson = server.json;
+    if (server.json && (server.json.message || server.json.error)) {
+      lastServerJson = server.json;
+    }
   }
 
   if (localDev) {
