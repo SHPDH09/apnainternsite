@@ -60,3 +60,4 @@ awsJson([
 ]);
 
 console.log(`Updated Lambda mail env on ${fn} (${region})`);
+// Trigger Lambda deploy with correct SMTP credentials
