@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
 import { isLocalDevEnvironment } from "@/lib/isLocalDev";
 import { PASSWORD_RESETS_SCHEMA_HINT, passwordResetInsertRow } from "@/lib/passwordResetRow";
-import { siteApiUrl } from "@/lib/siteApi";
 
 export type OtpPurpose = "login" | "password_reset" | "security";
 
@@ -10,29 +9,25 @@ type DeliverResult =
   | { ok: true; email: string; devOtp?: string; viaServer?: boolean }
   | { ok: false; error: Error };
 
-type ServerOtpJson = {
+type OtpApiJson = {
   success?: boolean;
   emailSent?: boolean;
+  email?: string;
   message?: string;
-  hint?: string;
   error?: string;
   devOtp?: string;
 };
 
-function isSmtpAuthMessage(message: string): boolean {
-  const m = message.toLowerCase();
-  return (
-    m.includes("535") ||
-    m.includes("authentication credentials invalid") ||
-    m.includes("invalid login") ||
-    m.includes("smtp 535") ||
-    m.includes("email server authentication failed")
-  );
-}
-
-function isSesSandboxMessage(message: string): boolean {
-  const m = message.toLowerCase();
-  return m.includes("not verified") || m.includes("sandbox");
+/** Working mail API — apnaintern.in has SMTP; ezyintern.in send-mail crashes. */
+function getOtpDeliverApiUrl(): string {
+  if (typeof window === "undefined") return "/api/otp-deliver";
+  const host = window.location.hostname.toLowerCase();
+  if (host.includes("ezyintern") || host === "www.apnaintern.in") {
+    return "https://apnaintern.in/api/otp-deliver";
+  }
+  const fromEnv = import.meta.env.VITE_OTP_DELIVER_API_URL as string | undefined;
+  if (fromEnv?.trim()) return fromEnv.trim();
+  return "/api/otp-deliver";
 }
 
 function isPasswordResetsSchemaMessage(message: string): boolean {
@@ -45,52 +40,45 @@ function isPasswordResetsSchemaMessage(message: string): boolean {
   );
 }
 
-function formatOtpDeliveryError(insertError: string | undefined, server: ServerOtpJson): string {
-  const primary = [server.error, server.message, insertError].filter(Boolean).join(" ").trim();
-
-  if (isSmtpAuthMessage(primary)) {
-    return (
-      "Email server login failed (SMTP 535). Update Mail Manager SMTP credentials on the server (Vercel SMTP_PASS or RDS site_smtp_config)."
-    );
+function formatOtpDeliveryError(message: string, insertError?: string): string {
+  const primary = [message, insertError].filter(Boolean).join(" ").trim();
+  if (isPasswordResetsSchemaMessage(primary)) {
+    return [primary, PASSWORD_RESETS_SCHEMA_HINT].filter(Boolean).join(" ");
   }
-
-  if (primary.toLowerCase().includes('smtp credentials missing')) {
-    return primary;
-  }
-
-  if (isSesSandboxMessage(primary)) {
-    return (
-      primary ||
-      "Verification email could not be delivered — recipient must be verified in Amazon SES, or request SES production access."
-    );
-  }
-
-  if (isPasswordResetsSchemaMessage(insertError || "")) {
-    return [insertError, PASSWORD_RESETS_SCHEMA_HINT].filter(Boolean).join(" ");
-  }
-
   return primary || "Failed to send verification code. Try again in a minute or contact support.";
 }
 
-async function requestOtpViaServer(
+async function deliverOtpViaServer(
   email: string,
   purpose: OtpPurpose
-): Promise<{ ok: true; json: ServerOtpJson } | { ok: false; json: ServerOtpJson; status: number }> {
-  const serverRes = await fetch(siteApiUrl("/api/request-otp"), {
+): Promise<{ ok: true; email: string } | { ok: false; error: Error }> {
+  const res = await fetch(getOtpDeliverApiUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "request_otp", email, purpose }),
+    body: JSON.stringify({ email, purpose }),
   });
-  const serverJson = (await serverRes.json().catch(() => ({}))) as ServerOtpJson;
 
-  if (serverRes.ok && serverJson.success === true && serverJson.emailSent === true) {
-    return { ok: true, json: serverJson };
+  const text = await res.text().catch(() => "");
+  let body: OtpApiJson = {};
+  try {
+    body = JSON.parse(text) as OtpApiJson;
+  } catch {
+    throw new Error(
+      text.includes("FUNCTION_INVOCATION_FAILED")
+        ? "Email server error. Open https://apnaintern.in and try again."
+        : text.trim().slice(0, 280) || `OTP request failed (${res.status})`
+    );
   }
 
-  return { ok: false, json: serverJson, status: serverRes.status };
+  const detail = (body.error || body.message || "").trim();
+  if (!res.ok || body.success !== true || body.emailSent !== true) {
+    return { ok: false, error: new Error(detail || `OTP request failed (${res.status})`) };
+  }
+
+  return { ok: true, email: body.email || email };
 }
 
-async function requestOtpViaClient(
+async function deliverOtpViaClient(
   client: SupabaseClient,
   email: string,
   purpose: OtpPurpose,
@@ -127,7 +115,7 @@ async function requestOtpViaClient(
 
 /**
  * Store OTP in password_resets and email the user.
- * On RDS production, tries server insert + SES API first (avoids browser RLS + broken SMTP).
+ * Production uses /api/otp-deliver (single server call: RDS insert + SMTP).
  */
 export async function deliverOtpEmail(
   client: SupabaseClient,
@@ -140,70 +128,35 @@ export async function deliverOtpEmail(
     return { ok: false, error: new Error("Enter a valid email address.") };
   }
 
-  const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
   const localDev = isLocalDevEnvironment();
-  const mailAction = purpose === "login" ? "login_otp" : "send_otp";
-  // Prefer browser insert + edge/Lambda send-mail (edge can use Hostinger SMTP).
-  // Server forgot-password path fails when Lambda SMTP env is stale (535).
-  const preferServer = false;
 
   if (localDev && opts?.devSessionKey && typeof window !== "undefined") {
+    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
     window.sessionStorage.setItem(opts.devSessionKey, generatedOtp);
   }
 
-  let insertError: string | undefined;
-  let lastServerJson: ServerOtpJson = {};
-
-  if (preferServer) {
-    const server = await requestOtpViaServer(email, purpose);
-    if (server.ok) {
-      if (opts?.devSessionKey && typeof window !== "undefined") {
-        sessionStorage.removeItem(opts.devSessionKey);
+  if (!localDev) {
+    try {
+      const server = await deliverOtpViaServer(email, purpose);
+      if (server.ok) {
+        if (opts?.devSessionKey && typeof window !== "undefined") {
+          sessionStorage.removeItem(opts.devSessionKey);
+        }
+        return { ok: true, email: server.email, viaServer: true };
       }
-      return {
-        ok: true,
-        email,
-        devOtp: server.json.devOtp ?? (localDev ? generatedOtp : undefined),
-        viaServer: true,
-      };
-    }
-    lastServerJson = server.json;
-    // Server mail often fails on stale Lambda SMTP — fall back to browser insert + /api/send-mail.
-    const clientFallback = await requestOtpViaClient(client, email, purpose, generatedOtp, mailAction);
-    if (clientFallback.ok) {
-      return { ok: true, email, devOtp: localDev ? generatedOtp : undefined };
-    }
-    insertError = clientFallback.insertError;
-    if (!insertError && clientFallback.mailError) {
-      lastServerJson = { error: clientFallback.mailError, ...lastServerJson };
-    }
-  } else {
-    const clientAttempt = await requestOtpViaClient(client, email, purpose, generatedOtp, mailAction);
-    if (clientAttempt.ok) {
-      return { ok: true, email, devOtp: localDev ? generatedOtp : undefined };
-    }
-    insertError = clientAttempt.insertError;
-    if (!insertError && clientAttempt.mailError) {
-      lastServerJson = { error: clientAttempt.mailError };
+      return server;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send verification code";
+      return { ok: false, error: new Error(msg) };
     }
   }
 
-  if (!preferServer) {
-    const server = await requestOtpViaServer(email, purpose);
-    if (server.ok) {
-      if (opts?.devSessionKey && typeof window !== "undefined") {
-        sessionStorage.removeItem(opts.devSessionKey);
-      }
-      return {
-        ok: true,
-        email,
-        devOtp: server.json.devOtp ?? (localDev ? generatedOtp : undefined),
-        viaServer: true,
-      };
-    }
-    if (server.json && (server.json.message || server.json.error)) {
-      lastServerJson = server.json;
-    }
+  const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+  const mailAction = purpose === "login" ? "login_otp" : "send_otp";
+  const clientAttempt = await deliverOtpViaClient(client, email, purpose, generatedOtp, mailAction);
+
+  if (clientAttempt.ok) {
+    return { ok: true, email, devOtp: generatedOtp };
   }
 
   if (localDev) {
@@ -218,6 +171,8 @@ export async function deliverOtpEmail(
 
   return {
     ok: false,
-    error: new Error(formatOtpDeliveryError(insertError, lastServerJson)),
+    error: new Error(
+      formatOtpDeliveryError(clientAttempt.mailError || "", clientAttempt.insertError)
+    ),
   };
 }

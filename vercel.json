@@ -49,7 +49,7 @@
   ],
   "rewrites": [
     {
-      "source": "/api/((?!send-mail$|request-otp$|auth/forgot-password$).*)",
+      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$).*)",
       "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/$1"
     },
     {

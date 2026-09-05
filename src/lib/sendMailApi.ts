@@ -6,6 +6,10 @@ import { siteApiUrl } from "@/lib/siteApi";
  */
 export function getSendMailApiUrl(): string {
   if (typeof window === "undefined") return "/api/send-mail";
+  const host = window.location.hostname.toLowerCase();
+  if (host.includes("ezyintern") || host === "www.apnaintern.in") {
+    return "https://apnaintern.in/api/send-mail";
+  }
   const fromEnv = import.meta.env.VITE_SEND_MAIL_API_URL as string | undefined;
   if (fromEnv?.trim()) return fromEnv.trim();
   return siteApiUrl("/api/send-mail");
