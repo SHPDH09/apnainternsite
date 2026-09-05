@@ -42,7 +42,9 @@ try {
   const hasCfAuth =
     Boolean(process.env.CLOUDFLARE_API_TOKEN?.trim()) ||
     Boolean(process.env.WRANGLER_API_TOKEN?.trim());
-  if (hasCfAuth) {
+  // Workers Builds runs deploy in a separate step (WORKERS_CI=1) — do not deploy during build.
+  const isWorkersCi = process.env.WORKERS_CI === "1";
+  if (hasCfAuth && !isWorkersCi) {
     execSync("node scripts/wrangler-deploy-ci.mjs", { stdio: "inherit", env: process.env });
   }
 } catch (e) {
