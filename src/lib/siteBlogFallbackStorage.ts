@@ -111,13 +111,14 @@ async function readEnvelope(client: SupabaseClient): Promise<FallbackBlogPost[]>
       }
     } catch (err) {
       const msg = blogErrorText(err);
-      if (!/failed|404|not found/i.test(msg)) throw err;
+      if (!/failed|404|not found|not implemented|not_found/i.test(msg)) throw err;
     }
   }
 
   const { data, error } = await client.storage.from("logos").download(FALLBACK_OBJECT_PATH);
   if (error) {
-    if (/not found|404|does not exist/i.test(error.message)) return [];
+    const msg = error.message || "";
+    if (/not found|404|does not exist|not implemented|not_found/i.test(msg)) return [];
     throw error;
   }
   const text = await data.text();
