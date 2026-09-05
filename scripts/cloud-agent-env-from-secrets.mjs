@@ -10,6 +10,21 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const out = path.join(root, ".env.awsrds.local");
 
+function parseExisting(filePath) {
+  const outMap = {};
+  if (!fs.existsSync(filePath)) return outMap;
+  for (const line of fs.readFileSync(filePath, "utf8").split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const eq = t.indexOf("=");
+    if (eq < 1) continue;
+    outMap[t.slice(0, eq).trim()] = t.slice(eq + 1);
+  }
+  return outMap;
+}
+
+const preserved = parseExisting(out);
+
 /** @type {string[]} */
 const lines = ["# Auto-generated from Cursor Environment secrets — do not commit"];
 
@@ -52,6 +67,13 @@ if (smtpPass) lines.push(`SMTP_PASS=${smtpPass}`);
 if (mailFrom) lines.push(`MAIL_FROM=${mailFrom}`);
 if (mailFromAddress) lines.push(`MAIL_FROM_ADDRESS=${mailFromAddress}`);
 if (smtpPass) lines.push("USE_SES_API=false");
+
+// Keep Hostinger SMTP from a prior local/env file when secrets omit mail vars.
+for (const key of ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "MAIL_FROM", "MAIL_FROM_ADDRESS", "USE_SES_API"]) {
+  if (!lines.some((l) => l.startsWith(`${key}=`)) && preserved[key]) {
+    lines.push(`${key}=${preserved[key]}`);
+  }
+}
 
 if (lines.length === 1) {
   console.log("[cloud-agent-env] No AWS/RDS secrets in environment — skip .env.awsrds.local");
