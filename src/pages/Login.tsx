@@ -13,8 +13,7 @@ import {
   STUDENT_CREDENTIAL_LOGIN_QUERY_VALUE,
   STUDENT_LOGIN_PATH,
 } from "@/lib/authRoutes";
-import { getSendMailApiUrl } from "@/lib/sendMailApi";
-import { siteApiUrl } from "@/lib/siteApi";
+import { deliverOtpEmail } from "@/lib/requestOtpDelivery";
 import { resolveLoginIdentifier } from "@/lib/resolveLoginIdentifier";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +38,7 @@ import {
   REGISTRATION_PASSWORD_MIN_LENGTH,
   userFacingPasswordError,
 } from "@/lib/registrationPassword";
-import { PASSWORD_RESETS_SCHEMA_HINT, passwordResetInsertRow } from "@/lib/passwordResetRow";
+import { PASSWORD_RESETS_SCHEMA_HINT } from "@/lib/passwordResetRow";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, KeyRound } from "lucide-react";
 import {
@@ -574,49 +573,9 @@ const Login = () => {
         );
       }
 
-      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-
-      // Store OTP via local /rest → RDS (awsrds) or hosted PostgREST; email via /api/send-mail.
-      const { error: insertError } = await supabase
-        .from('password_resets')
-        .insert(passwordResetInsertRow(normalizedEmail, generatedOtp));
-
-      if (!insertError) {
-        const response = await fetch(getSendMailApiUrl(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'send_otp',
-            otp: generatedOtp,
-            to: normalizedEmail,
-            email: normalizedEmail,
-          }),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.success) {
-          const detail = [result.message, result.error].filter(Boolean).join(' ');
-          throw new Error(detail || 'Failed to send OTP');
-        }
-      } else {
-        // Optional: server inserts OTP + sends mail if SUPABASE_SERVICE_ROLE_KEY is configured.
-        const serverRes = await fetch(siteApiUrl('/api/auth/forgot-password'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'request_otp', email: normalizedEmail }),
-        });
-        const serverJson = await serverRes.json().catch(() => ({}));
-        if (!serverRes.ok || !serverJson.success) {
-          throw new Error(
-            [
-              insertError.message,
-              serverJson.message,
-              serverJson.hint,
-              PASSWORD_RESETS_SCHEMA_HINT,
-            ]
-              .filter(Boolean)
-              .join(' ')
-          );
-        }
+      const sent = await deliverOtpEmail(supabase, normalizedEmail, "password_reset");
+      if (!sent.ok) {
+        throw sent.error;
       }
 
       toast.success(
@@ -727,81 +686,23 @@ const Login = () => {
     if (!normalizedEmail) { toast.error("Please enter your email"); return; }
     setForgotPinLoading(true);
     try {
-      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      const { error: insertError } = await supabase
-        .from("password_resets")
-        .insert(passwordResetInsertRow(normalizedEmail, generatedOtp));
-
-      if (!insertError) {
-        sessionStorage.setItem("fp_otp", generatedOtp);
-        sessionStorage.setItem("fp_email", normalizedEmail);
-        const response = await fetch(getSendMailApiUrl(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "login_otp",
-            otp: generatedOtp,
-            to: normalizedEmail,
-            email: normalizedEmail,
-          }),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.success) {
-          // SMTP can hit 429. Fall back to server-side OTP generation + delivery.
-          const serverRes = await fetch(siteApiUrl("/api/auth/forgot-password"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "request_otp", email: normalizedEmail }),
-          });
-          const serverJson = await serverRes.json().catch(() => ({}));
-          if (!serverRes.ok || !serverJson.success) {
-            throw new Error(
-              [result.message, result.error, serverJson.message, serverJson.hint]
-                .filter(Boolean)
-                .join(" ") || "Failed to send OTP"
-            );
-          }
-          setForgotPinOtpMode("server");
-          sessionStorage.removeItem("fp_otp");
-          sessionStorage.setItem("fp_email", normalizedEmail);
-          toast.success("OTP sent! Check your email.");
-          setForgotPinStep("otp");
-          return;
-        }
-
-        setForgotPinOtpMode("client");
-        toast.success("OTP sent! Check your email.");
-        setForgotPinStep("otp");
-        return;
-      }
-
-      const serverRes = await fetch(siteApiUrl("/api/auth/forgot-password"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "request_otp", email: normalizedEmail }),
+      const sent = await deliverOtpEmail(supabase, normalizedEmail, "security", {
+        devSessionKey: "fp_otp",
       });
-      const serverJson = await serverRes.json().catch(() => ({}));
-      if (!serverRes.ok || !serverJson.success) {
-        throw new Error(
-          [insertError.message, serverJson.message, serverJson.hint]
-            .filter(Boolean)
-            .join(" ") || "Failed to send OTP"
-        );
+      if (!sent.ok) {
+        throw sent.error;
       }
-      setForgotPinOtpMode("server");
-      sessionStorage.removeItem("fp_otp");
+
       sessionStorage.setItem("fp_email", normalizedEmail);
+      setForgotPinOtpMode("server");
+      if (sent.devOtp && isLocalDevEnvironment()) {
+        toast.info(`Dev OTP: ${sent.devOtp}`);
+      }
       toast.success("OTP sent! Check your email.");
       setForgotPinStep("otp");
-    } catch (err: any) {
-      if (window.location.hostname === 'localhost') {
-        const devOtp = sessionStorage.getItem("fp_otp");
-        toast.info(`Dev OTP: ${devOtp}`);
-        setForgotPinOtpMode("client");
-        setForgotPinStep("otp");
-      } else {
-        toast.error(err.message || "Failed to send OTP");
-      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to send OTP";
+      toast.error(message);
     } finally {
       setForgotPinLoading(false);
     }
@@ -810,20 +711,12 @@ const Login = () => {
   const handleForgotPinVerifyOtp = () => {
     if (forgotPinOtp.length !== 6) { toast.error("Enter the 6-digit code"); return; }
     const verify = async () => {
-      if (forgotPinOtpMode === "server") {
-        const { data: valid, error } = await supabase.rpc("verify_password_reset_otp", {
-          p_identifier: forgotPinEmail.trim(),
-          p_otp: forgotPinOtp.trim(),
-        });
-        if (error) throw error;
-        if (!valid) throw new Error("Invalid or expired OTP");
-      } else {
-        const expected = sessionStorage.getItem("fp_otp");
-        const storedEmail = sessionStorage.getItem("fp_email");
-        if (forgotPinOtp !== expected || forgotPinEmail.trim().toLowerCase() !== storedEmail) {
-          throw new Error("Invalid or expired OTP");
-        }
-      }
+      const { data: valid, error } = await supabase.rpc("verify_password_reset_otp", {
+        p_identifier: forgotPinEmail.trim(),
+        p_otp: forgotPinOtp.trim(),
+      });
+      if (error) throw error;
+      if (!valid) throw new Error("Invalid or expired OTP");
       sessionStorage.removeItem("fp_otp");
       sessionStorage.removeItem("fp_email");
       setForgotPinStep("new_pin");

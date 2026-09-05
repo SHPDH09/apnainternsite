@@ -1,7 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
-import { isLocalDevEnvironment } from "@/lib/isLocalDev";
-import { PASSWORD_RESETS_SCHEMA_HINT, passwordResetInsertRow } from "@/lib/passwordResetRow";
+import { deliverOtpEmail } from "@/lib/requestOtpDelivery";
 
 const OTP_SEND_COOLDOWN_MS = 60_000;
 const OTP_SEND_LAST_KEY = "ezyintern_admin_login_otp_last_send";
@@ -34,7 +32,7 @@ function markAdminLoginOtpSent(email: string): void {
   window.sessionStorage.setItem(OTP_SEND_LAST_KEY, JSON.stringify(map));
 }
 
-/** Store OTP in password_resets and email via /api/send-mail (SMTP from env). */
+/** Store OTP in password_resets and email via /api/send-mail (with RDS server fallback). */
 export async function requestAdminLoginOtp(
   client: SupabaseClient,
   rawEmail: string
@@ -51,52 +49,20 @@ export async function requestAdminLoginOtp(
     };
   }
 
-  const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-  const localDev = isLocalDevEnvironment();
+  const sent = await deliverOtpEmail(client, email, "login", {
+    devSessionKey: "admin_login_otp",
+  });
 
-  if (localDev && typeof window !== "undefined") {
-    window.sessionStorage.setItem("admin_login_otp", generatedOtp);
+  if (!sent.ok) {
+    return sent;
   }
 
-  const { error: insertError } = await client
-    .from("password_resets")
-    .insert(passwordResetInsertRow(email, generatedOtp));
-
-  if (insertError) {
-    return {
-      ok: false,
-      error: new Error([insertError.message, PASSWORD_RESETS_SCHEMA_HINT].filter(Boolean).join(" ")),
-    };
-  }
-
-  try {
-    const response = await fetch(getSendMailApiUrl(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "login_otp",
-        otp: generatedOtp,
-        to: email,
-        email,
-      }),
-    });
-    await assertSendMailOk(response);
-  } catch (mailErr: unknown) {
-    const ownerFallbackEmails = ["apnaintern.in@gmail.com"];
-    if (ownerFallbackEmails.includes(email)) {
-      markAdminLoginOtpSent(email);
-      return { ok: true, email, devOtp: generatedOtp };
-    }
-    if (localDev) {
-      markAdminLoginOtpSent(email);
-      return { ok: true, email, devOtp: generatedOtp };
-    }
-    const detail = mailErr instanceof Error ? mailErr.message : "Failed to send verification code";
-    return { ok: false, error: new Error(detail) };
+  if (sent.devOtp && typeof window !== "undefined") {
+    window.sessionStorage.setItem("admin_login_otp", sent.devOtp);
   }
 
   markAdminLoginOtpSent(email);
-  return { ok: true, email, devOtp: localDev ? generatedOtp : undefined };
+  return { ok: true, email, devOtp: sent.devOtp };
 }
 
 export async function verifyAdminLoginOtp(

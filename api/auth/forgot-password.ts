@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomUUID } from 'node:crypto';
 import { query } from '../../aws/server/db.js';
 import { useRds } from '../lib/useRds.js';
+import { buildOtpMailContent, resolveOtpMailPurpose, type OtpMailPurpose } from '../lib/otpMailTemplate.js';
 
 type Action = 'request_otp' | 'reset_password';
 
@@ -20,30 +21,24 @@ function getJsonBody(req: VercelRequest): Record<string, unknown> {
   }
 }
 
-async function sendOtpEmail(normalizedEmail: string, generatedOtp: string): Promise<void> {
+async function sendOtpEmail(
+  normalizedEmail: string,
+  generatedOtp: string,
+  purpose: OtpMailPurpose
+): Promise<void> {
   const { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } = await import('../lib/smtpTransport.js');
   const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
   if (!SMTP_USER || !SMTP_PASS) {
     throw new Error('SMTP Credentials missing');
   }
 
+  const mailContent = buildOtpMailContent(generatedOtp, purpose);
   const transporter = await createSmtpTransporter();
   await transporter.sendMail({
-    ...sesMailHeaders(),
+    ...sesMailHeaders('Apna Intern Security'),
     to: normalizedEmail,
-    subject: 'Your Password Reset OTP',
-    html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <div style="background-color: #0084FF; padding: 24px; text-align: center;">
-              <h1 style="color: white; margin: 0;">Password Reset</h1>
-            </div>
-            <div style="padding: 24px; text-align: center;">
-              <p>Use this OTP to reset your password:</p>
-              <p style="font-size: 32px; letter-spacing: 8px; font-weight: 800; color: #0084FF;">${generatedOtp}</p>
-              <p style="font-size: 12px; color: #64748b;">This code expires in 15 minutes.</p>
-            </div>
-          </div>
-        `,
+    subject: mailContent.subject,
+    html: mailContent.html,
   });
 }
 
@@ -52,6 +47,7 @@ async function handleWithRds(
   normalizedEmail: string,
   otp: string | undefined,
   newPassword: string | undefined,
+  purpose: OtpMailPurpose,
   res: VercelResponse
 ) {
   if (action === 'request_otp') {
@@ -63,7 +59,7 @@ async function handleWithRds(
     );
 
     try {
-      await sendOtpEmail(normalizedEmail, generatedOtp);
+      await sendOtpEmail(normalizedEmail, generatedOtp, purpose);
     } catch (mailErr) {
       // Local AWS often has no SMTP — still store OTP so browser/session can verify.
       if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_OTP_WITHOUT_SMTP === 'true') {
@@ -125,14 +121,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const body = getJsonBody(req);
-    const { action, email, otp, newPassword } = body as {
+    const { action, email, otp, newPassword, purpose: purposeRaw } = body as {
       action?: Action;
       email?: string;
       otp?: string;
       newPassword?: string;
+      purpose?: string;
     };
 
     const normalizedEmail = String(email ?? '').trim().toLowerCase();
+    const purpose = resolveOtpMailPurpose(purposeRaw || 'password_reset');
 
     if (!action || !normalizedEmail) {
       return res.status(400).json({ success: false, message: 'Missing action or email' });
@@ -145,7 +143,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    return await handleWithRds(action, normalizedEmail, otp, newPassword, res);
+    return await handleWithRds(action, normalizedEmail, otp, newPassword, purpose, res);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error('forgot-password error:', msg);

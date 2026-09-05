@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { formatSmtpError, isSesIdentityNotVerifiedError } from './lib/smtpErrors.js';
+import { buildOtpMailContent, resolveOtpMailPurpose } from './lib/otpMailTemplate.js';
 
 /** Inlined — importing api/lib/*.ts crashes this Vercel function (FUNCTION_INVOCATION_FAILED). */
 type MailFrom = { name: string; address: string };
@@ -168,6 +169,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const type = body.type as string | undefined;
     const to = body.to as string | undefined;
     const subject = body.subject as string | undefined;
+    const purposeRaw = body.purpose as string | undefined;
     const data = (body.data || {}) as Record<string, string | undefined>;
 
     /** Lovable / some proxies drop `action`; infer college welcome from payload shape. */
@@ -323,22 +325,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         </div>
       `;
     } else if (normalizedAction === 'send_otp' || normalizedAction === 'login_otp') {
-      const isLogin = normalizedAction === 'login_otp';
-      mailOptions.subject = isLogin ? 'Your Login Verification Code' : 'Your Password Reset OTP';
-      mailOptions.html = `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-          <div style="background-color: #0084FF; padding: 24px; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">${isLogin ? 'Login Verification' : 'Password Reset'}</h1>
-          </div>
-          <div style="padding: 32px; text-align: center; color: #1e293b;">
-            <p style="font-size: 16px; margin-bottom: 24px;">Hello,</p>
-            <p style="font-size: 16px; line-height: 1.5;">${isLogin ? 'Use the following code to complete your login:' : 'You requested to reset your password. Use the 6-digit code below to proceed:'}</p>
-            <div style="background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 16px; margin: 32px 0; display: inline-block;">
-              <span style="font-size: 36px; font-weight: 800; letter-spacing: 12px; color: #0084FF; font-family: monospace;">${otp}</span>
-            </div>
-          </div>
-        </div>
-      `;
+      const otpPurpose = resolveOtpMailPurpose(
+        purposeRaw || (normalizedAction === 'login_otp' ? 'login' : 'password_reset')
+      );
+      const mailContent = buildOtpMailContent(String(otp || ''), otpPurpose);
+      mailOptions.subject = mailContent.subject;
+      mailOptions.html = mailContent.html;
     } else if (normalizedAction === 'registration_confirmation' || normalizedAction === 'registration_success') {
       const isResend = normalizedAction === 'registration_success';
       mailOptions.subject = isResend
