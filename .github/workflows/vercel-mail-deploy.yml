@@ -1,0 +1,45 @@
+# Redeploy Vercel production when mail/OTP API changes (requires Vercel GitHub integration or secrets).
+
+name: Vercel Mail Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "vercel.json"
+      - ".github/workflows/vercel-mail-deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_SUPABASE_PUBLISHABLE_KEY: local-anon-key
+          VITE_SUPABASE_PROJECT_ID: apnaintern-local
+
+      - name: Deploy to Vercel (when token configured)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -z "${VERCEL_TOKEN:-}" ] || [ -z "${VERCEL_PROJECT_ID:-}" ]; then
+            echo "::warning::VERCEL_TOKEN / VERCEL_PROJECT_ID not set — rely on Vercel GitHub auto-deploy"
+            exit 0
+          fi
+          npx vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN" --yes

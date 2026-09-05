@@ -1,15 +1,32 @@
-/** Amazon SES SMTP (ap-south-1) — shared by Vercel mail API routes. */
+/** AWS SES Mail Manager ingress SMTP — shared by Vercel mail API routes. */
 
 import { formatSmtpError } from "./smtpErrors.js";
 
 export type MailFrom = { name: string; address: string };
 
-export function resolveSmtpHost(): string {
+const MAIL_MANAGER_SMTP_HOST = "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com";
+const MAIL_MANAGER_SMTP_USER = "inp-3u5sedrqj7kqwjazxwmph2th";
+
+function isStaleSmtpConfig(host: string, user: string): boolean {
+  const h = host.toLowerCase();
+  const u = user.toLowerCase();
   return (
+    h.includes("hostinger") ||
+    h.includes("email-smtp.") ||
+    u === "info@apnaintern.in" ||
+    (u.includes("@apnaintern.in") && !u.startsWith("inp-"))
+  );
+}
+
+export function resolveSmtpHost(): string {
+  const raw = (
     process.env.SMTP_HOST ||
     process.env.SES_SMTP_HOST ||
-    'email-smtp.ap-south-1.amazonaws.com'
-  );
+    MAIL_MANAGER_SMTP_HOST
+  ).trim();
+  const user = (process.env.SMTP_USER || "").trim();
+  if (isStaleSmtpConfig(raw, user)) return MAIL_MANAGER_SMTP_HOST;
+  return raw;
 }
 
 export function resolveSmtpPort(): number {
@@ -46,10 +63,13 @@ export function sesMailHeaders(label = 'Apna Intern'): { from: MailFrom; sender:
 }
 
 export function getSmtpCredentials(): { user: string; pass: string } {
-  return {
-    user: process.env.SMTP_USER || '',
-    pass: process.env.SMTP_PASS || '',
-  };
+  const pass = (process.env.SMTP_PASS || "").trim();
+  let user = (process.env.SMTP_USER || "").trim();
+  const host = resolveSmtpHost();
+  if (!user || isStaleSmtpConfig(host, user)) {
+    user = MAIL_MANAGER_SMTP_USER;
+  }
+  return { user, pass };
 }
 
 export async function createSmtpTransporter() {
