@@ -6,6 +6,7 @@ import Busboy from "busboy";
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -98,25 +99,99 @@ export function storageRawBody(req: Request, res: Response, next: NextFunction) 
   req.on("error", next);
 }
 
+function decodeObjectKey(segments: string[]): string {
+  return decodeURIComponent(segments.join("/")).replace(/^\/+/, "");
+}
+
+function isReservedObjectSegment(segment: string): boolean {
+  return segment === "public" || segment === "sign" || segment === "upload";
+}
+
+async function streamS3Object(
+  req: Request,
+  res: Response,
+  s3Bucket: string,
+  objectKey: string
+): Promise<void> {
+  try {
+    const result = await getS3().send(
+      new GetObjectCommand({ Bucket: s3Bucket, Key: objectKey })
+    );
+    const contentType = result.ContentType || "application/octet-stream";
+    if (result.ContentLength != null) {
+      res.setHeader("Content-Length", String(result.ContentLength));
+    }
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=300");
+
+    if (req.method === "HEAD") {
+      res.status(200).end();
+      return;
+    }
+
+    const body = result.Body;
+    if (!body) {
+      res.status(404).json({ error: "not_found", message: "Object not found" });
+      return;
+    }
+
+    const bytes = await body.transformToByteArray();
+    res.status(200).send(Buffer.from(bytes));
+  } catch (err: unknown) {
+    const code =
+      err && typeof err === "object"
+        ? String((err as { name?: string; Code?: string }).name || (err as { Code?: string }).Code || "")
+        : "";
+    const status =
+      err && typeof err === "object"
+        ? (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
+        : undefined;
+    if (code === "NoSuchKey" || code === "NotFound" || status === 404) {
+      res.status(404).json({ error: "not_found", message: "Object not found" });
+      return;
+    }
+    throw err;
+  }
+}
+
 export async function handleStorageRequest(req: Request, res: Response) {
   const sub = storageSubPath(req);
   const parts = sub.split("/").filter(Boolean);
 
   try {
-    // GET/HEAD public object → redirect to S3
+    // GET/HEAD public object → stream from S3 (works for private buckets via Lambda creds)
     if (
       (req.method === "GET" || req.method === "HEAD") &&
       parts[0] === "object" &&
-      parts[1] === "public"
+      parts[1] === "public" &&
+      parts.length >= 4
     ) {
       const appBucket = parts[2];
-      const objectKey = decodeURIComponent(parts.slice(3).join("/"));
-      const url = publicObjectUrl(appBucket, objectKey);
-      if (!url) {
+      const objectKey = decodeObjectKey(parts.slice(3));
+      const s3Bucket = resolveS3Bucket(appBucket);
+      if (!s3Bucket) {
         res.status(404).json({ error: "Bucket not found" });
         return;
       }
-      res.redirect(302, url);
+      await streamS3Object(req, res, s3Bucket, objectKey);
+      return;
+    }
+
+    // GET/HEAD authenticated object download: object/{bucket}/{key...}
+    if (
+      (req.method === "GET" || req.method === "HEAD") &&
+      parts[0] === "object" &&
+      parts.length >= 3 &&
+      !isReservedObjectSegment(parts[1])
+    ) {
+      const appBucket = parts[1];
+      const objectKey = decodeObjectKey(parts.slice(2));
+      const s3Bucket = resolveS3Bucket(appBucket);
+      if (!s3Bucket) {
+        res.status(404).json({ error: "Bucket not found" });
+        return;
+      }
+      await streamS3Object(req, res, s3Bucket, objectKey);
       return;
     }
 
@@ -164,10 +239,11 @@ export async function handleStorageRequest(req: Request, res: Response) {
     if (
       (req.method === "POST" || req.method === "PUT") &&
       parts[0] === "object" &&
-      parts.length >= 3
+      parts.length >= 3 &&
+      !isReservedObjectSegment(parts[1])
     ) {
       const appBucket = parts[1];
-      const objectKey = parts.slice(2).join("/");
+      const objectKey = decodeObjectKey(parts.slice(2));
       const s3Bucket = resolveS3Bucket(appBucket);
       if (!s3Bucket) {
         res.status(404).json({ error: "Bucket not found", message: appBucket });

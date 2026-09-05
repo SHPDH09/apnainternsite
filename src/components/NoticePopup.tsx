@@ -15,37 +15,37 @@ import { fetchPublicSitePopups } from "@/lib/sitePopupsApi";
 import { isPopupLiveForLocation, type SitePopup } from "@/lib/sitePopups";
 import { StorageImage } from "@/components/StorageImage";
 
-const DISMISS_PREFIX = "site-popup-dismissed:";
+const LEGACY_DISMISS_PREFIX = "site-popup-dismissed:";
 
-function dismissedIds(): Set<string> {
-  const ids = new Set<string>();
+function clearLegacyPopupDismissals() {
   try {
+    const keys: string[] = [];
     for (let i = 0; i < sessionStorage.length; i++) {
       const key = sessionStorage.key(i);
-      if (key?.startsWith(DISMISS_PREFIX) && sessionStorage.getItem(key) === "1") {
-        ids.add(key.slice(DISMISS_PREFIX.length));
-      }
+      if (key?.startsWith(LEGACY_DISMISS_PREFIX)) keys.push(key);
     }
-  } catch {
-    /* ignore */
-  }
-  return ids;
-}
-
-function markDismissed(id: string) {
-  try {
-    sessionStorage.setItem(`${DISMISS_PREFIX}${id}`, "1");
+    keys.forEach((key) => sessionStorage.removeItem(key));
   } catch {
     /* ignore */
   }
 }
 
-/** Renders scheduled, page-targeted popups from Admin → Popup Management. */
+/** Popups repeat on each page visit (route change or refresh). Dismiss only lasts for the current URL. */
 export function SitePopupsHost() {
   const { pathname, hash } = useLocation();
+  const routeKey = `${pathname}${hash || ""}`;
   const [allPopups, setAllPopups] = useState<SitePopup[]>([]);
   const [checkoutActive, setCheckoutActive] = useState(false);
-  const [dismissTick, setDismissTick] = useState(0);
+  /** Popup ids dismissed on the current route only — cleared when pathname/hash changes. */
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    clearLegacyPopupDismissals();
+  }, []);
+
+  useEffect(() => {
+    setDismissedIds(new Set());
+  }, [routeKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +61,7 @@ export function SitePopupsHost() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [routeKey]);
 
   useEffect(() => {
     const closeForPayment = () => {
@@ -81,24 +81,29 @@ export function SitePopupsHost() {
   }, []);
 
   const queue = useMemo(() => {
-    const skipped = dismissedIds();
     return allPopups.filter(
-      (p) => !skipped.has(p.id) && isPopupLiveForLocation(p, pathname, hash)
+      (p) => !dismissedIds.has(p.id) && isPopupLiveForLocation(p, pathname, hash)
     );
-  }, [allPopups, pathname, hash, dismissTick]);
+  }, [allPopups, pathname, hash, dismissedIds]);
 
   const current = queue[0] || null;
 
   const closeCurrent = () => {
-    if (current) markDismissed(current.id);
-    setDismissTick((n) => n + 1);
+    if (current) {
+      setDismissedIds((prev) => {
+        const next = new Set(prev);
+        next.add(current.id);
+        return next;
+      });
+    }
   };
 
   if (!current || checkoutActive) return null;
 
   const ctaHref = current.cta_url?.trim() || "";
   const ctaLabel = current.cta_label?.trim() || (ctaHref ? "Open" : "");
-  const isImage = current.popup_type === "image" && current.image_url;
+  const isImage =
+    current.popup_type === "image" && Boolean(current.image_path?.trim() || current.image_url?.trim());
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) closeCurrent(); }}>
