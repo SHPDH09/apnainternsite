@@ -1,4 +1,6 @@
 import { siteApiUrl } from "@/lib/siteApi";
+import { getCanonicalMailApiUrl } from "@/lib/legacyDomainRedirect";
+import { isLocalDevEnvironment } from "@/lib/isLocalDev";
 
 /**
  * Mail uses `/api/send-mail`. Override with `VITE_SEND_MAIL_API_URL`, or set
@@ -6,9 +8,8 @@ import { siteApiUrl } from "@/lib/siteApi";
  */
 export function getSendMailApiUrl(): string {
   if (typeof window === "undefined") return "/api/send-mail";
-  const host = window.location.hostname.toLowerCase();
-  if (host.includes("ezyintern") || host === "www.apnaintern.in") {
-    return "https://apnaintern.in/api/send-mail";
+  if (!isLocalDevEnvironment()) {
+    return getCanonicalMailApiUrl("/api/send-mail");
   }
   const fromEnv = import.meta.env.VITE_SEND_MAIL_API_URL as string | undefined;
   if (fromEnv?.trim()) return fromEnv.trim();

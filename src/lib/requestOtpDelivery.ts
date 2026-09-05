@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
 import { isLocalDevEnvironment } from "@/lib/isLocalDev";
+import { getCanonicalMailApiUrl } from "@/lib/legacyDomainRedirect";
 import { PASSWORD_RESETS_SCHEMA_HINT, passwordResetInsertRow } from "@/lib/passwordResetRow";
 
 export type OtpPurpose = "login" | "password_reset" | "security";
@@ -18,16 +19,11 @@ type OtpApiJson = {
   devOtp?: string;
 };
 
-/** Production OTP — single /api/send-mail call (RDS insert + SMTP). */
+/** Production OTP — always use apnaintern.in mail API (ezyintern.in send-mail crashes). */
 function getOtpDeliverApiUrl(): string {
   if (typeof window === "undefined") return "/api/send-mail";
-  const host = window.location.hostname.toLowerCase();
-  if (host.includes("ezyintern") || host === "www.apnaintern.in") {
-    return "https://apnaintern.in/api/send-mail";
-  }
-  const fromEnv = import.meta.env.VITE_OTP_DELIVER_API_URL as string | undefined;
-  if (fromEnv?.trim()) return fromEnv.trim();
-  return "/api/send-mail";
+  if (isLocalDevEnvironment()) return "/api/send-mail";
+  return getCanonicalMailApiUrl("/api/send-mail");
 }
 
 function isPasswordResetsSchemaMessage(message: string): boolean {

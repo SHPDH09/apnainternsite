@@ -244,7 +244,9 @@ const Login = () => {
         (typeof window !== "undefined" ? window.sessionStorage.getItem("admin_login_otp") : null);
       setAdminDevOtp(devCode);
       setAdminOtpSent(true);
-      toast.success(`Verification code sent to ${sent.email}`);
+      toast.success(
+        `Verification code sent to ${sent.email}. Check Inbox and Spam — sender: info@apnaintern.in`
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to send verification code";
       toast.error(msg);

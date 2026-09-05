@@ -34,7 +34,7 @@ function resolveOtpMailPurpose(raw: unknown): OtpMailPurpose {
   return 'password_reset';
 }
 
-function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_reset'): { subject: string; html: string } {
+function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_reset'): { subject: string; html: string; text: string } {
   const copy =
     purpose === 'login'
       ? {
@@ -59,7 +59,8 @@ function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_re
   const code = String(otp || '').trim();
   const year = new Date().getFullYear();
   const html = `<!DOCTYPE html><html lang="en"><body style="margin:0;padding:0;background:#f1f5f9;font-family:system-ui,sans-serif;"><table role="presentation" width="100%" style="background:#f1f5f9;padding:32px 16px;"><tr><td align="center"><table role="presentation" width="100%" style="max-width:560px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;"><tr><td style="padding:28px 32px 8px;text-align:center;"><p style="margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;">Apna Intern</p><h1 style="margin:0;font-size:22px;color:#0f172a;">${copy.headline}</h1></td></tr><tr><td style="padding:8px 32px 0;text-align:center;"><p style="margin:0;font-size:15px;color:#475569;">${copy.lead}</p></td></tr><tr><td style="padding:28px 32px;text-align:center;"><p style="margin:0;font-size:36px;font-weight:700;letter-spacing:.35em;color:#1e40af;font-family:monospace;">${code}</p><p style="margin:20px 0 0;font-size:13px;color:#64748b;">Valid for 15 minutes.</p></td></tr><tr><td style="padding:0 32px 24px;"><div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 16px;"><p style="margin:0;font-size:13px;color:#1e3a8a;">${copy.footerNote}</p></div></td></tr><tr><td style="padding:20px 32px;background:#f8fafc;text-align:center;border-top:1px solid #e2e8f0;"><p style="margin:0;font-size:11px;color:#94a3b8;">© ${year} Apna Intern</p></td></tr></table></td></tr></table></body></html>`;
-  return { subject: copy.subject, html };
+  const text = `Apna Intern — ${copy.headline}\n\n${copy.lead}\n\nYour verification code: ${code}\n\nValid for 15 minutes.\n${copy.footerNote}\n`;
+  return { subject: copy.subject, html, text };
 }
 
 function canUseSesApi(): boolean {
@@ -402,6 +403,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           to: recipient,
           subject: mailContent.subject,
           html: mailContent.html,
+          text: mailContent.text,
+          replyTo: 'apnaintern.in@gmail.com',
+          headers: {
+            'X-Entity-Ref-ID': `otp-${Date.now()}`,
+          },
         });
         return res.status(200).json({
           success: true,
@@ -577,6 +583,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const mailContent = buildOtpMailContent(String(otp || ''), otpPurpose);
       mailOptions.subject = mailContent.subject;
       mailOptions.html = mailContent.html;
+      mailOptions.text = mailContent.text;
     } else if (normalizedAction === 'registration_confirmation' || normalizedAction === 'registration_success') {
       const isResend = normalizedAction === 'registration_success';
       mailOptions.subject = isResend
