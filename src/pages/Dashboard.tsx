@@ -4,6 +4,9 @@ import { StudentLearningPanel, type LearningPanelTab } from "@/components/studen
 import { StudentHomeView } from "@/components/student/StudentHomeView";
 import { StudentMyCoursesPanel } from "@/components/student/StudentMyCoursesPanel";
 import { StudentAttendancePanel } from "@/components/student/StudentAttendancePanel";
+import { StudentLiveSessionsSection } from "@/components/student/StudentLiveSessionsSection";
+import { StudentProfileView } from "@/components/student/StudentProfileView";
+import { StudentSettingsView } from "@/components/student/StudentSettingsView";
 import { StudentDocumentPreviewDialog } from "@/components/student/StudentDocumentPreviewDialog";
 import { useStudentDocumentActions } from "@/hooks/useStudentDocumentActions";
 import { fetchStudentLearningMaterials, type LearningMaterialRow } from "@/lib/learningMaterialsApi";
@@ -22,7 +25,6 @@ import { ScrollableDialogBody, scrollableDialogShellClass } from "@/components/u
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { ChangePinModal } from "@/components/ChangePinModal";
 import { syncDirectoryPasswordAfterAuthChange } from "@/lib/studentCredentials";
 import {
   REGISTRATION_PASSWORD_MIN_LENGTH,
@@ -70,11 +72,7 @@ import { fetchStudentAssignments } from "@/lib/assignmentApi";
 import { matchSubjectToOption, subjectsFor } from "@/lib/subjectOptions";
 import {
   ClassLinkRow,
-  classJoinUrl,
-  inferLinkTypeFromUrl,
-  linkTypeLabel,
   studentMatchesClassTargets,
-  youtubeEmbedUrl,
 } from "@/lib/classLinkTargeting";
 import {
   ATTENDANCE_ELIGIBILITY_MIN_PERCENT,
@@ -94,7 +92,6 @@ import {
 } from "@/lib/internshipProgramme";
 import { isBnmuStudent } from "@/lib/feeRules";
 import { isStudentSelfProfileEditBlocked } from "@/lib/studentPolicy";
-import { StaffSecurityPanel } from "@/components/staff/StaffAccountPanels";
 
 const UG_DEPARTMENTS = ["B.A.", "B.Sc", "B.Com"] as const;
 const PG_DEPARTMENTS = ["M.A.", "M.Sc", "M.Com"] as const;
@@ -848,9 +845,9 @@ const Dashboard = () => {
                   )}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80 p-0 shadow-elegant">
-                <div className="p-4 border-b bg-muted/20">
-                  <h3 className="font-bold">Notifications</h3>
+              <DropdownMenuContent align="end" className="w-80 overflow-hidden rounded-xl border border-slate-200 p-0 shadow-lg">
+                <div className="border-b border-slate-200 bg-slate-50/80 p-4">
+                  <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
                 </div>
                 <ScrollArea className="max-h-80">
                   {notifications.length === 0 ? (
@@ -860,7 +857,7 @@ const Dashboard = () => {
                       <button
                         key={notif.id}
                         type="button"
-                        className={`w-full text-left p-4 border-b hover:bg-muted/50 transition-colors ${
+                        className={`w-full border-b border-slate-100 p-4 text-left transition-colors hover:bg-slate-50 ${
                           notif.is_read ? "opacity-80" : "bg-primary/5"
                         }`}
                         onClick={() => {
@@ -901,11 +898,11 @@ const Dashboard = () => {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <div className="flex md:hidden items-center gap-1">
+            <div className="flex items-center gap-1 md:hidden">
               <Button
                 variant="ghost"
                 size="icon"
-                className={`size-9 rounded-xl ${activeView === "home" ? "bg-primary/10 text-primary" : ""}`}
+                className={`size-9 rounded-lg ${activeView === "home" ? "bg-slate-100 text-slate-900" : "text-slate-500"}`}
                 onClick={() => setActiveView("home")}
               >
                 <LayoutDashboard className="size-4" />
@@ -913,7 +910,7 @@ const Dashboard = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                className={`size-9 rounded-xl ${activeView === "courses" ? "bg-primary/10 text-primary" : ""}`}
+                className={`size-9 rounded-lg ${activeView === "courses" ? "bg-slate-100 text-slate-900" : "text-slate-500"}`}
                 onClick={() => setActiveView("courses")}
               >
                 <GraduationCap className="size-4" />
@@ -923,8 +920,8 @@ const Dashboard = () => {
             <Button
               variant="ghost"
               size="sm"
-              className={`hidden md:inline-flex text-slate-600 hover:text-primary gap-2 rounded-xl ${
-                activeView === "profile" ? "bg-primary/10 text-primary" : ""
+              className={`hidden md:inline-flex gap-2 rounded-lg text-slate-600 hover:text-slate-900 ${
+                activeView === "profile" ? "bg-slate-100 text-slate-900" : ""
               }`}
               onClick={activeView === "home" ? goToProfileHome : goToDashboardHome}
             >
@@ -943,8 +940,8 @@ const Dashboard = () => {
             <Button
               variant="ghost"
               size="sm"
-              className={`md:hidden text-slate-600 hover:text-primary rounded-xl ${
-                activeView === "profile" ? "bg-primary/10 text-primary" : ""
+              className={`rounded-lg text-slate-600 hover:text-slate-900 md:hidden ${
+                activeView === "profile" ? "bg-slate-100 text-slate-900" : ""
               }`}
               onClick={activeView === "home" ? goToProfileHome : goToDashboardHome}
             >
@@ -965,349 +962,141 @@ const Dashboard = () => {
 
       <main className="flex-1 py-6 md:py-8">
         <div className="container mx-auto px-4 max-w-7xl">
-          {activeView !== "home" && (
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-            <div className="flex items-center gap-5">
-              <div className="size-16 md:size-20 rounded-2xl gradient-hero flex items-center justify-center text-white text-3xl font-bold shadow-elegant">
-                {profile?.full_name?.charAt(0)}
-              </div>
-              <div>
-                <h1 className="text-3xl md:text-5xl font-bold tracking-tight">Howdy, {profile?.full_name?.split(" ")[0]}!</h1>
-                <p className="text-muted-foreground mt-1 flex items-center gap-2">
-                  <span className="flex items-center gap-1">Student Dashboard</span>
-                  <span className="size-1 rounded-full bg-muted-foreground/30"></span>
-                  <span className="text-primary font-medium">
-                    Registration ID:{" "}
-                    {displayRegistrationId(profile?.registration_id, profile?.created_at)}
-                  </span>
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {localStorage.getItem("impersonate_id") && (
-                <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10 w-full sm:w-auto" onClick={() => { localStorage.removeItem("impersonate_id"); window.location.reload(); }}>
-                  Exit Preview
+          {activeView !== "home" &&
+          (localStorage.getItem("impersonate_id") ||
+            (isAdmin && !localStorage.getItem("impersonate_id"))) ? (
+            <div className="mb-6 flex flex-wrap gap-2 student-dash-animate-in">
+              {localStorage.getItem("impersonate_id") ? (
+                <Button
+                  variant="outline"
+                  className="rounded-lg border-destructive text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    localStorage.removeItem("impersonate_id");
+                    window.location.reload();
+                  }}
+                >
+                  Exit preview
                 </Button>
-              )}
-              {isAdmin && !localStorage.getItem("impersonate_id") && (
-                <Button variant="outline" className="shadow-sm border-primary/20 hover:bg-primary/5 gap-2 w-full sm:w-auto" onClick={() => navigate("/admin")}>
-                  <ShieldCheck className="size-4 text-primary" /> Admin Panel
+              ) : null}
+              {isAdmin && !localStorage.getItem("impersonate_id") ? (
+                <Button
+                  variant="outline"
+                  className="gap-2 rounded-lg border-slate-300 hover:bg-slate-50"
+                  onClick={() => navigate("/admin")}
+                >
+                  <ShieldCheck className="size-4" /> Admin panel
                 </Button>
-              )}
-              <Button variant="hero" className="gap-2 shadow-lg w-full sm:w-auto" onClick={() => setIsOfferLetterOpen(true)}>
-                <FileText className="size-4" /> Offer Letter
-              </Button>
+              ) : null}
             </div>
-          </div>
-          )}
+          ) : null}
 
-          {activeView === 'settings' ? (
-            <div className="max-w-md mx-auto">
-              <Card className="p-8 shadow-elegant border-none bg-white">
-                <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><ShieldCheck className="size-5 text-primary" /> Security Settings</h3>
-                {currentUserId && (
-                  <div className="mb-6 p-4 bg-slate-50 rounded-xl border">
-                    <p className="text-sm font-bold text-slate-700 mb-3">4-Digit Security Code</p>
-                    <p className="text-xs text-slate-500 mb-4">This code is used as an additional layer of protection when you login.</p>
-                    <ChangePinModal userId={currentUserId} />
-                  </div>
-                )}
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = e.currentTarget;
-                  const newPass = (form.elements.namedItem('new_password') as HTMLInputElement).value;
-                  const confirmPass = (form.elements.namedItem('confirm_password') as HTMLInputElement).value;
+          {activeView === "settings" ? (
+            <StudentSettingsView
+              currentUserId={currentUserId}
+              settingsActive={activeView === "settings"}
+              onSignOut={async () => {
+                await supabase.auth.signOut();
+                navigate("/login");
+              }}
+              onPasswordSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const newPass = (form.elements.namedItem("new_password") as HTMLInputElement).value;
+                const confirmPass = (form.elements.namedItem("confirm_password") as HTMLInputElement)
+                  .value;
 
-                  if (newPass !== confirmPass) return toast.error("Passwords do not match");
-                  if (newPass.length < REGISTRATION_PASSWORD_MIN_LENGTH) {
-                    return toast.error(
-                      `Password must be at least ${REGISTRATION_PASSWORD_MIN_LENGTH} characters`
+                if (newPass !== confirmPass) return toast.error("Passwords do not match");
+                if (newPass.length < REGISTRATION_PASSWORD_MIN_LENGTH) {
+                  return toast.error(
+                    `Password must be at least ${REGISTRATION_PASSWORD_MIN_LENGTH} characters`
+                  );
+                }
+
+                try {
+                  await setLoginPasswordViaRpc(supabase, newPass);
+                  try {
+                    await syncDirectoryPasswordAfterAuthChange(supabase, newPass);
+                  } catch (syncErr: unknown) {
+                    const m = syncErr instanceof Error ? syncErr.message : String(syncErr);
+                    toast.warning(
+                      `Login password updated, but saving copy for admin emails failed: ${m}. Run migration 20260509232000_student_sync_directory_password_rpc.sql or contact support.`
                     );
                   }
-
-                  try {
-                    await setLoginPasswordViaRpc(supabase, newPass);
-                    try {
-                      await syncDirectoryPasswordAfterAuthChange(supabase, newPass);
-                    } catch (syncErr: unknown) {
-                      const m = syncErr instanceof Error ? syncErr.message : String(syncErr);
-                      toast.warning(
-                        `Login password updated, but saving copy for admin emails failed: ${m}. Run migration 20260509232000_student_sync_directory_password_rpc.sql or contact support.`
-                      );
-                    }
-                    toast.success("Password updated successfully!");
-                    form.reset();
-                  } catch (pwErr: unknown) {
-                    toast.error(userFacingPasswordError(pwErr));
-                  }
-                }} className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-muted-foreground uppercase">New Password</label>
-                    <input name="new_password" type="password" className="w-full p-3 rounded-xl border bg-slate-50 focus:ring-2 focus:ring-primary/20 outline-none transition-all" required placeholder="••••••••" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-muted-foreground uppercase">Confirm New Password</label>
-                    <input name="confirm_password" type="password" className="w-full p-3 rounded-xl border bg-slate-50 focus:ring-2 focus:ring-primary/20 outline-none transition-all" required placeholder="••••••••" />
-                  </div>
-                  <Button type="submit" className="w-full h-12 shadow-glow gap-2 mt-2">
-                    <CheckCircle2 className="size-4" /> Update Password
-                  </Button>
-                </form>
-                </Card>
-              <div className="mt-6">
-                <StaffSecurityPanel isActive={activeView === 'settings'} onSignOutCurrent={async () => { await supabase.auth.signOut(); navigate('/login'); }} />
-              </div>
-            </div>
+                  toast.success("Password updated successfully!");
+                  form.reset();
+                } catch (pwErr: unknown) {
+                  toast.error(userFacingPasswordError(pwErr));
+                }
+              }}
+            />
           ) : activeView === "courses" ? (
             currentUserId ? (
               <StudentMyCoursesPanel
                 studentId={localStorage.getItem("impersonate_id") || currentUserId}
               />
             ) : null
-          ) : activeView === 'profile' ? (
-            <>
-              <div id="profile-section" className="grid lg:grid-cols-3 gap-6 mb-8">
-            <div className="lg:col-span-2 space-y-6">
-              <Card className="p-8 shadow-elegant border-none bg-white relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <User className="size-20 text-primary" />
-                </div>
-                <div className="flex items-center justify-between border-b pb-4 mb-6">
-                  <h3 className="text-lg font-bold flex items-center gap-2"><User className="size-5 text-primary" /> Personal Profile</h3>
-                  {!studentProfileEditLocked ? (
-                  <Button variant="ghost" size="sm" className="text-primary hover:bg-primary/5 gap-2" onClick={() => {
-                    setEditProfileData({
-                      email: profile?.email || "",
-                      full_name: profile?.full_name || "",
-                      contact_number: profile?.contact_number || "",
-                      parent_name: profile?.parent_name || profile?.father_name || "",
-                      gender: profile?.gender || "",
-                      university_name: profile?.university_name || "",
-                      college_name: profile?.college_name || "",
-                      degree: profile?.degree || "",
-                      department: profile?.department || "",
-                      subject:
-                        matchSubjectToOption(
-                          profile?.subject || profile?.metadata?.subject,
-                          profile?.department
-                        ) ||
-                        profile?.subject ||
-                        profile?.metadata?.subject ||
-                        "",
-                      academic_session: profile?.academic_session || "",
-                      class_semester: profile?.class_semester || "",
-                      roll_number: profile?.roll_number || "",
-                      university_roll_number:
-                        profile?.university_roll_number ||
-                        resolveBnmuUniversityRollNumber(profile) ||
-                        "",
-                      internship_domain: profile?.internship_domain || profile?.course || "",
-                      internship_mode: resolveInternshipModeForUniversity(
-                        profile?.university_name,
-                        profile?.internship_mode || profile?.metadata?.internship_mode
-                      ),
-                      internship_duration: profile?.internship_duration || "",
-                      joining_date: profile?.joining_date || "",
-                      completion_date: profile?.completion_date || "",
-                      emergency_name: profile?.emergency_name || "",
-                      emergency_contact: profile?.emergency_contact || "",
-                      emergency_relation: profile?.emergency_relation || "",
-                    });
-                    setIsEditProfileOpen(true);
-                  }}>
-                    <Edit2 className="size-4" /> Edit Profile
-                  </Button>
-                  ) : null}
-                </div>
-                <div className="grid md:grid-cols-2 gap-x-8 gap-y-6">
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Full Name</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.full_name || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Email Address</p>
-                    <p className="text-sm font-bold text-slate-800 truncate">{profile?.email || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Contact Number</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.contact_number || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Gender</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.gender || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Parent / Guardian Name</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.parent_name || profile?.father_name || "—"}</p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-8 shadow-elegant border-none bg-white relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <GraduationCap className="size-20 text-primary" />
-                </div>
-                <h3 className="text-lg font-bold mb-6 flex items-center gap-2 border-b pb-4"><GraduationCap className="size-5 text-primary" /> Academic Information</h3>
-                <div className="grid md:grid-cols-2 gap-x-8 gap-y-6">
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">University Name</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.university_name || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">College Name</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.college_name || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Degree Program</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.degree || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Department</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.department || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Major / Subject</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.subject || profile?.metadata?.subject || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Academic Session</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.academic_session || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Class / Semester</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.class_semester || profile?.class_sem || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Registration No.</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.roll_number || "—"}</p>
-                  </div>
-                  {isBnmuStudent(profile?.university_name) ? (
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Roll No.</p>
-                      <p className="text-sm font-bold text-slate-800">
-                        {profile?.university_roll_number ||
-                          resolveBnmuUniversityRollNumber(profile) ||
-                          "—"}
-                      </p>
-                    </div>
-                  ) : null}
-                  <div className="space-y-1 md:col-span-2 p-3 bg-primary/5 rounded-lg border border-primary/10">
-                    <p className="text-[10px] text-primary font-black uppercase tracking-widest">Internship Domain</p>
-                    <p className="text-base font-black text-primary">{profile?.course || profile?.internship_domain || "—"}</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
-
-            <div className="space-y-6">
-              <Card className="p-8 shadow-elegant border-none bg-white relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Phone className="size-20 text-primary" />
-                </div>
-                <h3 className="text-lg font-bold mb-6 flex items-center gap-2 border-b pb-4"><Phone className="size-5 text-primary" /> Emergency Details</h3>
-                <div className="space-y-6">
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Contact Name</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.emergency_name || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Contact Phone</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.emergency_contact || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Relationship</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.emergency_relation || "—"}</p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-6 border-none bg-gradient-to-br from-primary to-accent text-white shadow-elegant">
-                <div className="flex items-start gap-4">
-                  <div className="size-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-sm">
-                    <Award className="size-6 text-white" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm">Status: Active</h4>
-                    <p className="text-xs text-white/80 mt-1 leading-relaxed">You are currently enrolled in the internship program. Your progress is being tracked by our team.</p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-8 shadow-elegant border-none bg-slate-900 text-white overflow-hidden relative">
-                <div className="absolute top-0 right-0 p-8 opacity-20">
-                  <Briefcase className="size-20" />
-                </div>
-                <div className="relative z-10">
-                  <h3 className="text-xl font-bold mb-3">Support & Help</h3>
-                  <p className="text-slate-400 text-sm mb-6 max-w-sm">Need help with your internship or have questions about the portal? Our support team is here to assist you 24/7.</p>
-                  <Button variant="outline" className="border-slate-700 hover:bg-slate-800 text-white gap-2 w-full">
-                    <ExternalLink className="size-4" /> Contact Support
-                  </Button>
-                </div>
-              </Card>
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-1 gap-6">
-            <Card className="p-8 shadow-elegant border-none bg-white overflow-hidden relative border-t-4 border-t-primary">
-              <div className="absolute -bottom-6 -right-6 opacity-10">
-                <FileText className="size-32 text-primary" />
-              </div>
-              <div className="relative z-10">
-                <h3 className="text-2xl font-bold mb-3">Internship Documents</h3>
-                <p className="text-muted-foreground text-sm mb-8 max-w-2xl">Access and download your official internship documents. Your offer letter is available immediately, and your certificate will be generated upon successful completion of the program.</p>
-                <div className="flex flex-wrap gap-4">
-                  <Button variant="default" className="bg-primary hover:bg-primary/90 h-12 px-6 shadow-md gap-2" onClick={() => setIsOfferLetterOpen(true)}>
-                    <Download className="size-5" /> Download Offer Letter
-                  </Button>
-                  <Button variant="outline" className="h-12 px-6 shadow-md gap-2 border-primary/20 hover:bg-primary/5 text-primary" onClick={() => setIsReceiptOpen(true)}>
-                    <FileText className="size-5" /> Payment Receipt
-                  </Button>
-                  {isServiceEnabled('certificates') && (
-                    cert ? (
-                      <Button
-                        variant="hero"
-                        className="h-12 px-6 gap-2"
-                        onClick={() => {
-                          if (!hasRequiredCertificateIdentityFields(profile)) {
-                            toast.error(
-                              isBnmuStudent(profile?.university_name)
-                                ? "Certificate cannot be opened — your Registration number and Roll number are required. Please update them in your profile."
-                                : "Certificate cannot be opened — your University Roll Number is missing. Please update it in your profile."
-                            );
-                            return;
-                          }
-                          setIsCertOpen(true);
-                        }}
-                      >
-                        <Award className="size-5" /> View & Download Certificate
-                      </Button>
-                    ) : (
-                      <Button variant="outline" className="h-12 px-6 bg-slate-100 border-dashed border-slate-300 gap-2 cursor-not-allowed opacity-60 text-slate-500" disabled>
-                        <Award className="size-5" /> Certificate Not Ready
-                      </Button>
-                    )
-                  )}
-                </div>
-                {isServiceEnabled('certificates') && (
-                  <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-100">
-                    {!cert ? (
-                      <p className="text-sm text-slate-600 flex items-center gap-2">
-                        <Loader2 className="size-4 text-primary animate-spin" /> 
-                        Your internship is currently in progress. The certificate will be issued automatically after the evaluation phase.
-                      </p>
-                    ) : (
-                      <p className="text-sm text-green-600 font-bold flex items-center gap-2">
-                        <CheckCircle2 className="size-4" /> 
-                        Congratulations! Your internship certificate has been issued and is ready for download.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </Card>
-          </div>
-            </>
+          ) : activeView === "profile" ? (
+            <StudentProfileView
+              profile={profile}
+              registrationLabel={displayRegistrationId(profile?.registration_id, profile?.created_at)}
+              studentProfileEditLocked={studentProfileEditLocked}
+              onEditProfile={() => {
+                setEditProfileData({
+                  email: profile?.email || "",
+                  full_name: profile?.full_name || "",
+                  contact_number: profile?.contact_number || "",
+                  parent_name: profile?.parent_name || profile?.father_name || "",
+                  gender: profile?.gender || "",
+                  university_name: profile?.university_name || "",
+                  college_name: profile?.college_name || "",
+                  degree: profile?.degree || "",
+                  department: profile?.department || "",
+                  subject:
+                    matchSubjectToOption(
+                      profile?.subject || profile?.metadata?.subject,
+                      profile?.department
+                    ) ||
+                    profile?.subject ||
+                    profile?.metadata?.subject ||
+                    "",
+                  academic_session: profile?.academic_session || "",
+                  class_semester: profile?.class_semester || "",
+                  roll_number: profile?.roll_number || "",
+                  university_roll_number:
+                    profile?.university_roll_number ||
+                    resolveBnmuUniversityRollNumber(profile) ||
+                    "",
+                  internship_domain: profile?.internship_domain || profile?.course || "",
+                  internship_mode: resolveInternshipModeForUniversity(
+                    profile?.university_name,
+                    profile?.internship_mode || profile?.metadata?.internship_mode
+                  ),
+                  internship_duration: profile?.internship_duration || "",
+                  joining_date: profile?.joining_date || "",
+                  completion_date: profile?.completion_date || "",
+                  emergency_name: profile?.emergency_name || "",
+                  emergency_contact: profile?.emergency_contact || "",
+                  emergency_relation: profile?.emergency_relation || "",
+                });
+                setIsEditProfileOpen(true);
+              }}
+              onOfferLetter={() => setIsOfferLetterOpen(true)}
+              onReceipt={() => setIsReceiptOpen(true)}
+              onCertificate={() => {
+                if (!hasRequiredCertificateIdentityFields(profile)) {
+                  toast.error(
+                    isBnmuStudent(profile?.university_name)
+                      ? "Certificate cannot be opened — your Registration number and Roll number are required. Please update them in your profile."
+                      : "Certificate cannot be opened — your University Roll Number is missing. Please update it in your profile."
+                  );
+                  return;
+                }
+                setIsCertOpen(true);
+              }}
+              certificatesEnabled={isServiceEnabled("certificates")}
+              hasCertificate={!!cert}
+              certificateReady={!!cert}
+            />
           ) : (
             <>
               <StudentHomeView
@@ -1382,113 +1171,13 @@ const Dashboard = () => {
             />
           )}
 
-          {isServiceEnabled('live_classes') && (
-            <div id="live-classes-section" className="mt-12 relative student-dash-animate-in">
-              {isServiceLocked("live_classes") ? (
-                <button
-                  type="button"
-                  className="absolute inset-0 z-20 rounded-xl bg-white/70 backdrop-blur-[1px] flex items-center justify-center min-h-[200px]"
-                  onClick={() => setServiceLockKey("live_classes")}
-                >
-                  <span className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm">
-                    Live classes locked
-                  </span>
-                </button>
-              ) : null}
-              <div className="flex items-center justify-between mb-5 gap-4 pb-4 border-b border-slate-200">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="size-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                    <BookOpen className="size-4 text-slate-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Live sessions</h2>
-                    <p className="text-sm text-slate-500 hidden sm:block">Scheduled classes and recordings</p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="font-medium text-slate-600 shrink-0">
-                  {liveClasses.length} scheduled
-                </Badge>
-              </div>
-
-              {liveClasses.length > 0 ? (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {liveClasses.map(c => {
-                    const sessionType =
-                      c.link_type === "youtube" || inferLinkTypeFromUrl(c.url || "") === "youtube"
-                        ? "youtube"
-                        : c.link_type;
-                    const joinUrl = classJoinUrl(c.url || "", sessionType);
-                    const embedUrl = sessionType === "youtube" ? youtubeEmbedUrl(c.url || "") : null;
-
-                    return (
-                      <Card key={c.id} className="overflow-hidden student-dash-card border-0 shadow-none flex flex-col group bg-white">
-                        <div className="p-3 text-[11px] text-center font-medium text-slate-600 bg-slate-50 border-b border-slate-200">
-                          {new Date(c.scheduled_at).toLocaleString([], { dateStyle: 'full', timeStyle: 'short' })}
-                        </div>
-                        
-                        {sessionType === "youtube" && embedUrl ? (
-                          <div className="relative w-full aspect-video bg-black shadow-inner">
-                            <iframe
-                              src={embedUrl}
-                              title={c.title || "Live class"}
-                              className="absolute inset-0 w-full h-full border-0"
-                              allowFullScreen
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            />
-                          </div>
-                        ) : (
-                          <div className="w-full aspect-video bg-indigo-50 flex items-center justify-center flex-col gap-3 p-6 text-center border-b border-indigo-100">
-                            <div className="size-16 rounded-full bg-white flex items-center justify-center text-primary shadow-elegant group-hover:scale-110 transition-transform duration-500">
-                              <ExternalLink className="size-8" />
-                            </div>
-                            <div className="font-bold text-sm text-indigo-900">{linkTypeLabel(sessionType)} Session</div>
-                          </div>
-                        )}
-                        
-                        <div className="p-6 flex flex-col flex-1">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-black uppercase tracking-wider">{c.internship_domains?.name || "General"}</span>
-                            <span className="size-1 rounded-full bg-slate-300"></span>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{linkTypeLabel(sessionType)} Session</span>
-                          </div>
-                          <h3 className="font-bold text-lg leading-tight mb-3 flex-1 text-slate-900">{c.title}</h3>
-                          {c.description ? (
-                            <p className="text-sm text-muted-foreground mb-4 line-clamp-3">{c.description}</p>
-                          ) : null}
-
-                          <div className="mt-auto space-y-3">
-                            {sessionType === "youtube" ? (
-                              <div className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-100">
-                                <span className="relative flex h-3 w-3 shrink-0">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
-                                </span>
-                                <span className="text-[10px] font-black text-red-600 uppercase tracking-widest">Live on YouTube</span>
-                              </div>
-                            ) : null}
-                            <a href={joinUrl} target="_blank" rel="noopener noreferrer" className="w-full block">
-                              <Button className="w-full h-11 bg-primary hover:bg-primary/90 gap-2 shadow-lg transition-all">
-                                <ExternalLink className="size-4" />
-                                {sessionType === "youtube" ? "Join Class on YouTube" : "Join Class"}
-                              </Button>
-                            </a>
-                          </div>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
-              ) : (
-                <Card className="p-16 text-center border-none shadow-elegant bg-white/80 backdrop-blur-sm">
-                  <div className="size-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-6 shadow-inner">
-                    <BookOpen className="size-10 text-slate-300" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-slate-800">Stay Tuned for Classes</h3>
-                  <p className="text-slate-500 text-sm max-w-sm mx-auto mt-3 leading-relaxed">There are currently no live sessions scheduled for your internship domain. We'll update this section soon!</p>
-                </Card>
-              )}
-            </div>
-          )}
+          {activeView === "home" && isServiceEnabled("live_classes") ? (
+            <StudentLiveSessionsSection
+              liveClasses={liveClasses}
+              locked={isServiceLocked("live_classes")}
+              onLockedClick={() => setServiceLockKey("live_classes")}
+            />
+          ) : null}
 
         </div>
       </main>

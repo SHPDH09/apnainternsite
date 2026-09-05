@@ -13,6 +13,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import {
+  StudentPageHero,
+  StudentSectionHeader,
+} from "@/components/student/studentDashboardUi";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -99,7 +103,7 @@ export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) 
     const label = statusLabel(enrollment);
 
     return (
-      <Card key={enrollment.id} className="overflow-hidden student-dash-card border-0 shadow-none">
+      <Card className="overflow-hidden student-dash-card border-0 shadow-none">
         <div className="flex flex-col sm:flex-row">
           <div className="relative aspect-[16/10] w-full shrink-0 bg-slate-100 sm:w-48">
             {course.thumbnail_url ? (
@@ -121,7 +125,7 @@ export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) 
                 </Badge>
               ) : null}
             </div>
-            <h4 className="mb-1 font-bold text-slate-900">{course.title}</h4>
+            <h4 className="mb-1 font-semibold text-slate-900">{course.title}</h4>
             {course.instructor_name ? (
               <p className="mb-3 text-xs text-slate-500">Instructor: {course.instructor_name}</p>
             ) : null}
@@ -133,7 +137,7 @@ export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) 
               <Progress value={enrollment.progress_percent} className="h-2" />
             </div>
             <div className="mt-auto flex flex-wrap gap-2">
-              <Button size="sm" className="rounded-xl font-bold gap-2" asChild>
+              <Button size="sm" className="gap-2 rounded-lg bg-slate-800 font-medium hover:bg-slate-900" asChild>
                 <Link to={`/courses/${course.slug}`}>
                   {label === "Completed" ? (
                     <>
@@ -150,7 +154,7 @@ export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) 
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl font-bold gap-2"
+                  className="gap-2 rounded-lg font-medium"
                   onClick={() => toast.info("Certificate download will be available soon.")}
                 >
                   <Download className="size-4" />
@@ -189,45 +193,43 @@ export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) 
   }
 
   return (
-    <div className="space-y-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="flex items-center gap-3 text-2xl font-black text-slate-900">
-            <GraduationCap className="size-7 text-emerald-600" />
-            My Courses
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            {enrollments.length} enrolled · {grouped.completed.length} completed
-          </p>
-        </div>
-        <Button variant="outline" className="rounded-xl font-bold" asChild>
-          <Link to="/courses">Browse More Courses</Link>
-        </Button>
-      </div>
+    <div className="space-y-8 student-dash-animate-in">
+      <StudentPageHero
+        initial="C"
+        title="My courses"
+        subtitle={`${enrollments.length} enrolled · ${grouped.completed.length} completed`}
+        actions={
+          <Button variant="outline" className="h-10 gap-2 rounded-lg border-slate-300 font-medium text-slate-800 hover:bg-slate-50" asChild>
+            <Link to="/courses">Browse courses</Link>
+          </Button>
+        }
+      />
 
       {grouped.continueLearning.length > 0 ? (
         <section>
-          <h3 className="mb-4 flex items-center gap-2 text-lg font-black text-slate-800">
-            <PlayCircle className="size-5 text-primary" />
-            Continue Learning
-          </h3>
+          <StudentSectionHeader
+            icon={PlayCircle}
+            title="Continue learning"
+            countLabel={`${grouped.continueLearning.length} in progress`}
+          />
           <div className="grid gap-4 lg:grid-cols-2">{grouped.continueLearning.map(renderEnrollmentCard)}</div>
         </section>
       ) : null}
 
       {grouped.notStarted.length > 0 ? (
         <section>
-          <h3 className="mb-4 text-lg font-black text-slate-800">Not Started</h3>
+          <StudentSectionHeader title="Not started" countLabel={`${grouped.notStarted.length} courses`} />
           <div className="grid gap-4 lg:grid-cols-2">{grouped.notStarted.map(renderEnrollmentCard)}</div>
         </section>
       ) : null}
 
       {grouped.completed.length > 0 ? (
         <section>
-          <h3 className="mb-4 flex items-center gap-2 text-lg font-black text-slate-800">
-            <Award className="size-5 text-emerald-600" />
-            Completed
-          </h3>
+          <StudentSectionHeader
+            icon={Award}
+            title="Completed"
+            countLabel={`${grouped.completed.length} courses`}
+          />
           <div className="grid gap-4 lg:grid-cols-2">{grouped.completed.map(renderEnrollmentCard)}</div>
         </section>
       ) : null}

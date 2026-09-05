@@ -216,6 +216,10 @@
     animation: studentDashFadeUp 0.35s ease-out both;
   }
 
+  .student-dash-page {
+    @apply space-y-8 md:space-y-9;
+  }
+
   .attendance-hold-shell {
     width: 11rem;
     height: 11rem;
