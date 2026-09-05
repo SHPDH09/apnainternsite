@@ -119,7 +119,7 @@ function HorizontalBreakdown({
 }) {
   const h = chartHeight(data.length || 1);
   return (
-    <Card className="p-4 md:p-5 border border-slate-200/80 shadow-elegant bg-white">
+    <Card className="p-4 md:p-5 portal-dash-card">
       <h2 className="text-sm font-semibold text-slate-800 mb-3">{title}</h2>
       <BreakdownChart h={h} data={data} emptyHint={emptyHint} />
     </Card>
@@ -366,7 +366,7 @@ export default function ReferralPartnerDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex text-slate-900">
+    <div className="portal-dashboard-bg flex min-h-screen text-slate-900">
       <aside className="hidden md:flex w-52 flex-col border-r border-slate-200 bg-white shrink-0">
         <div className="p-4 border-b border-slate-100">
           <p className="text-xs font-semibold text-primary">Referral</p>
@@ -419,7 +419,7 @@ export default function ReferralPartnerDashboard() {
         <main className="flex-1 overflow-auto p-4 md:p-6">
           {section === "dashboard" && (
             <div className="space-y-5 max-w-5xl mx-auto">
-              <Card className="p-4 md:p-5 border border-slate-200/80 shadow-elegant bg-white">
+              <Card className="p-4 md:p-5 portal-dash-card">
                 <p className="text-xs font-medium text-slate-500 mb-1">Your referral code</p>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                   <code className="text-sm font-mono font-semibold bg-slate-100 text-slate-900 px-3 py-2 rounded-lg border border-slate-200">
@@ -461,21 +461,21 @@ export default function ReferralPartnerDashboard() {
               </Card>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <Card className="p-4 border border-slate-200/80 shadow-elegant bg-white">
+                <Card className="p-4 portal-dash-card">
                   <p className="text-xs font-medium text-slate-500 flex items-center gap-1">
                     <MousePointerClick className="size-3.5" /> Link clicks
                   </p>
                   <p className="text-2xl font-bold text-slate-800 mt-1">{stats?.total_clicks ?? 0}</p>
                 </Card>
-                <Card className="p-4 border border-slate-200/80 shadow-elegant bg-white">
+                <Card className="p-4 portal-dash-card">
                   <p className="text-xs font-medium text-slate-500">Students referred</p>
                   <p className="text-2xl font-bold text-primary mt-1">{stats?.total_students ?? 0}</p>
                 </Card>
-                <Card className="p-4 border border-slate-200/80 shadow-elegant bg-white">
+                <Card className="p-4 portal-dash-card">
                   <p className="text-xs font-medium text-slate-500">Approved</p>
                   <p className="text-2xl font-bold text-emerald-600 mt-1">{stats?.approved_students ?? 0}</p>
                 </Card>
-                <Card className="p-4 border border-slate-200/80 shadow-elegant bg-white">
+                <Card className="p-4 portal-dash-card">
                   <p className="text-xs font-medium text-slate-500">Pending</p>
                   <p className="text-2xl font-bold text-amber-600 mt-1">
                     {Math.max(0, (stats?.total_students ?? 0) - (stats?.approved_students ?? 0))}
@@ -493,7 +493,7 @@ export default function ReferralPartnerDashboard() {
 
           {section === "referrals" && (
             <div className="max-w-5xl mx-auto space-y-4">
-              <Card className="p-4 md:p-5 border border-slate-200/80 shadow-elegant bg-white">
+              <Card className="p-4 md:p-5 portal-dash-card">
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mb-4">
                   <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />

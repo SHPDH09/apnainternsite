@@ -182,38 +182,31 @@ export function AdminDashboardPanel({
   return (
     <div className="space-y-8">
       {/* Branded hero */}
-      <section className={adminHeroClass}>
-        <div
-          className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-[#5AA3E6]/20 blur-3xl"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -bottom-20 left-1/3 size-48 rounded-full bg-[#F7941D]/10 blur-3xl"
-          aria-hidden
-        />
+      <section className={cn(adminHeroClass, "portal-dash-animate-in")}>
+        <div className="absolute bottom-0 left-0 top-0 w-1 student-dash-hero-accent rounded-l-xl" aria-hidden />
 
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="relative flex flex-col gap-6 pl-2 lg:flex-row lg:items-end lg:justify-between lg:pl-3">
           <div className="space-y-3">
-            <Badge className="border-white/20 bg-white/10 text-[10px] font-bold uppercase tracking-widest text-white hover:bg-white/10">
-              {BRAND_NAME} · Admin Console
+            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-[10px] font-medium text-slate-600">
+              {BRAND_NAME} · Admin console
             </Badge>
             <div>
-              <h1 className="font-display text-2xl font-bold tracking-tight text-white md:text-3xl">
-                Operations Dashboard
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">
+                Operations dashboard
               </h1>
-              <p className="mt-1 max-w-lg text-sm text-slate-300">
+              <p className="mt-1 max-w-lg text-sm text-slate-500">
                 Enrollment, revenue, leads, and site traffic — all in one place.
               </p>
             </div>
             <div className="flex flex-wrap gap-4 text-sm">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Range revenue</p>
-                <p className="text-xl font-bold text-white">₹{rangeRevenue.toLocaleString()}</p>
+                <p className="text-xs font-medium text-slate-500">Range revenue</p>
+                <p className="text-xl font-semibold text-slate-900">₹{rangeRevenue.toLocaleString()}</p>
               </div>
-              <div className="h-10 w-px bg-white/15" />
+              <div className="h-10 w-px bg-slate-200" />
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Payments in range</p>
-                <p className="text-xl font-bold text-[#5AA3E6]">{filteredPayments.length}</p>
+                <p className="text-xs font-medium text-slate-500">Payments in range</p>
+                <p className="text-xl font-semibold text-[#5AA3E6]">{filteredPayments.length}</p>
               </div>
             </div>
           </div>
@@ -225,12 +218,12 @@ export function AdminDashboardPanel({
                   key={p.id}
                   type="button"
                   size="sm"
-                  variant={preset === p.id ? "secondary" : "ghost"}
+                  variant={preset === p.id ? "default" : "outline"}
                   className={cn(
-                    "h-8 rounded-full px-3 text-xs font-bold",
+                    "h-8 rounded-lg px-3 text-xs font-medium",
                     preset === p.id
-                      ? "bg-white text-slate-900 hover:bg-white/90"
-                      : "text-white hover:bg-white/10"
+                      ? "bg-slate-800 text-white hover:bg-slate-900"
+                      : "border-slate-200 text-slate-700 hover:bg-slate-50"
                   )}
                   onClick={() => applyPreset(p.id)}
                 >
@@ -238,8 +231,8 @@ export function AdminDashboardPanel({
                 </Button>
               ))}
             </div>
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/15 bg-white/5 p-2 backdrop-blur-sm">
-              <Calendar className="ml-1 size-4 shrink-0 text-slate-400" />
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2">
+              <Calendar className="ml-1 size-4 shrink-0 text-slate-500" />
               <Input
                 type="date"
                 value={dashStartDate}
@@ -247,7 +240,7 @@ export function AdminDashboardPanel({
                   setPreset("custom");
                   setDashStartDate(e.target.value);
                 }}
-                className="h-8 w-[9rem] border-white/20 bg-white/10 text-xs text-white [color-scheme:dark]"
+                className="h-8 w-[9rem] border-slate-200 bg-white text-xs"
               />
               <span className="text-xs text-slate-400">to</span>
               <Input
@@ -257,20 +250,19 @@ export function AdminDashboardPanel({
                   setPreset("custom");
                   setDashEndDate(e.target.value);
                 }}
-                className="h-8 w-[9rem] border-white/20 bg-white/10 text-xs text-white [color-scheme:dark]"
+                className="h-8 w-[9rem] border-slate-200 bg-white text-xs"
               />
               <Button
                 type="button"
                 size="sm"
-                variant="secondary"
-                className="h-8 gap-1.5 bg-[#F7941D] text-white hover:bg-[#E87800]"
+                className="h-8 gap-1.5 bg-slate-800 text-white hover:bg-slate-900"
                 onClick={onExportCsv}
               >
                 <Download className="size-3.5" />
                 Export
               </Button>
               {isPaymentsLoading ? (
-                <Loader2 className="size-4 animate-spin text-white/70" />
+                <Loader2 className="size-4 animate-spin text-slate-400" />
               ) : null}
             </div>
           </div>

@@ -371,11 +371,11 @@ export default function CollegeDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex text-slate-900">
+    <div className="portal-dashboard-bg flex min-h-screen text-slate-900">
       <aside className="hidden md:flex w-56 flex-col border-r border-slate-200 bg-white shadow-sm shrink-0">
         <div className="p-4 border-b border-slate-100">
-          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">College portal</p>
-          <p className="font-black text-sm mt-0.5">Apna Intern</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600">College portal</p>
+          <p className="text-sm font-semibold text-slate-900 mt-0.5">Apna Intern</p>
         </div>
         <NavLinks />
         <div className="mt-auto p-3 border-t border-slate-100">
@@ -396,8 +396,8 @@ export default function CollegeDashboard() {
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0 flex flex-col">
                 <div className="p-4 border-b">
-                  <p className="text-[10px] font-black uppercase text-emerald-600">College portal</p>
-                  <p className="font-black">Apna Intern</p>
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-emerald-600">College portal</p>
+                  <p className="font-semibold">Apna Intern</p>
                 </div>
                 <NavLinks mobile />
                 <div className="mt-auto p-4 border-t">
@@ -408,7 +408,7 @@ export default function CollegeDashboard() {
               </SheetContent>
             </Sheet>
             <div className="min-w-0">
-              <h1 className="font-black text-base md:text-lg truncate capitalize">
+              <h1 className="text-base font-semibold text-slate-900 md:text-lg truncate capitalize">
                 {section}
               </h1>
               <p className="text-[10px] md:text-xs text-slate-500 truncate hidden sm:block">
@@ -425,7 +425,7 @@ export default function CollegeDashboard() {
 
         <main className="flex-1 overflow-auto p-4 md:p-6">
           {assignedColleges.length > 1 && (
-            <Card className="p-4 mb-4 border-none shadow-elegant bg-white max-w-6xl mx-auto">
+            <Card className="p-4 mb-4 portal-dash-card max-w-6xl mx-auto">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex items-center gap-2 text-sm font-bold text-slate-700 shrink-0">
                   <Filter className="size-4 text-emerald-600" />
@@ -456,34 +456,34 @@ export default function CollegeDashboard() {
             <div className="space-y-6 max-w-6xl mx-auto">
               {collegeFilter !== "all" && (
                 <p className="text-sm font-semibold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
-                  Showing data for <span className="font-black">{selectedCollegeLabel}</span> —{" "}
-                  <span className="font-black">{dashTotal}</span> enrolled student{dashTotal === 1 ? "" : "s"}
+                  Showing data for <span className="font-semibold">{selectedCollegeLabel}</span> —{" "}
+                  <span className="font-semibold">{dashTotal}</span> enrolled student{dashTotal === 1 ? "" : "s"}
                 </p>
               )}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-                <Card className="p-4 border-none shadow-elegant bg-white">
-                  <p className="text-[10px] font-black uppercase text-slate-400">Total students</p>
-                  <p className="text-2xl md:text-3xl font-black text-emerald-700 mt-1">
+                <Card className="p-4 portal-dash-card">
+                  <p className="text-xs font-medium text-slate-500">Total students</p>
+                  <p className="text-xl md:text-2xl font-semibold tabular-nums text-emerald-700 mt-1">
                     {collegeFilter === "all" ? allScopeTotal : dashTotal}
                   </p>
                 </Card>
-                <Card className="p-4 border-none shadow-elegant bg-white">
-                  <p className="text-[10px] font-black uppercase text-slate-400">Male</p>
-                  <p className="text-2xl md:text-3xl font-black text-sky-600 mt-1">{maleN}</p>
+                <Card className="p-4 portal-dash-card">
+                  <p className="text-xs font-medium text-slate-500">Male</p>
+                  <p className="text-xl md:text-2xl font-semibold tabular-nums text-sky-600 mt-1">{maleN}</p>
                 </Card>
-                <Card className="p-4 border-none shadow-elegant bg-white">
-                  <p className="text-[10px] font-black uppercase text-slate-400">Female</p>
-                  <p className="text-2xl md:text-3xl font-black text-pink-600 mt-1">{femaleN}</p>
+                <Card className="p-4 portal-dash-card">
+                  <p className="text-xs font-medium text-slate-500">Female</p>
+                  <p className="text-xl md:text-2xl font-semibold tabular-nums text-pink-600 mt-1">{femaleN}</p>
                 </Card>
-                <Card className="p-4 border-none shadow-elegant bg-white">
-                  <p className="text-[10px] font-black uppercase text-slate-400">Other / not set</p>
-                  <p className="text-2xl md:text-3xl font-black text-slate-500 mt-1">{otherGenderN}</p>
+                <Card className="p-4 portal-dash-card">
+                  <p className="text-xs font-medium text-slate-500">Other / not set</p>
+                  <p className="text-xl md:text-2xl font-semibold tabular-nums text-slate-500 mt-1">{otherGenderN}</p>
                 </Card>
               </div>
 
               <div className="grid lg:grid-cols-2 gap-6">
-                <Card className="p-4 md:p-6 border-none shadow-elegant bg-white">
-                  <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Gender</h2>
+                <Card className="p-4 md:p-6 portal-dash-card">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">Gender</h2>
                   <div className="h-[260px] w-full flex items-center justify-center">
                     {statsLoading ? (
                       <Loader2 className="size-8 animate-spin text-emerald-600" />
@@ -514,8 +514,8 @@ export default function CollegeDashboard() {
                   </div>
                 </Card>
 
-                <Card className="p-4 md:p-6 border-none shadow-elegant bg-white">
-                  <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">
+                <Card className="p-4 md:p-6 portal-dash-card">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">
                     Program (B.Com / B.Sc / B.A)
                   </h2>
                   <div className="h-[260px] w-full flex items-center justify-center">
@@ -548,9 +548,9 @@ export default function CollegeDashboard() {
           {section === "students" && (
             <div className="max-w-6xl mx-auto space-y-4">
               {assignedColleges.length > 1 && (
-                <Card className="p-4 border-none shadow-elegant bg-white">
+                <Card className="p-4 portal-dash-card">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    <Label className="text-xs font-black uppercase text-slate-500 shrink-0">
+                    <Label className="text-xs font-semibold uppercase text-slate-500 shrink-0">
                       College
                     </Label>
                     <Select value={collegeFilter} onValueChange={setCollegeFilter}>
@@ -570,7 +570,7 @@ export default function CollegeDashboard() {
                 </Card>
               )}
 
-              <Card className="p-4 md:p-6 border-none shadow-elegant bg-white">
+              <Card className="p-4 md:p-6 portal-dash-card">
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mb-4">
                   <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
@@ -596,13 +596,13 @@ export default function CollegeDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50/80">
-                        <TableHead className="text-[10px] font-black uppercase">Name</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase">Gender</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase">College</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase">Course</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase">Program</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase">Reg. ID</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase w-[80px]" />
+                        <TableHead className="text-[10px] font-semibold uppercase">Name</TableHead>
+                        <TableHead className="text-[10px] font-semibold uppercase">Gender</TableHead>
+                        <TableHead className="text-[10px] font-semibold uppercase">College</TableHead>
+                        <TableHead className="text-[10px] font-semibold uppercase">Course</TableHead>
+                        <TableHead className="text-[10px] font-semibold uppercase">Program</TableHead>
+                        <TableHead className="text-[10px] font-semibold uppercase">Reg. ID</TableHead>
+                        <TableHead className="text-[10px] font-semibold uppercase w-[80px]" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -733,7 +733,7 @@ export default function CollegeDashboard() {
                 ["Joined", detailStudent.created_at ? new Date(detailStudent.created_at).toLocaleString() : "—"],
               ].map(([label, val]) => (
                 <div key={String(label)} className="flex flex-col sm:flex-row sm:gap-3 border-b border-slate-100 pb-2 last:border-0">
-                  <dt className="text-[10px] font-black uppercase text-slate-400 shrink-0 sm:w-36">{label}</dt>
+                  <dt className="text-xs font-medium text-slate-500 shrink-0 sm:w-36">{label}</dt>
                   <dd className="font-medium text-slate-800 break-words">{val != null && val !== "" ? String(val) : "—"}</dd>
                 </div>
               ))}

@@ -175,7 +175,7 @@ const CyberCafeDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="portal-dashboard-bg flex min-h-screen flex-col">
       <main className="flex-1 py-8">
         <div className="container mx-auto px-4 max-w-6xl">
           <div className="flex justify-between items-center mb-8">

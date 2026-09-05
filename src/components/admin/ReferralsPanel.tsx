@@ -66,6 +66,7 @@ import {
 import { fetchAllCollegesCatalog, resolveUniversityId } from "@/lib/institutionCatalog";
 import { displayCollegeName } from "@/lib/collegeDisplay";
 import { ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { PortalSectionHeader } from "@/components/portal/portalDashboardUi";
 
 const PARTNER_PAGE_SIZE = 20;
 const DETAIL_PAGE_SIZE = 20;
@@ -767,19 +768,21 @@ Apna Intern Team`;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <Share2 className="size-5 text-primary" /> Referrals
-        </h2>
-        <Button
-          className="gap-2 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold text-xs shadow-sm"
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus className="size-4" /> Add Referral
-        </Button>
-      </div>
+      <PortalSectionHeader
+        title="Referrals & partner codes"
+        subtitle="Manage referral partners, codes, and signup tracking"
+        icon={Share2}
+        action={
+          <Button
+            className="h-10 gap-2 rounded-lg bg-slate-800 text-sm font-medium hover:bg-slate-900"
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus className="size-4" /> Add referral
+          </Button>
+        }
+      />
 
-      <Card className="p-6 border-none shadow-elegant mb-6 bg-card/50 backdrop-blur-sm">
+      <div className="portal-dash-card mb-6 p-6">
         <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div className="relative md:col-span-2 lg:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -814,9 +817,9 @@ Apna Intern Team`;
             <Filter className="size-4" /> Reset Filters
           </Button>
         </div>
-      </Card>
+      </div>
 
-      <Card className="overflow-hidden border-none shadow-elegant">
+      <div className="portal-dash-card overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/30">
             <TableRow>
@@ -887,7 +890,7 @@ Apna Intern Team`;
                     </code>
                   </TableCell>
                   <TableCell className="text-right font-medium text-slate-600">{p.total_clicks ?? 0}</TableCell>
-                  <TableCell className="text-right font-black text-primary">{p.signup_count ?? 0}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums text-[#5AA3E6]">{p.signup_count ?? 0}</TableCell>
                   <TableCell className="text-right font-semibold text-emerald-600">{p.approved_students ?? 0}</TableCell>
                   <TableCell>
                     {p.auth_user_id ? (
@@ -995,7 +998,7 @@ Apna Intern Team`;
             Next <ChevronRight className="size-4" />
           </Button>
         </div>
-      </Card>
+      </div>
 
       {/* Add */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

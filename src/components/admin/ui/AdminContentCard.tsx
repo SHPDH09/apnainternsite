@@ -46,7 +46,7 @@ export function AdminContentCard({
             {title ? (
               <h2
                 className={cn(
-                  "font-display text-base font-bold tracking-tight",
+                  "text-base font-semibold tracking-tight",
                   isDark ? "text-white" : "text-slate-900"
                 )}
               >

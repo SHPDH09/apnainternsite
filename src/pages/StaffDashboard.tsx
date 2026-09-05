@@ -160,6 +160,7 @@ import type { StudentDirectoryStudent } from "@/components/admin/StudentDirector
 import { fetchAdminStudentsLight } from "@/lib/adminStudentDirectory";
 import type { AdminStaffProfile } from "@/lib/staffProfile";
 import { resolveStorageUrl } from "@/lib/storageUrl";
+import { portalNavItemClass, portalNavSectionClass } from "@/components/portal/portalDashboardUi";
 
 const STAFF_PAGE_SIZE = 20;
 
@@ -1281,17 +1282,26 @@ const StaffDashboard = () => {
   if (loading) return <SiteLoader />;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex">
-      <aside className="hidden md:flex w-64 h-screen bg-white border-r border-slate-200 sticky top-0 flex-col p-6 shadow-sm">
-        <div className="flex items-center gap-3 mb-8"><div className="size-10 rounded-xl bg-primary flex items-center justify-center shadow-lg"><LayoutDashboard className="size-5 text-white" /></div><span className="text-xl font-black tracking-tighter">StaffPanel</span></div>
-        <nav className="space-y-1 flex-1 overflow-y-auto">
-          <button onClick={() => setActiveTab("dashboard")} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}><LayoutDashboard className="size-4" /> Dashboard</button>
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-6 mb-4 px-3">Authorized Access</div>
+    <div className="portal-dashboard-bg flex min-h-screen">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-5 md:flex">
+        <div className="mb-8 flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-[#5AA3E6] shadow-sm">
+            <LayoutDashboard className="size-5 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Staff portal</p>
+            <p className="text-[11px] font-medium text-slate-500">Apna Intern</p>
+          </div>
+        </div>
+        <nav className="flex-1 space-y-1 overflow-y-auto">
+          <button onClick={() => setActiveTab("dashboard")} data-active={activeTab === "dashboard"} className={portalNavItemClass}><LayoutDashboard className="size-4" /> Dashboard</button>
+          <div className={portalNavSectionClass}>Authorized access</div>
           {services.map(s => hasStaffPerm(permissions, s.id) && (
             <button
               key={s.tab}
               onClick={() => setActiveTab(s.tab)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === s.tab ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}
+              data-active={activeTab === s.tab}
+              className={portalNavItemClass}
             >
               <s.icon className={`size-4 ${s.color}`} /> {s.label}
             </button>
@@ -1299,23 +1309,25 @@ const StaffDashboard = () => {
           {hasStaffPerm(permissions, "can_manage_students") && (
             <button
               onClick={() => setActiveTab("add-registration")}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === "add-registration" ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
+              data-active={activeTab === "add-registration"}
+              className={portalNavItemClass}
             >
               <UserPlus className="size-4 text-emerald-600" /> Add Registration
             </button>
           )}
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-6 mb-4 px-3">Account</div>
-          <button onClick={() => setActiveTab("profile")} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'profile' ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}><User className="size-4" /> Profile</button>
-          <button onClick={() => setActiveTab("security")} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'security' ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}><Shield className="size-4" /> Security</button>
-          <button onClick={() => setActiveTab("my-attendance")} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'my-attendance' ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}><Calendar className="size-4" /> My Attendance</button>
-          <button onClick={() => setActiveTab("requests")} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'requests' ? 'bg-slate-50 text-primary' : 'text-slate-600 hover:bg-slate-50'}`}><ClipboardList className="size-4" /> Requests</button>
+          <div className={portalNavSectionClass}>Account</div>
+          <button onClick={() => setActiveTab("profile")} data-active={activeTab === "profile"} className={portalNavItemClass}><User className="size-4" /> Profile</button>
+          <button onClick={() => setActiveTab("security")} data-active={activeTab === "security"} className={portalNavItemClass}><Shield className="size-4" /> Security</button>
+          <button onClick={() => setActiveTab("my-attendance")} data-active={activeTab === "my-attendance"} className={portalNavItemClass}><Calendar className="size-4" /> My Attendance</button>
+          <button onClick={() => setActiveTab("requests")} data-active={activeTab === "requests"} className={portalNavItemClass}><ClipboardList className="size-4" /> Requests</button>
         </nav>
-        <Button variant="ghost" className="mt-auto justify-start text-red-500 hover:bg-red-50 font-bold" onClick={() => { void handleStaffLogout(); }}><LogOut className="size-4 mr-2" /> Logout</Button>
+        <Button variant="ghost" className="mt-auto justify-start font-medium text-red-600 hover:bg-red-50" onClick={() => { void handleStaffLogout(); }}><LogOut className="size-4 mr-2" /> Logout</Button>
       </aside>
 
       <main className="flex-1 overflow-y-auto">
-        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-10 sticky top-0 z-30 shadow-sm backdrop-blur-md bg-white/80">
-          <div><h1 className="text-xl font-black text-slate-900 uppercase tracking-tight">{
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-6 backdrop-blur md:px-10">
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight text-slate-900 md:text-xl">{
             activeTab === 'dashboard' ? `Hello, ${staffName.split(' ')[0]}`
             : activeTab === 'add-registration' ? 'Add Registration'
             : activeTab === 'profile' ? 'Profile'
@@ -1323,35 +1335,36 @@ const StaffDashboard = () => {
             : activeTab === 'my-attendance' ? 'My Attendance'
             : activeTab === 'requests' ? 'Requests'
             : services.find(s => s.tab === activeTab)?.label
-          }</h1><p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Apna Intern Staff Access</p></div>
+          }</h1>
+            <p className="text-xs font-medium text-slate-500">Apna Intern staff portal</p>
+          </div>
           {(() => {
             const avatar =
               resolveStorageUrl(staffProfile?.profile_image_url || "") || staffProfile?.profile_image_url;
             return avatar ? (
               <img src={avatar} alt="" className="size-10 rounded-full object-cover border border-slate-200" />
             ) : (
-              <div className="size-10 rounded-full bg-slate-100 flex items-center justify-center font-black text-primary text-xs border border-slate-200">
+              <div className="flex size-10 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-semibold text-[#5AA3E6]">
                 {staffName[0]}
               </div>
             );
           })()}
         </header>
 
-        <div className="p-10 max-w-7xl mx-auto">
+        <div className="mx-auto max-w-7xl p-6 portal-dash-animate-in md:p-10">
           {activeTab === 'dashboard' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {services.map((service) => hasStaffPerm(permissions, service.id) && (
-                <Card key={service.tab} className="p-6 border-none shadow-elegant hover:scale-105 transition-all cursor-pointer group bg-white" onClick={() => setActiveTab(service.tab)}>
-                  <div className={`size-12 rounded-2xl ${service.bg} flex items-center justify-center mb-4 group-hover:shadow-md transition-all`}><service.icon className={`size-6 ${service.color}`} /></div>
-                  <h3 className="font-bold text-slate-800 mb-1">{service.label}</h3>
-                  <p className="text-[10px] text-slate-500 font-medium">Manage {service.label.toLowerCase()}</p>
-                </Card>
+                <div key={service.tab} className="portal-dash-card cursor-pointer border-l-[3px] border-l-[#5AA3E6] p-6 transition-shadow hover:shadow-md" onClick={() => setActiveTab(service.tab)}>
+                  <div className={`mb-4 flex size-11 items-center justify-center rounded-xl ${service.bg}`}><service.icon className={`size-5 ${service.color}`} /></div>
+                  <h3 className="mb-1 font-semibold text-slate-900">{service.label}</h3>
+                  <p className="text-xs font-medium text-slate-500">Manage {service.label.toLowerCase()}</p>
+                </div>
               ))}
 
-              {/* Quick Offer Letter Download Card */}
-              <Card className="p-6 border-none shadow-elegant bg-white border-t-4 border-t-indigo-600">
-                <div className="size-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-4"><FileText className="size-6 text-indigo-600" /></div>
-                <h3 className="font-bold text-slate-800 mb-4">Quick Offer Letter</h3>
+              <div className="portal-dash-card border-l-[3px] border-l-indigo-500 p-6">
+                <div className="mb-4 flex size-11 items-center justify-center rounded-xl bg-indigo-50"><FileText className="size-5 text-indigo-600" /></div>
+                <h3 className="mb-4 font-semibold text-slate-900">Quick offer letter</h3>
                 <div className="space-y-3">
                   <Input 
                     placeholder="Student Email Address" 
@@ -1360,7 +1373,7 @@ const StaffDashboard = () => {
                     className="h-10 text-xs"
                   />
                   <Button 
-                    className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 font-bold gap-2 text-xs" 
+                    className="h-10 w-full gap-2 bg-slate-800 text-xs font-medium hover:bg-slate-900" 
                     onClick={handleManualDownload}
                     disabled={processing}
                   >
@@ -1368,7 +1381,7 @@ const StaffDashboard = () => {
                     Download Letter
                   </Button>
                 </div>
-              </Card>
+              </div>
             </div>
           )}
 

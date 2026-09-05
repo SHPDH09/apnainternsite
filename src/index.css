@@ -216,8 +216,33 @@
     animation: studentDashFadeUp 0.35s ease-out both;
   }
 
-  .student-dash-page {
-    @apply space-y-8 md:space-y-9;
+  /* Portal dashboards — staff, college, referral, admin panels */
+  .portal-dashboard-bg {
+    background-color: #f8fafc;
+  }
+
+  .portal-dash-card {
+    @apply relative overflow-hidden rounded-xl border border-slate-200 bg-white;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .portal-dash-card:hover {
+    border-color: rgb(203 213 225);
+  }
+
+  .portal-dash-hero {
+    background: #ffffff;
+    border: 1px solid rgb(226 232 240);
+    box-shadow: 0 1px 3px rgb(15 23 42 / 0.04);
+  }
+
+  .portal-stat-tile {
+    @apply rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3;
+  }
+
+  .portal-dash-animate-in {
+    animation: studentDashFadeUp 0.35s ease-out both;
   }
 
   .attendance-hold-shell {

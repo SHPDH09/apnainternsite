@@ -83,10 +83,10 @@ export function AdminStatCard({
 
       <div className="relative flex items-start justify-between gap-3 p-5">
         <div className="min-w-0 space-y-1.5">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+          <p className="text-xs font-medium text-slate-500">{label}</p>
           <div
             className={cn(
-              "font-display text-3xl font-bold tracking-tight text-slate-900",
+              "text-xl font-semibold tabular-nums tracking-tight text-slate-900 md:text-2xl",
               loading && "animate-pulse text-slate-400"
             )}
           >

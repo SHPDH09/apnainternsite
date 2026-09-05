@@ -29,10 +29,10 @@ export const adminNavSectionClass =
 export const adminPageClass =
   "flex-1 overflow-y-auto bg-[#f4f7fb] p-4 md:p-6 lg:p-8 admin-page-canvas";
 
-/** Premium content card */
+/** Premium content card — aligned with student / portal dashboards */
 export const adminCardClass = cn(
-  "rounded-2xl border border-slate-200/80 bg-white text-card-foreground",
-  "shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.06)]"
+  "portal-dash-card rounded-xl border border-slate-200 bg-white text-card-foreground",
+  "shadow-[0_1px_2px_rgb(15_23_42/0.04)]"
 );
 
 /** Elevated KPI stat card */
@@ -44,6 +44,6 @@ export const adminStatCardClass = cn(
 /** Table container with consistent padding */
 export const adminTableWrapClass = "overflow-x-auto rounded-xl border border-slate-200/80";
 
-/** Branded dashboard hero gradient */
+/** Branded dashboard hero — clean professional variant */
 export const adminHeroClass =
-  "relative overflow-hidden rounded-2xl border border-[#5AA3E6]/20 bg-gradient-to-br from-[#0f172a] via-[#1e3a5f] to-[#2B7CD3] p-6 text-white shadow-lg md:p-8";
+  "relative overflow-hidden rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-[0_1px_3px_rgb(15_23_42/0.04)] md:p-8";
