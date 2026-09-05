@@ -5,16 +5,12 @@
 #   Root directory:  /
 #   Node.js:        22
 #
-# Do NOT use "Retry" after seed_repo builds — use Create deployment.
-# Do NOT use wrangler pages deploy (this is a Worker + static assets, not Pages).
+# No [build] in wrangler.toml — Workers Builds already runs npm run build;
+# a wrangler [build] step would run vite twice and often fail the deploy step.
 
 name = "apnainternsite"
 main = "cloudflare/worker.ts"
 compatibility_date = "2024-09-23"
-
-[build]
-command = "npm run build"
-watch_dir = "src"
 
 [assets]
 directory = "./dist"
