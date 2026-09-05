@@ -1,17 +1,78 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { formatSmtpError, isSesIdentityNotVerifiedError, isSmtpAuthError } from './lib/smtpErrors.js';
-import { buildOtpMailContent, resolveOtpMailPurpose } from './lib/otpMailTemplate.js';
-import { deliverOutbound } from './lib/deliverOutbound.js';
-import { canUseSesApi } from './lib/sesSend.js';
 
-/** Inlined — importing api/lib/*.ts crashes this Vercel function (FUNCTION_INVOCATION_FAILED). */
+/** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). Inlined below. */
 type MailFrom = { name: string; address: string };
+type OtpMailPurpose = 'login' | 'password_reset' | 'security';
+
+const SES_REGION = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+
+function isSesIdentityNotVerifiedError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return raw.includes('not verified') || raw.includes('messagerejected') || (raw.includes('554') && raw.includes('verified'));
+}
+
+function isSmtpAuthError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return raw.includes('535') || raw.includes('authentication credentials invalid') || raw.includes('invalid login');
+}
+
+function formatSmtpError(e: unknown, context?: { to?: string; from?: string }): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  if (isSmtpAuthError(e)) {
+    return 'Email server login failed (SMTP 535 — invalid credentials). Update SMTP_USER/SMTP_PASS in deployment env.';
+  }
+  if (!isSesIdentityNotVerifiedError(e)) return raw;
+  const identity = context?.to?.trim() || context?.from?.trim() || 'email address';
+  return `AWS SES (${SES_REGION}): "${identity}" is not verified. Use Hostinger SMTP (SMTP_HOST=smtp.hostinger.com, USE_SES_API=false).`;
+}
+
+function resolveOtpMailPurpose(raw: unknown): OtpMailPurpose {
+  const v = String(raw || '').trim().toLowerCase();
+  if (v === 'login' || v === 'login_otp') return 'login';
+  if (v === 'security' || v === 'pin') return 'security';
+  return 'password_reset';
+}
+
+function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_reset'): { subject: string; html: string } {
+  const copy =
+    purpose === 'login'
+      ? {
+          subject: 'Apna Intern — Your sign-in verification code',
+          headline: 'Sign-in verification',
+          lead: 'Use the one-time code below to complete your secure sign-in to Apna Intern.',
+          footerNote: 'This code was requested for your Apna Intern account sign-in.',
+        }
+      : purpose === 'security'
+        ? {
+            subject: 'Apna Intern — Security verification code',
+            headline: 'Security verification',
+            lead: 'Use this verification code to confirm your identity for a sensitive account action.',
+            footerNote: 'Never share this code with anyone, including Apna Intern staff.',
+          }
+        : {
+            subject: 'Apna Intern — Password reset verification code',
+            headline: 'Password reset',
+            lead: 'You requested to reset your password. Enter this verification code to continue.',
+            footerNote: 'If you did not request a password reset, you can safely ignore this email.',
+          };
+  const code = String(otp || '').trim();
+  const year = new Date().getFullYear();
+  const html = `<!DOCTYPE html><html lang="en"><body style="margin:0;padding:0;background:#f1f5f9;font-family:system-ui,sans-serif;"><table role="presentation" width="100%" style="background:#f1f5f9;padding:32px 16px;"><tr><td align="center"><table role="presentation" width="100%" style="max-width:560px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;"><tr><td style="padding:28px 32px 8px;text-align:center;"><p style="margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;">Apna Intern</p><h1 style="margin:0;font-size:22px;color:#0f172a;">${copy.headline}</h1></td></tr><tr><td style="padding:8px 32px 0;text-align:center;"><p style="margin:0;font-size:15px;color:#475569;">${copy.lead}</p></td></tr><tr><td style="padding:28px 32px;text-align:center;"><p style="margin:0;font-size:36px;font-weight:700;letter-spacing:.35em;color:#1e40af;font-family:monospace;">${code}</p><p style="margin:20px 0 0;font-size:13px;color:#64748b;">Valid for 15 minutes.</p></td></tr><tr><td style="padding:0 32px 24px;"><div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 16px;"><p style="margin:0;font-size:13px;color:#1e3a8a;">${copy.footerNote}</p></div></td></tr><tr><td style="padding:20px 32px;background:#f8fafc;text-align:center;border-top:1px solid #e2e8f0;"><p style="margin:0;font-size:11px;color:#94a3b8;">© ${year} Apna Intern</p></td></tr></table></td></tr></table></body></html>`;
+  return { subject: copy.subject, html };
+}
+
+function canUseSesApi(): boolean {
+  if (process.env.USE_SES_API === 'false') return false;
+  const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').toLowerCase();
+  if (host && !host.includes('amazonaws.com')) return false;
+  return Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.USE_SES_API === 'true' || process.env.AWS_EXECUTION_ENV);
+}
 
 function resolveSmtpHost(): string {
   return (
     process.env.SMTP_HOST ||
     process.env.SES_SMTP_HOST ||
-    'email-smtp.ap-south-1.amazonaws.com'
+    'smtp.hostinger.com'
   );
 }
 
@@ -26,7 +87,7 @@ function resolveMailFromAddress(): string {
   const angle = explicit.match(/<([^>]+)>/);
   if (angle) return angle[1].trim();
   if (explicit.includes('@')) return explicit;
-  return process.env.MAIL_FROM_ADDRESS?.trim() || process.env.SES_FROM_ADDRESS?.trim() || 'noreply@apnaintern.in';
+  return process.env.MAIL_FROM_ADDRESS?.trim() || process.env.SES_FROM_ADDRESS?.trim() || 'info@apnaintern.in';
 }
 
 function resolveMailFrom(label = 'Apna Intern'): MailFrom {
@@ -139,6 +200,23 @@ async function sendMailWithRetry(
     }
   }
   throw last;
+}
+
+async function deliverOutbound(
+  mailOptions: Record<string, unknown>,
+  transporter: { sendMail: (opts: Record<string, unknown>) => Promise<unknown> } | null,
+  opts?: { fast?: boolean; bulk?: boolean; sendWithRetry?: typeof sendMailWithRetry }
+): Promise<void> {
+  if (!transporter) throw new Error('SMTP credentials missing');
+  if (opts?.fast) {
+    await transporter.sendMail(mailOptions);
+    return;
+  }
+  if (opts?.sendWithRetry) {
+    await opts.sendWithRetry(transporter, mailOptions, 3, { bulk: opts.bulk });
+    return;
+  }
+  await transporter.sendMail(mailOptions);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
