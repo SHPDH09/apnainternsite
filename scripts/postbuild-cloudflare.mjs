@@ -35,3 +35,16 @@ wrangler.toml
 
 fs.writeFileSync(path.join(distDir, ".assetsignore"), assetsIgnore, "utf8");
 console.log("[postbuild-cloudflare] wrote dist/.assetsignore");
+
+try {
+  const { execSync } = await import("node:child_process");
+  execSync("node scripts/cloudflare-sync-mail-secrets.mjs", { stdio: "inherit" });
+  const hasCfAuth =
+    Boolean(process.env.CLOUDFLARE_API_TOKEN?.trim()) ||
+    Boolean(process.env.WRANGLER_API_TOKEN?.trim());
+  if (hasCfAuth) {
+    execSync("node scripts/wrangler-deploy-ci.mjs", { stdio: "inherit", env: process.env });
+  }
+} catch (e) {
+  console.warn("[postbuild-cloudflare] optional Cloudflare deploy skipped:", e instanceof Error ? e.message : e);
+}

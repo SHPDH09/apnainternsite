@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
 import { isLocalDevEnvironment } from "@/lib/isLocalDev";
 import { PASSWORD_RESETS_SCHEMA_HINT, passwordResetInsertRow } from "@/lib/passwordResetRow";
-import { siteApiUrl, usePollingInsteadOfRealtime } from "@/lib/siteApi";
+import { siteApiUrl } from "@/lib/siteApi";
 
 export type OtpPurpose = "login" | "password_reset" | "security";
 
@@ -141,7 +141,9 @@ export async function deliverOtpEmail(
   const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
   const localDev = isLocalDevEnvironment();
   const mailAction = purpose === "login" ? "login_otp" : "send_otp";
-  const preferServer = usePollingInsteadOfRealtime() && !localDev;
+  // Prefer browser insert + edge/Lambda send-mail (edge can use Hostinger SMTP).
+  // Server forgot-password path fails when Lambda SMTP env is stale (535).
+  const preferServer = false;
 
   if (localDev && opts?.devSessionKey && typeof window !== "undefined") {
     window.sessionStorage.setItem(opts.devSessionKey, generatedOtp);

@@ -1,7 +1,7 @@
 # Cloudflare Workers — Workers Builds (Git) settings:
 #
 #   Build command:  npm run build
-#   Deploy command: npx wrangler deploy
+#   Deploy command: node scripts/wrangler-deploy-ci.mjs
 #   Root directory:  /
 #   Node.js:        22
 #
@@ -24,3 +24,7 @@ not_found_handling = "single-page-application"
 [vars]
 LAMBDA_ORIGIN = "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com"
 LAMBDA_STAGE = "staging"
+SMTP_HOST = "smtp.hostinger.com"
+SMTP_PORT = "587"
+SMTP_USER = "info@apnaintern.in"
+MAIL_FROM_ADDRESS = "info@apnaintern.in"

@@ -64,7 +64,7 @@ const mailFromAddress = process.env.MAIL_FROM_ADDRESS?.trim();
 if (smtpHost) lines.push(`SMTP_HOST=${smtpHost}`);
 if (smtpUser) lines.push(`SMTP_USER=${smtpUser}`);
 if (smtpPass) lines.push(`SMTP_PASS=${smtpPass}`);
-if (mailFrom) lines.push(`MAIL_FROM=${mailFrom}`);
+if (mailFrom) lines.push(`MAIL_FROM="${mailFrom.replace(/"/g, '\\"')}"`);
 if (mailFromAddress) lines.push(`MAIL_FROM_ADDRESS=${mailFromAddress}`);
 if (smtpPass) lines.push("USE_SES_API=false");
 
