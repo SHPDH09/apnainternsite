@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { formatSmtpError, isSesIdentityNotVerifiedError } from './lib/smtpErrors.js';
+import { formatSmtpError, isSesIdentityNotVerifiedError, isSmtpAuthError } from './lib/smtpErrors.js';
 import { buildOtpMailContent, resolveOtpMailPurpose } from './lib/otpMailTemplate.js';
 import { deliverOutbound } from './lib/deliverOutbound.js';
+import { canUseSesApi } from './lib/sesSend.js';
 
 /** Inlined — importing api/lib/*.ts crashes this Vercel function (FUNCTION_INVOCATION_FAILED). */
 type MailFrom = { name: string; address: string };
@@ -198,12 +199,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
     const { from: mailFrom, sender: mailSender } = sesMailHeaders('Apna Intern');
+    const useSesApi = canUseSesApi();
 
-    if (!SMTP_USER || !SMTP_PASS) {
+    if (!useSesApi && (!SMTP_USER || !SMTP_PASS)) {
       return res.status(500).json({ success: false, message: 'SMTP Credentials missing' });
     }
 
-    const transporter = await createSmtpTransporter();
+    const transporter =
+      useSesApi ? null : await createSmtpTransporter();
 
     if (normalizedAction === 'bulk_custom_mail_batch') {
       const rawRecipients = body.recipients;
@@ -237,11 +240,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const outcomes = await Promise.all(
         list.map(async (to) => {
           try {
-            await sendMailWithRetry(
-              transporter,
+            await deliverOutbound(
               { from, sender, to, subject: mailSubject, html },
-              2,
-              { bulk: true }
+              transporter,
+              { bulk: true, sendWithRetry: sendMailWithRetry }
             );
             return { ok: true as const };
           } catch (e: unknown) {
@@ -296,6 +298,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Skip verify on OTP + bulk — extra SMTP handshakes add 2–10s latency per login code.
     if (
+      transporter &&
       !fastOtpMail &&
       normalizedAction !== 'bulk_custom_mail' &&
       normalizedAction !== 'bulk_custom_mail_batch'
@@ -520,12 +523,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
         const toAddr = String(mailOptions.to || '').trim();
-        return res.status(isSesIdentityNotVerifiedError(e) ? 503 : 500).json({
+        return res.status(isSesIdentityNotVerifiedError(e) ? 503 : isSmtpAuthError(e) ? 502 : 500).json({
           success: false,
           emailSent: false,
           message: isSesIdentityNotVerifiedError(e)
             ? 'Verification email could not be delivered — recipient not verified in Amazon SES'
-            : 'Failed to send verification email',
+            : isSmtpAuthError(e)
+              ? 'Email server authentication failed (SMTP 535)'
+              : 'Failed to send verification email',
           error: formatSmtpError(e, { to: toAddr, from: resolveMailFromAddress() }),
         });
       }

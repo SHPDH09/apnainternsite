@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { query } from '../../aws/server/db.js';
 import { useRds } from '../lib/useRds.js';
 import { buildOtpMailContent, resolveOtpMailPurpose, type OtpMailPurpose } from '../lib/otpMailTemplate.js';
-import { formatSmtpError, isSesIdentityNotVerifiedError } from '../lib/smtpErrors.js';
+import { formatSmtpError, isSesIdentityNotVerifiedError, isSmtpAuthError } from '../lib/smtpErrors.js';
 
 type Action = 'request_otp' | 'reset_password';
 
@@ -83,12 +83,16 @@ async function handleWithRds(
         });
       }
       const msg = mailErr instanceof Error ? mailErr.message : String(mailErr);
-      return res.status(isSesIdentityNotVerifiedError(mailErr) ? 503 : 500).json({
+      return res.status(
+        isSesIdentityNotVerifiedError(mailErr) ? 503 : isSmtpAuthError(mailErr) ? 502 : 500
+      ).json({
         success: false,
         emailSent: false,
         message: isSesIdentityNotVerifiedError(mailErr)
           ? 'Verification email could not be delivered — Amazon SES sandbox blocks unverified recipients'
-          : 'Failed to send verification email',
+          : isSmtpAuthError(mailErr)
+            ? 'Email server authentication failed (SMTP 535)'
+            : 'Failed to send verification email',
         error: formatSmtpError(mailErr, { to: normalizedEmail }),
       });
     }

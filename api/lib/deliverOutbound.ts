@@ -4,9 +4,16 @@ type Transporter = {
   sendMail: (opts: Record<string, unknown>) => Promise<unknown>;
 };
 
+export type SendWithRetryFn = (
+  transporter: Transporter,
+  mailOptions: Record<string, unknown>,
+  attempts?: number,
+  retryOpts?: { bulk?: boolean }
+) => Promise<unknown>;
+
 export async function deliverOutbound(
   mailOptions: Record<string, unknown>,
-  transporter: Transporter,
+  transporter: Transporter | null,
   opts?: { fast?: boolean; bulk?: boolean; attempts?: number; sendWithRetry?: SendWithRetryFn }
 ): Promise<void> {
   const to = String(mailOptions.to || '').trim();
@@ -16,6 +23,10 @@ export async function deliverOutbound(
   if (canUseSesApi()) {
     await sendEmailViaSesApi({ to, subject, html });
     return;
+  }
+
+  if (!transporter) {
+    throw new Error('SMTP credentials missing — configure SMTP_USER/SMTP_PASS or deploy with USE_SES_API');
   }
 
   if (opts?.fast) {
@@ -30,10 +41,3 @@ export async function deliverOutbound(
 
   await transporter.sendMail(mailOptions);
 }
-
-export type SendWithRetryFn = (
-  transporter: Transporter,
-  mailOptions: Record<string, unknown>,
-  attempts?: number,
-  retryOpts?: { bulk?: boolean }
-) => Promise<unknown>;

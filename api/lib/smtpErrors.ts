@@ -20,7 +20,28 @@ export function isSesIdentityNotVerifiedError(e: unknown): boolean {
   return (
     raw.includes("not verified") ||
     raw.includes("messagerejected") ||
-    raw.includes("554") && raw.includes("verified")
+    (raw.includes("554") && raw.includes("verified"))
+  );
+}
+
+/** SMTP login rejected — wrong/expired SMTP_USER or SMTP_PASS on Lambda. */
+export function isSmtpAuthError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    raw.includes("535") ||
+    raw.includes("authentication credentials invalid") ||
+    raw.includes("invalid login") ||
+    raw.includes("auth") && raw.includes("credentials") && raw.includes("invalid")
+  );
+}
+
+export function isPasswordResetsSchemaError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("password_resets") ||
+    m.includes("null value") && m.includes("id") ||
+    m.includes("gen_random_uuid") ||
+    m.includes("permission denied") && m.includes("password_resets")
   );
 }
 
@@ -32,6 +53,16 @@ export function formatSmtpError(
   context?: { to?: string; from?: string }
 ): string {
   const raw = e instanceof Error ? e.message : String(e);
+
+  if (isSmtpAuthError(e)) {
+    return (
+      "Email server login failed (SMTP 535 — invalid credentials). " +
+      "On AWS Lambda: redeploy with USE_SES_API=true (recommended, uses IAM — no SMTP password), " +
+      "or update SMTP_USER/SMTP_PASS in Lambda env with fresh Amazon SES SMTP credentials " +
+      "(SES Console → SMTP settings → Create SMTP credentials)."
+    );
+  }
+
   if (!isSesIdentityNotVerifiedError(e)) return raw;
 
   const identity =
