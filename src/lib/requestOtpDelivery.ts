@@ -18,16 +18,16 @@ type OtpApiJson = {
   devOtp?: string;
 };
 
-/** Working mail API — apnaintern.in has SMTP; ezyintern.in send-mail crashes. */
+/** Production OTP — single /api/send-mail call (RDS insert + SMTP). */
 function getOtpDeliverApiUrl(): string {
-  if (typeof window === "undefined") return "/api/otp-deliver";
+  if (typeof window === "undefined") return "/api/send-mail";
   const host = window.location.hostname.toLowerCase();
   if (host.includes("ezyintern") || host === "www.apnaintern.in") {
-    return "https://apnaintern.in/api/otp-deliver";
+    return "https://apnaintern.in/api/send-mail";
   }
   const fromEnv = import.meta.env.VITE_OTP_DELIVER_API_URL as string | undefined;
   if (fromEnv?.trim()) return fromEnv.trim();
-  return "/api/otp-deliver";
+  return "/api/send-mail";
 }
 
 function isPasswordResetsSchemaMessage(message: string): boolean {
@@ -55,7 +55,7 @@ async function deliverOtpViaServer(
   const res = await fetch(getOtpDeliverApiUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, purpose }),
+    body: JSON.stringify({ action: "otp_deliver", email, purpose }),
   });
 
   const text = await res.text().catch(() => "");

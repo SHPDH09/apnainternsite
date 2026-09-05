@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { randomUUID } from 'node:crypto';
 
 /** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). Inlined below. */
 type MailFrom = { name: string; address: string };
@@ -72,6 +73,32 @@ function canUseSesApi(): boolean {
 
 const MAIL_MANAGER_SMTP_HOST = 'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
 const MAIL_MANAGER_SMTP_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+const RDS_REST =
+  process.env.RDS_REST_URL?.trim() ||
+  'https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/v1/password_resets';
+const REST_KEY = process.env.RDS_ANON_KEY?.trim() || 'local-anon-key';
+
+async function storeOtpInRds(normalizedEmail: string, code: string): Promise<void> {
+  const res = await fetch(RDS_REST, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: REST_KEY,
+      Authorization: `Bearer ${REST_KEY}`,
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({
+      id: randomUUID(),
+      email: normalizedEmail,
+      otp: code,
+      expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(detail.trim().slice(0, 240) || `Could not store OTP (${res.status})`);
+  }
+}
 
 function isStaleSmtpConfig(host: string, user: string): boolean {
   const h = host.toLowerCase();
@@ -345,6 +372,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (cid && recipient) return 'college_admin_welcome';
       return '';
     })();
+
+    if (normalizedAction === 'otp_deliver' || normalizedAction === 'request_otp') {
+      const recipient = String(to || email || '').trim().toLowerCase();
+      if (!recipient.includes('@')) {
+        return res.status(400).json({ success: false, message: 'Valid email required' });
+      }
+      const otpPurpose = resolveOtpMailPurpose(purposeRaw || 'login');
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await storeOtpInRds(recipient, code);
+
+      const smtpCreds = await resolveSmtpCredentials();
+      if (!canUseSesApi() && (!smtpCreds.user || !smtpCreds.pass)) {
+        return res.status(500).json({
+          success: false,
+          emailSent: false,
+          message:
+            'SMTP credentials missing on server. Add SMTP_PASS in Vercel project env, or store Mail Manager SMTP in RDS site_smtp_config.',
+        });
+      }
+
+      const transporter = await createSmtpTransporter(smtpCreds);
+      const mailContent = buildOtpMailContent(code, otpPurpose);
+      const from = { name: 'Apna Intern', address: smtpCreds.fromAddress };
+      try {
+        const info = await transporter.sendMail({
+          from,
+          sender: smtpCreds.fromAddress,
+          to: recipient,
+          subject: mailContent.subject,
+          html: mailContent.html,
+        });
+        return res.status(200).json({
+          success: true,
+          emailSent: true,
+          email: recipient,
+          message: `Verification code sent to ${recipient}. Check inbox and spam.`,
+          messageId: String(info.messageId || ''),
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return res.status(isSmtpAuthError(e) ? 502 : 500).json({
+          success: false,
+          emailSent: false,
+          message: isSmtpAuthError(e)
+            ? 'Email server authentication failed (SMTP 535)'
+            : 'Failed to send verification email',
+          error: formatSmtpError(e, { to: recipient, from: smtpCreds.fromAddress }),
+        });
+      }
+    }
 
     if (normalizedAction === 'send_otp' || normalizedAction === 'login_otp') {
       const recipient = String(to || email || '').trim();
