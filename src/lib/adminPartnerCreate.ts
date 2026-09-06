@@ -1,29 +1,70 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  fetchPendingPartnerApplications,
-  submitPartnerApplication,
   type PartnerKind,
   type PartnerRegistrationInput,
 } from "@/lib/partnerApplications";
-import { approvePartnerApplication } from "@/lib/partnerApplicationAdmin";
+import { readAccessTokenFromClient } from "@/lib/partnerApplicationSubmitApi";
+
+export async function adminCreatePartnerViaApi(
+  accessToken: string,
+  input: PartnerRegistrationInput
+): Promise<{ recordId: string; applicationId: string }> {
+  const origin =
+    typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+  if (!origin) {
+    throw new Error("Admin partner registration API is unavailable in this environment.");
+  }
+
+  const res = await fetch(`${origin}/api/admin-partner-register`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      partner_kind: input.partner_kind,
+      full_name: input.full_name.trim(),
+      email: input.email.trim(),
+      password: input.password,
+      contact_number: input.contact_number.trim(),
+      payload: input.payload,
+    }),
+  });
+
+  const text = await res.text().catch(() => "");
+  let body: {
+    ok?: boolean;
+    recordId?: string;
+    applicationId?: string;
+    message?: string;
+    detail?: string;
+  } = {};
+  try {
+    body = JSON.parse(text) as typeof body;
+  } catch {
+    body = { message: text.trim().slice(0, 280) || `Request failed (${res.status})` };
+  }
+
+  if (!res.ok || body.ok !== true || !body.recordId) {
+    throw new Error(body.message || body.detail || `Partner registration failed (${res.status})`);
+  }
+
+  return {
+    recordId: body.recordId,
+    applicationId: body.applicationId || "",
+  };
+}
 
 export async function adminCreatePartnerDirect(
   client: SupabaseClient,
-  reviewerId: string,
+  _reviewerId: string,
   input: PartnerRegistrationInput
 ): Promise<void> {
-  await submitPartnerApplication(client, input);
-
-  const pending = await fetchPendingPartnerApplications(client);
-  const app = pending.find(
-    (row) => row.email.trim().toLowerCase() === input.email.trim().toLowerCase() &&
-      row.partner_kind === input.partner_kind
-  );
-  if (!app) {
-    throw new Error("Partner record created but application queue entry was not found.");
+  const token = await readAccessTokenFromClient(client);
+  if (!token) {
+    throw new Error("Admin session required");
   }
-
-  await approvePartnerApplication(client, app, reviewerId);
+  await adminCreatePartnerViaApi(token, input);
 }
 
 export type AdminPartnerFormPayload = {

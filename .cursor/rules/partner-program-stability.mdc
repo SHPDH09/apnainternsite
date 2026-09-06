@@ -8,3 +8,4 @@ When changing partner self-apply, applications queue, referral coupons, or homep
 - **Preserve** referral click tracking (`referral_clicks`, `log_referral_click`) — coupon tracking is additive.
 - **Do not gate** core admin/student features behind partner application tables.
 - If another task touches partners, **leave approval + coupon logic unchanged** unless the user explicitly asks.
+- **Preserve** auto-bootstrap for `partner_applications` (`ensurePartnerApplicationsTables`, `/api/ensure-partner-applications`) — do not remove in favor of manual SQL-only errors.
