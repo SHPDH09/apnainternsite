@@ -74,9 +74,13 @@ async function readFallbackJson(client: SupabaseClient): Promise<FallbackEnvelop
 export async function readDashboardServiceKeysFallback(
   client: SupabaseClient
 ): Promise<Record<string, FallbackServiceKeyConfig> | null> {
-  const envelope = await readFallbackJson(client);
-  if (!envelope?.services || typeof envelope.services !== "object") return null;
-  return envelope.services;
+  try {
+    const envelope = await readFallbackJson(client);
+    if (!envelope?.services || typeof envelope.services !== "object") return null;
+    return envelope.services;
+  } catch {
+    return null;
+  }
 }
 
 export async function writeDashboardServiceKeysFallback(

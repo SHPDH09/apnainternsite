@@ -333,9 +333,11 @@ function serviceKeysErrorText(error: unknown): string {
 export function isDashboardServiceKeysTableMissing(error: unknown): boolean {
   const msg = serviceKeysErrorText(error);
   return (
-    /42P01|undefined_table/i.test(msg) ||
+    /42P01|undefined_table|PGRST205/i.test(msg) ||
     /relation ["']?public\.dashboard_service_keys["']? does not exist/i.test(msg) ||
-    /Could not find the table ['"]public\.dashboard_service_keys['"]/i.test(msg)
+    /Could not find the table ['"]public\.dashboard_service_keys['"]/i.test(msg) ||
+    (/dashboard_service_keys/i.test(msg) &&
+      (/schema cache/i.test(msg) || /does not exist/i.test(msg)))
   );
 }
 
@@ -401,19 +403,27 @@ async function readRdsDashboardServiceKeysRow(
 async function readMergedDashboardServiceKeysRow(
   client: SupabaseClient
 ): Promise<DashboardServiceKeysRow> {
-  const rdsRow = await readRdsDashboardServiceKeysRow(client);
-  if (rdsRow) return rdsRow;
-
-  const fallbackServices = await readDashboardServiceKeysFallback(client);
-  const base = normalizeDashboardServiceKeysRow(null);
-  if (!fallbackServices) return base;
-
-  const services = { ...base.services } as Partial<Record<StudentServiceKey, StudentServiceKeyConfig>>;
-  for (const key of STUDENT_SERVICE_KEYS) {
-    const patch = fallbackServices[key];
-    if (patch) services[key] = mergeServiceConfig(DEFAULT_SERVICE_CONFIGS[key], patch);
+  try {
+    const rdsRow = await readRdsDashboardServiceKeysRow(client);
+    if (rdsRow) return rdsRow;
+  } catch (err) {
+    if (!isDashboardServiceKeysBootstrapUnavailable(err)) throw err;
   }
-  return { ...base, services };
+
+  const base = normalizeDashboardServiceKeysRow(null);
+  try {
+    const fallbackServices = await readDashboardServiceKeysFallback(client);
+    if (!fallbackServices) return base;
+
+    const services = { ...base.services } as Partial<Record<StudentServiceKey, StudentServiceKeyConfig>>;
+    for (const key of STUDENT_SERVICE_KEYS) {
+      const patch = fallbackServices[key];
+      if (patch) services[key] = mergeServiceConfig(DEFAULT_SERVICE_CONFIGS[key], patch);
+    }
+    return { ...base, services };
+  } catch {
+    return base;
+  }
 }
 
 export async function fetchDashboardServiceKeys(
@@ -424,12 +434,10 @@ export async function fetchDashboardServiceKeys(
     cachedServiceKeys = row;
     return row;
   } catch (err) {
-    if (isDashboardServiceKeysBootstrapUnavailable(err)) {
-      const row = normalizeDashboardServiceKeysRow(null);
-      cachedServiceKeys = row;
-      return row;
-    }
-    throw err;
+    console.warn("[fetchDashboardServiceKeys] falling back to defaults:", err);
+    const row = normalizeDashboardServiceKeysRow(null);
+    cachedServiceKeys = row;
+    return row;
   }
 }
 
@@ -446,15 +454,18 @@ export async function loadDashboardServiceKeysForAdmin(
 
     const row = await readMergedDashboardServiceKeysRow(client);
     cachedServiceKeys = row;
-    const fallbackOnly = Boolean(await readDashboardServiceKeysFallback(client));
+    let fallbackOnly = false;
+    try {
+      fallbackOnly = Boolean(await readDashboardServiceKeysFallback(client));
+    } catch {
+      /* optional S3 snapshot */
+    }
     return { row, persisted: fallbackOnly };
   } catch (err) {
-    if (isDashboardServiceKeysBootstrapUnavailable(err)) {
-      const row = normalizeDashboardServiceKeysRow(null);
-      cachedServiceKeys = row;
-      return { row, persisted: false };
-    }
-    throw err;
+    console.warn("[loadDashboardServiceKeysForAdmin] falling back to defaults:", err);
+    const row = normalizeDashboardServiceKeysRow(null);
+    cachedServiceKeys = row;
+    return { row, persisted: false };
   }
 }
 

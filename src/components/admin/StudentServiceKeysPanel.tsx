@@ -173,12 +173,14 @@ export function StudentServiceKeysPanel({ client, currentUserId, isActive = true
   const reloadConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const { row } = await loadDashboardServiceKeysForAdmin(client);
+      const { row, persisted } = await loadDashboardServiceKeysForAdmin(client);
       setServiceConfigs(row.services);
+      if (!persisted) {
+        toast.message("Using default service key settings (database table not ready yet). You can still edit and save.");
+      }
     } catch (err) {
       console.warn("[StudentServiceKeysPanel] load failed:", err);
       setServiceConfigs(normalizeDashboardServiceKeysRow(null).services);
-      toast.error(err instanceof Error ? err.message : "Failed to load service keys.");
     } finally {
       setLoading(false);
     }
