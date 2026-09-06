@@ -42,4 +42,6 @@ Health: `GET http://127.0.0.1:3000/api/health`
 - Start brings up local Postgres (`pg_ctlcluster`) then `npm run dev`.
 - Do not point Cloud Agents at production AWS RDS, S3, Razorpay, or SMTP unless the user explicitly provides those secrets.
 - Do not remove Admin sidebar items; see `.cursor/rules/admin-sidebar-stability.mdc`.
+- Do not break Admin → Keys load/save resilience; see `.cursor/rules/dashboard-service-keys-stability.mdc`.
+- Do not break blog CMS storage routes or S3 fallback; see `.cursor/rules/blog-storage-stability.mdc`.
 - When pushing at the user’s request, follow `.cursor/rules/git-push-main.mdc`.
