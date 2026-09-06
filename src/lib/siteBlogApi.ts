@@ -5,6 +5,7 @@ import {
   deleteFallbackBlogPost,
   fetchFallbackAdminBlogPosts,
   fetchFallbackPublicBlogPosts,
+  findFallbackBlogPostById,
   isSiteBlogTableMissingError,
   siteBlogFallbackAvailable,
   siteBlogTableAvailable,
@@ -280,26 +281,42 @@ export async function fetchPublicBlogPosts(
   opts?: { featuredOnly?: boolean; limit?: number; postType?: BlogPostType }
 ): Promise<SiteBlogPost[]> {
   await ensureSiteBlogStorage(client);
+
+  let fallbackRows = sortBlogPosts((await fetchFallbackPublicBlogPosts(client)).map(mapCoverUrl)).filter(
+    isBlogPostPublic
+  );
+
   if (!(await siteBlogTableAvailable(client))) {
-    let rows = sortBlogPosts((await fetchFallbackPublicBlogPosts(client)).map(mapCoverUrl)).filter(
+    if (opts?.featuredOnly) fallbackRows = fallbackRows.filter((p) => p.is_featured);
+    if (opts?.postType) fallbackRows = fallbackRows.filter((p) => p.post_type === opts.postType);
+    if (opts?.limit && opts.limit > 0) fallbackRows = fallbackRows.slice(0, opts.limit);
+    return fallbackRows;
+  }
+
+  let query = client.from("site_blog_posts").select(BLOG_SELECT).eq("is_active", true);
+  if (opts?.featuredOnly) query = query.eq("is_featured", true);
+  if (opts?.postType) query = query.eq("post_type", opts.postType);
+
+  try {
+    const { data, error } = await withBlogStorageRetry(client, () => query);
+    if (error) throw error;
+    let rows = mergeBlogPostsById(fallbackRows, sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl))).filter(
       isBlogPostPublic
     );
     if (opts?.featuredOnly) rows = rows.filter((p) => p.is_featured);
     if (opts?.postType) rows = rows.filter((p) => p.post_type === opts.postType);
     if (opts?.limit && opts.limit > 0) rows = rows.slice(0, opts.limit);
     return rows;
+  } catch (err) {
+    if (isSiteBlogTableMissing(err)) {
+      resetSiteBlogStorageCache();
+      if (opts?.featuredOnly) fallbackRows = fallbackRows.filter((p) => p.is_featured);
+      if (opts?.postType) fallbackRows = fallbackRows.filter((p) => p.post_type === opts.postType);
+      if (opts?.limit && opts.limit > 0) fallbackRows = fallbackRows.slice(0, opts.limit);
+      return fallbackRows;
+    }
+    throw err;
   }
-  let query = client.from("site_blog_posts").select(BLOG_SELECT).eq("is_active", true);
-
-  if (opts?.featuredOnly) query = query.eq("is_featured", true);
-  if (opts?.postType) query = query.eq("post_type", opts.postType);
-
-  const { data, error } = await withBlogStorageRetry(client, () => query);
-  if (error) throw error;
-
-  let rows = sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl)).filter(isBlogPostPublic);
-  if (opts?.limit && opts.limit > 0) rows = rows.slice(0, opts.limit);
-  return rows;
 }
 
 export async function fetchPublicBlogPostBySlug(
@@ -332,16 +349,64 @@ export async function fetchPublicBlogPostBySlug(
   return isBlogPostPublic(post) ? post : null;
 }
 
-export async function fetchAdminBlogPosts(client: SupabaseClient): Promise<SiteBlogPost[]> {
-  await ensureSiteBlogStorage(client);
-  if (!(await siteBlogTableAvailable(client))) {
-    return sortBlogPosts((await fetchFallbackAdminBlogPosts(client)).map(mapCoverUrl));
+async function locateBlogPost(
+  client: SupabaseClient,
+  id: string
+): Promise<"rds" | "fallback" | null> {
+  resetSiteBlogStorageCache();
+  if (await siteBlogTableAvailable(client)) {
+    const { data, error } = await client.from("site_blog_posts").select("id").eq("id", id).maybeSingle();
+    if (error && !isSiteBlogTableMissing(error)) throw error;
+    if (data?.id) return "rds";
   }
+  const fallback = await findFallbackBlogPostById(client, id);
+  if (fallback) return "fallback";
+  return null;
+}
+
+async function fetchRdsAdminBlogPosts(client: SupabaseClient): Promise<SiteBlogPost[]> {
   const { data, error } = await withBlogStorageRetry(client, () =>
     client.from("site_blog_posts").select("*").order("updated_at", { ascending: false })
   );
   if (error) throw error;
-  return sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl));
+  return ((data || []) as SiteBlogPost[]).map(mapCoverUrl);
+}
+
+function mergeBlogPostsById(...groups: SiteBlogPost[][]): SiteBlogPost[] {
+  const byId = new Map<string, SiteBlogPost>();
+  for (const group of groups) {
+    for (const row of group) {
+      const existing = byId.get(row.id);
+      if (!existing) {
+        byId.set(row.id, row);
+        continue;
+      }
+      const existingTs = new Date(existing.updated_at || existing.created_at || 0).getTime();
+      const nextTs = new Date(row.updated_at || row.created_at || 0).getTime();
+      if (nextTs >= existingTs) byId.set(row.id, row);
+    }
+  }
+  return sortBlogPosts([...byId.values()]);
+}
+
+export async function fetchAdminBlogPosts(client: SupabaseClient): Promise<SiteBlogPost[]> {
+  await ensureSiteBlogStorage(client);
+
+  const fallbackRows = sortBlogPosts((await fetchFallbackAdminBlogPosts(client)).map(mapCoverUrl));
+  if (!(await siteBlogTableAvailable(client))) {
+    return fallbackRows;
+  }
+
+  try {
+    const rdsRows = await fetchRdsAdminBlogPosts(client);
+    return mergeBlogPostsById(fallbackRows, rdsRows);
+  } catch (err) {
+    if (isSiteBlogTableMissing(err)) {
+      resetSiteBlogStorageCache();
+      return fallbackRows;
+    }
+    throw err;
+  }
 }
 
 function resolvePublishFields(input: SiteBlogPostInput): {
@@ -485,14 +550,58 @@ export async function updateBlogPost(
   }
 
   await ensureSiteBlogStorage(client);
-  if (!(await siteBlogTableAvailable(client))) {
-    await updateFallbackBlogPost(client, id, payload as Partial<SiteBlogPost>);
+
+  const location = await locateBlogPost(client, id);
+  const fallbackPatch = payload as Partial<SiteBlogPost>;
+
+  if (location === "fallback") {
+    await updateFallbackBlogPost(client, id, fallbackPatch);
     return;
   }
-  const { error } = await withBlogStorageRetry(client, () =>
-    client.from("site_blog_posts").update(payload).eq("id", id)
+
+  if (location === "rds") {
+    const { data, error } = await withBlogStorageRetry(client, () =>
+      client.from("site_blog_posts").update(payload).eq("id", id).select("id").maybeSingle()
+    );
+    if (error) throw error;
+    if (data?.id) return;
+    // Post disappeared from RDS — fall back to cloud JSON if present.
+    if (await findFallbackBlogPostById(client, id)) {
+      await updateFallbackBlogPost(client, id, fallbackPatch);
+      return;
+    }
+    throw new Error("Blog post not found.");
+  }
+
+  if (!(await siteBlogTableAvailable(client))) {
+    await updateFallbackBlogPost(client, id, fallbackPatch);
+    return;
+  }
+
+  const { data, error } = await withBlogStorageRetry(client, () =>
+    client.from("site_blog_posts").update(payload).eq("id", id).select("id").maybeSingle()
   );
-  if (error) throw error;
+  if (error) {
+    if (isSiteBlogTableMissing(error)) {
+      resetSiteBlogStorageCache();
+      await updateFallbackBlogPost(client, id, fallbackPatch);
+      return;
+    }
+    throw error;
+  }
+  if (data?.id) return;
+
+  if (await findFallbackBlogPostById(client, id)) {
+    await updateFallbackBlogPost(client, id, fallbackPatch);
+    return;
+  }
+
+  if (fallbackPatch.title && fallbackPatch.content) {
+    await updateFallbackBlogPost(client, id, fallbackPatch);
+    return;
+  }
+
+  throw new Error("Blog post not found. Save as draft first, then publish.");
 }
 
 async function uploadBlogImage(
@@ -552,14 +661,23 @@ export async function deleteBlogPost(client: SupabaseClient, row: SiteBlogPost):
     await client.storage.from(BLOG_BUCKET).remove([row.cover_image_path]);
   }
   await ensureSiteBlogStorage(client);
-  if (!(await siteBlogTableAvailable(client))) {
-    await deleteFallbackBlogPost(client, row.id);
-    return;
+
+  const location = await locateBlogPost(client, row.id);
+  if (location === "fallback" || location === null) {
+    try {
+      await deleteFallbackBlogPost(client, row.id);
+    } catch {
+      /* ignore missing fallback row */
+    }
   }
-  const { error } = await withBlogStorageRetry(client, () =>
-    client.from("site_blog_posts").delete().eq("id", row.id)
-  );
-  if (error) throw error;
+  if (location === "rds" || location === null) {
+    if (await siteBlogTableAvailable(client)) {
+      const { error } = await withBlogStorageRetry(client, () =>
+        client.from("site_blog_posts").delete().eq("id", row.id)
+      );
+      if (error && !isSiteBlogTableMissing(error)) throw error;
+    }
+  }
 }
 
 export function formatBlogDate(value?: string | null): string {
