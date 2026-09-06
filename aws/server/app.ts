@@ -21,6 +21,7 @@ import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
 import ensureBlogCms from "../../api/ensure-blog-cms";
 import ensureDashboardServiceKeys from "../../api/ensure-dashboard-service-keys";
 import ensurePartnerApplications from "../../api/ensure-partner-applications";
+import partnerApplicationSubmit from "../../api/partner-application-submit";
 import rdsApplyAll from "./rds-apply-all-route.js";
 import { loadRootEnv } from "./load-env";
 import { ensureAllCmsTables } from "./cms-bootstrap";
@@ -202,6 +203,7 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/ensure-blog-cms", handler: ensureBlogCms },
     { method: "post", path: "/api/ensure-dashboard-service-keys", handler: ensureDashboardServiceKeys },
     { method: "post", path: "/api/ensure-partner-applications", handler: ensurePartnerApplications },
+    { method: "post", path: "/api/partner-application-submit", handler: partnerApplicationSubmit },
     { method: "post", path: "/api/rds-apply-all", handler: rdsApplyAll },
     { method: "all", path: "/api/admin-tasks", handler: adminTasks },
     { method: "post", path: "/api/razorpay-recovery", handler: razorpayRecovery },
