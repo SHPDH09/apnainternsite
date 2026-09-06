@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  normalizePartnerAccessMode,
+  type PartnerAccessMode,
+} from "@/lib/partnerAccessMode";
 
 export type ReferralPartnerSelf = {
   id: string;
@@ -8,13 +12,14 @@ export type ReferralPartnerSelf = {
   email: string;
   active: boolean;
   profile_image_url?: string | null;
+  access_mode: PartnerAccessMode;
 };
 
 const PARTNER_SELF_SELECT =
-  "id, auth_user_id, referral_code, full_name, email, active";
+  "id, auth_user_id, referral_code, full_name, email, active, access_mode";
 
 const PARTNER_SELF_SELECT_WITH_AVATAR =
-  "id, auth_user_id, referral_code, full_name, email, active, profile_image_url";
+  "id, auth_user_id, referral_code, full_name, email, active, access_mode, profile_image_url";
 
 function partnerFromRpcPayload(raw: unknown): ReferralPartnerSelf | null {
   const row = raw as {
@@ -25,6 +30,7 @@ function partnerFromRpcPayload(raw: unknown): ReferralPartnerSelf | null {
     email?: string;
     active?: boolean;
     profile_image_url?: string | null;
+    access_mode?: string | null;
   } | null;
   if (!row?.id || !row.referral_code) return null;
   return {
@@ -35,6 +41,7 @@ function partnerFromRpcPayload(raw: unknown): ReferralPartnerSelf | null {
     email: String(row.email || ""),
     active: row.active !== false,
     profile_image_url: row.profile_image_url ?? null,
+    access_mode: normalizePartnerAccessMode(row.access_mode),
   };
 }
 

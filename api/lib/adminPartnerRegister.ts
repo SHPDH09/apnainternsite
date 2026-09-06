@@ -29,10 +29,35 @@ function generateCouponCode(): string {
   return s;
 }
 
+function generateCouponCodeFromName(fullName: string): string {
+  const parts = fullName
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, "")
+    .split(/\s+/)
+    .filter(Boolean);
+  let base =
+    parts.length >= 2 ? `${parts[0]}${parts[parts.length - 1]}` : parts[0] || "PARTNER";
+  base = base.replace(/[^A-Z0-9]/g, "").slice(0, 14) || "PARTNER";
+  return `CPN-${base}`;
+}
+
+function resolveAccessMode(partnerKind: string, payload: Record<string, unknown>): string {
+  const explicit = String(payload.access_mode || "").trim();
+  if (explicit === "referral_only" || explicit === "coupon_only" || explicit === "both") {
+    return explicit;
+  }
+  if (partnerKind === "coupon") return "coupon_only";
+  if (partnerKind === "referral") {
+    const mode = String(payload.referral_apply_mode || "referral_only");
+    if (mode === "coupon_only" || mode === "both") return mode;
+    return "referral_only";
+  }
+  return "both";
+}
+
 function shouldCreateCoupon(partnerKind: string, payload: Record<string, unknown>): boolean {
-  if (partnerKind === "coupon") return true;
-  if (partnerKind !== "referral") return false;
-  const mode = String(payload.referral_apply_mode || "referral_only");
+  const mode = resolveAccessMode(partnerKind, payload);
   return mode === "coupon_only" || mode === "both";
 }
 
@@ -217,6 +242,7 @@ async function createReferralPartnerRecord(
   reviewerId: string
 ): Promise<{ partnerId: string; applicationId: string }> {
   const payload = input.payload || {};
+  const accessMode = resolveAccessMode(input.partner_kind, payload);
   const email = input.email.trim().toLowerCase();
 
   const { data: existing } = await db
@@ -235,8 +261,8 @@ async function createReferralPartnerRecord(
       const { rows } = await query<{ id: string }>(
         `INSERT INTO public.referral_partners (
            full_name, email, contact_number, city, college_name, referral_type,
-           referral_code, auth_user_id, partner_login_secret, active
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid, $9, true)
+           referral_code, auth_user_id, partner_login_secret, active, access_mode
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid, $9, true, $10)
          RETURNING id`,
         [
           input.full_name.trim(),
@@ -248,6 +274,7 @@ async function createReferralPartnerRecord(
           code,
           userId,
           password.trim(),
+          accessMode,
         ]
       );
       partnerId = rows[0]?.id || "";
@@ -284,15 +311,21 @@ async function createReferralPartnerRecord(
   const applicationId = await insertApprovedApplication(userId, reviewerId, input, partnerId);
 
   if (shouldCreateCoupon(input.partner_kind, payload)) {
-    const couponCode = String(payload.coupon_code || generateCouponCode()).trim().toUpperCase();
+    const couponCode = String(
+      payload.coupon_code || generateCouponCodeFromName(input.full_name.trim()) || generateCouponCode()
+    ).trim().toUpperCase();
     const allowedEmails = parseEmailList(payload.allowed_student_emails ?? payload.student_emails);
+    const couponAmount =
+      payload.coupon_amount != null && String(payload.coupon_amount).trim() !== ""
+        ? Number(payload.coupon_amount)
+        : null;
     await query(
       `INSERT INTO public.referral_coupons (
          referral_partner_id, coupon_code, university_name, college_name,
          internship_domain, max_students, allowed_student_emails,
-         valid_from, valid_to, active, application_id
+         valid_from, valid_to, active, application_id, coupon_amount
        ) VALUES (
-         $1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::timestamptz, $9::timestamptz, true, $10::uuid
+         $1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::timestamptz, $9::timestamptz, true, $10::uuid, $11
        )`,
       [
         partnerId,
@@ -305,6 +338,7 @@ async function createReferralPartnerRecord(
         payload.valid_from ? String(payload.valid_from) : null,
         payload.valid_to ? String(payload.valid_to) : null,
         applicationId,
+        couponAmount,
       ]
     );
   }

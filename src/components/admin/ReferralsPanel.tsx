@@ -66,6 +66,18 @@ import {
 import { fetchAllCollegesCatalog, resolveUniversityId } from "@/lib/institutionCatalog";
 import { displayCollegeName } from "@/lib/collegeDisplay";
 import { ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { PartnerDetailHistoryPanel } from "@/components/admin/PartnerDetailHistoryPanel";
+import {
+  PARTNER_ACCESS_MODE_OPTIONS,
+  partnerAccessModeLabel,
+  type PartnerAccessMode,
+} from "@/lib/partnerAccessMode";
+import {
+  createReferralCouponFromPayload,
+  fetchCouponsForPartner,
+  generateCouponCodeFromName,
+  updateReferralCoupon,
+} from "@/lib/referralCoupons";
 import { PortalSectionHeader } from "@/components/portal/portalDashboardUi";
 
 const PARTNER_PAGE_SIZE = 20;
@@ -84,6 +96,7 @@ type PartnerRow = {
   created_at: string;
   auth_user_id: string | null;
   partner_login_secret?: string | null;
+  access_mode?: PartnerAccessMode | null;
   signup_count?: number;
   total_clicks?: number;
   approved_students?: number;
@@ -112,6 +125,9 @@ export const ReferralsPanel = () => {
   const [addCreatePortal, setAddCreatePortal] = useState(false);
   const [addPortalLoginCode, setAddPortalLoginCode] = useState("");
   const [addEmailPortalCreds, setAddEmailPortalCreds] = useState(true);
+  const [addAccessMode, setAddAccessMode] = useState<PartnerAccessMode>("both");
+  const [addCouponAmount, setAddCouponAmount] = useState("");
+  const [addCouponCode, setAddCouponCode] = useState("");
 
   const [portalDialogOpen, setPortalDialogOpen] = useState(false);
   const [portalTarget, setPortalTarget] = useState<PartnerRow | null>(null);
@@ -141,6 +157,8 @@ export const ReferralsPanel = () => {
   const [editColleges, setEditColleges] = useState<string[]>([]);
   const [editReferralType, setEditReferralType] = useState("other");
   const [editActive, setEditActive] = useState(true);
+  const [editAccessMode, setEditAccessMode] = useState<PartnerAccessMode>("both");
+  const [editCouponAmount, setEditCouponAmount] = useState("");
 
   const addCollegeOptions = useMemo(
     () => collegesForUniversityNames(colleges, unis, addUniversities),
@@ -216,7 +234,7 @@ export const ReferralsPanel = () => {
         const { data, error } = await supabase
           .from("referral_partners")
           .select(
-            "id, full_name, email, contact_number, referral_code, city, college_name, referral_type, active, created_at, auth_user_id, partner_login_secret"
+            "id, full_name, email, contact_number, referral_code, city, college_name, referral_type, active, created_at, auth_user_id, partner_login_secret, access_mode"
           )
           .order("created_at", { ascending: false });
         if (error) {
@@ -500,6 +518,7 @@ Apna Intern Team`;
                   : null,
             referral_type: addReferralType,
             referral_code: code,
+            access_mode: addAccessMode,
           })
           .select("id, referral_code")
           .single();
@@ -524,7 +543,6 @@ Apna Intern Team`;
       try {
         await savePartnerAssignments(inserted.id, addUniversities, addColleges);
       } catch (assignErr) {
-        // Partner exists — surface assignment failure clearly.
         toast.error(
           assignErr instanceof Error
             ? `Partner created but assignments failed: ${assignErr.message}`
@@ -533,6 +551,28 @@ Apna Intern Team`;
         await loadPartners();
         openLinkDialog(inserted.referral_code);
         return;
+      }
+
+      if (addAccessMode === "coupon_only" || addAccessMode === "both") {
+        try {
+          await createReferralCouponFromPayload(supabase, {
+            referralPartnerId: inserted.id,
+            payload: {
+              universities: addUniversities,
+              colleges: addColleges,
+              university_name: addUniversities[0] || null,
+              college_name: addColleges[0] || null,
+              coupon_amount: addCouponAmount.trim() ? Number(addCouponAmount) : null,
+            },
+            couponCode: addCouponCode.trim() || generateCouponCodeFromName(name),
+          });
+        } catch (couponErr) {
+          toast.warning(
+            couponErr instanceof Error
+              ? `Partner saved, but coupon failed: ${couponErr.message}`
+              : "Partner saved, but coupon could not be created"
+          );
+        }
       }
 
       if (addCreatePortal) {
@@ -578,6 +618,9 @@ Apna Intern Team`;
       setAddCreatePortal(false);
       setAddPortalLoginCode("");
       setAddEmailPortalCreds(true);
+      setAddAccessMode("both");
+      setAddCouponAmount("");
+      setAddCouponCode("");
       await loadPartners();
       openLinkDialog(inserted.referral_code);
     } catch (e: unknown) {
@@ -707,7 +750,7 @@ Apna Intern Team`;
     setDetailTotal(0);
   };
 
-  const openEdit = (p: PartnerRow) => {
+  const openEdit = async (p: PartnerRow) => {
     setEditRow(p);
     setEditName(p.full_name);
     setEditEmail(p.email);
@@ -717,6 +760,16 @@ Apna Intern Team`;
     setEditColleges(p.assigned_colleges || []);
     setEditReferralType(p.referral_type || "other");
     setEditActive(p.active);
+    setEditAccessMode((p.access_mode as PartnerAccessMode) || "both");
+    setEditCouponAmount("");
+    try {
+      const coupons = await fetchCouponsForPartner(supabase, p.id);
+      if (coupons[0]?.coupon_amount != null) {
+        setEditCouponAmount(String(coupons[0].coupon_amount));
+      }
+    } catch {
+      /* optional */
+    }
     setEditOpen(true);
   };
 
@@ -750,11 +803,30 @@ Apna Intern Team`;
                 : null,
           referral_type: editReferralType,
           active: editActive,
+          access_mode: editAccessMode,
           updated_at: new Date().toISOString(),
         })
         .eq("id", editRow.id);
       if (error) throw error;
       await savePartnerAssignments(editRow.id, editUniversities, editColleges);
+      if (editAccessMode === "coupon_only" || editAccessMode === "both") {
+        const coupons = await fetchCouponsForPartner(supabase, editRow.id);
+        if (coupons[0]) {
+          await updateReferralCoupon(supabase, coupons[0].id, {
+            coupon_amount: editCouponAmount.trim() ? Number(editCouponAmount) : null,
+          });
+        } else {
+          await createReferralCouponFromPayload(supabase, {
+            referralPartnerId: editRow.id,
+            payload: {
+              universities: editUniversities,
+              colleges: editColleges,
+              coupon_amount: editCouponAmount.trim() ? Number(editCouponAmount) : null,
+            },
+            couponCode: generateCouponCodeFromName(name),
+          });
+        }
+      }
       toast.success("Updated");
       setEditOpen(false);
       setEditRow(null);
@@ -826,6 +898,7 @@ Apna Intern Team`;
               <TableHead>Partner</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead>Referral Code</TableHead>
+              <TableHead>Access</TableHead>
               <TableHead className="text-right">Clicks</TableHead>
               <TableHead className="text-right">Signups</TableHead>
               <TableHead className="text-right">Approved</TableHead>
@@ -838,14 +911,14 @@ Apna Intern Team`;
           <TableBody>
             {tableLoading ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-20">
+                <TableCell colSpan={11} className="text-center py-20">
                   <Loader2 className="size-8 animate-spin mx-auto text-primary" />
                 </TableCell>
               </TableRow>
             ) : paginatedPartners.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={10}
+                  colSpan={11}
                   className="text-center py-20 text-muted-foreground font-medium italic"
                 >
                   No referral partners match your filters.
@@ -888,6 +961,11 @@ Apna Intern Team`;
                     <code className="text-[10px] bg-slate-100 px-2 py-0.5 rounded font-bold">
                       {p.referral_code}
                     </code>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-[9px] font-semibold whitespace-nowrap">
+                      {partnerAccessModeLabel(p.access_mode)}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right font-medium text-slate-600">{p.total_clicks ?? 0}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums text-[#5AA3E6]">{p.signup_count ?? 0}</TableCell>
@@ -1075,6 +1153,50 @@ Apna Intern Team`;
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2 rounded-lg border p-3">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                Dashboard access
+              </Label>
+              <div className="grid gap-2">
+                {PARTNER_ACCESS_MODE_OPTIONS.map((option) => (
+                  <label key={option.value} className="flex gap-2 text-sm">
+                    <input
+                      type="radio"
+                      checked={addAccessMode === option.value}
+                      onChange={() => setAddAccessMode(option.value)}
+                    />
+                    <span>
+                      <span className="font-bold">{option.label}</span>
+                      <span className="block text-xs text-muted-foreground">{option.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {(addAccessMode === "coupon_only" || addAccessMode === "both") && (
+              <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                <p className="text-sm font-bold text-amber-900">Coupon</p>
+                <div className="space-y-1.5">
+                  <Label>Coupon code</Label>
+                  <Input
+                    className="font-mono uppercase"
+                    value={addCouponCode}
+                    onChange={(e) => setAddCouponCode(e.target.value.toUpperCase())}
+                    placeholder={addName.trim() ? generateCouponCodeFromName(addName.trim()) : "CPN-NAME"}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Coupon amount (₹)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={addCouponAmount}
+                    onChange={(e) => setAddCouponAmount(e.target.value)}
+                    placeholder="e.g. 100"
+                  />
+                </div>
+              </div>
+            )}
             <div className="flex items-start gap-2 pt-1">
               <Checkbox
                 id="ref-add-portal"
@@ -1186,100 +1308,25 @@ Apna Intern Team`;
               ) : null}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col sm:flex-row gap-2 mb-2">
-            <Input
-              placeholder="Search by name, email, or phone…"
-              value={detailSearch}
-              onChange={(e) => {
-                setDetailSearch(e.target.value);
-                setDetailPage(0);
-              }}
-              className="h-9"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2 shrink-0"
-              disabled={detailStudents.length === 0}
-              onClick={() =>
-                exportReferralStudentsCsv(
-                  detailStudents,
-                  `referral-${detailPartner?.referral_code || "export"}.csv`
-                )
-              }
-            >
-              <Download className="size-4" /> Export CSV
-            </Button>
-          </div>
-          {detailLoading ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="size-8 animate-spin text-primary" />
-            </div>
-          ) : (
-            <ScrollArea className="max-h-[55vh] pr-3">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs">Student</TableHead>
-                    <TableHead className="text-xs">Mobile</TableHead>
-                    <TableHead className="text-xs">College</TableHead>
-                    <TableHead className="text-xs">Status</TableHead>
-                    <TableHead className="text-xs">Registered</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {detailStudents.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8 text-sm">
-                        No students yet from this referral link.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    detailStudents.map((s) => (
-                      <TableRow key={s.id}>
-                        <TableCell>
-                          <div className="font-bold text-sm">{s.full_name}</div>
-                          <div className="text-xs text-muted-foreground">{s.email}</div>
-                        </TableCell>
-                        <TableCell className="text-xs">{s.contact_number || "—"}</TableCell>
-                        <TableCell className="text-xs max-w-[140px] truncate" title={s.college_name}>
-                          {s.college_name || "—"}
-                        </TableCell>
-                        <TableCell className="text-xs">{s.status || "Applied"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">
-                          {s.created_at ? new Date(s.created_at).toLocaleDateString() : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          )}
-          {!detailLoading && detailTotal > 0 ? (
-            <div className="flex items-center justify-between gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={detailPage <= 0}
-                onClick={() => setDetailPage((p) => Math.max(0, p - 1))}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                Page {detailPage + 1} / {Math.max(1, Math.ceil(detailTotal / DETAIL_PAGE_SIZE))}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={detailPage >= Math.ceil(detailTotal / DETAIL_PAGE_SIZE) - 1}
-                onClick={() => setDetailPage((p) => p + 1)}
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
-          ) : null}
+          <PartnerDetailHistoryPanel
+            partner={detailPartner}
+            students={detailStudents}
+            studentsTotal={detailTotal}
+            studentsLoading={detailLoading}
+            studentPage={detailPage}
+            onStudentPageChange={setDetailPage}
+            studentSearch={detailSearch}
+            onStudentSearchChange={(value) => {
+              setDetailSearch(value);
+              setDetailPage(0);
+            }}
+            onExportStudents={() =>
+              exportReferralStudentsCsv(
+                detailStudents,
+                `referral-${detailPartner?.referral_code || "export"}.csv`
+              )
+            }
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => detailPartner && openLinkDialog(detailPartner.referral_code)}>
               View link
@@ -1404,8 +1451,33 @@ Apna Intern Team`;
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2 rounded-lg border p-3">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">Dashboard access</Label>
+              <div className="grid gap-2">
+                {PARTNER_ACCESS_MODE_OPTIONS.map((option) => (
+                  <label key={option.value} className="flex gap-2 text-sm">
+                    <input
+                      type="radio"
+                      checked={editAccessMode === option.value}
+                      onChange={() => setEditAccessMode(option.value)}
+                    />
+                    <span className="font-medium">{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {(editAccessMode === "coupon_only" || editAccessMode === "both") && (
+              <div className="space-y-1.5">
+                <Label>Primary coupon amount (₹)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={editCouponAmount}
+                  onChange={(e) => setEditCouponAmount(e.target.value)}
+                />
+              </div>
+            )}
             <div className="flex items-center gap-2 pt-2">
-              <Checkbox id="ref-active" checked={editActive} onCheckedChange={(v) => setEditActive(!!v)} />
               <Label htmlFor="ref-active" className="font-normal cursor-pointer">
                 Active (accept new attributions)
               </Label>

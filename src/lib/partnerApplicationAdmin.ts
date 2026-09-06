@@ -10,8 +10,22 @@ import {
 import { fetchAllCollegesCatalog, resolveUniversityId } from "@/lib/institutionCatalog";
 import { displayCollegeName } from "@/lib/collegeDisplay";
 import type { PartnerApplicationRow } from "@/lib/partnerApplications";
-import { shouldCreateCouponOnApproval } from "@/lib/partnerApplications";
-import { createReferralCouponFromPayload, generateCouponCode } from "@/lib/referralCoupons";
+import {
+  createReferralCouponFromPayload,
+  generateCouponCode,
+  generateCouponCodeFromName,
+} from "@/lib/referralCoupons";
+import {
+  resolvePartnerAccessMode,
+  type PartnerAccessMode,
+} from "@/lib/partnerAccessMode";
+
+export type ApprovePartnerOptions = {
+  access_mode?: PartnerAccessMode;
+  coupon_amount?: number | null;
+  coupon_code?: string | null;
+  create_coupon?: boolean;
+};
 
 async function savePartnerAssignments(
   client: SupabaseClient,
@@ -99,9 +113,15 @@ async function linkReferralPartnerPortal(
 export async function approvePartnerApplication(
   client: SupabaseClient,
   app: PartnerApplicationRow,
-  reviewerId: string
+  reviewerId: string,
+  options: ApprovePartnerOptions = {}
 ): Promise<{ redirectKind: PartnerApplicationRow["partner_kind"]; recordId: string }> {
   const payload = app.payload || {};
+  const accessMode = resolvePartnerAccessMode(
+    app.partner_kind,
+    payload,
+    options.access_mode ?? (payload.access_mode as PartnerAccessMode | undefined)
+  );
 
   if (app.partner_kind === "cyber_cafe") {
     const { data: cafe } = await client
@@ -142,6 +162,14 @@ export async function approvePartnerApplication(
       id: String(existingPartner.id),
       referral_code: String(existingPartner.referral_code),
     };
+    await client
+      .from("referral_partners")
+      .update({
+        access_mode: accessMode,
+        full_name: app.full_name,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", inserted.id);
   } else {
     for (let attempt = 0; attempt < 10; attempt++) {
       const { data, error } = await client
@@ -154,6 +182,7 @@ export async function approvePartnerApplication(
           college_name: String(payload.college_name || payload.colleges?.[0] || "").trim() || null,
           referral_type: String(payload.referral_type || "partner"),
           referral_code: code,
+          access_mode: accessMode,
           active: true,
         })
         .select("id, referral_code")
@@ -195,12 +224,24 @@ export async function approvePartnerApplication(
     loginSecret,
   });
 
-  if (shouldCreateCouponOnApproval(app.partner_kind, payload)) {
+  const shouldCreateCoupon =
+    options.create_coupon === true ||
+    (options.create_coupon !== false &&
+      (accessMode === "coupon_only" || accessMode === "both"));
+
+  if (shouldCreateCoupon) {
+    const couponPayload = {
+      ...payload,
+      coupon_amount: options.coupon_amount ?? payload.coupon_amount ?? null,
+    };
+    const couponCode =
+      String(options.coupon_code || payload.coupon_code || "").trim() ||
+      generateCouponCodeFromName(app.full_name);
     await createReferralCouponFromPayload(client, {
       referralPartnerId: inserted.id,
       applicationId: app.id,
-      payload,
-      couponCode: String(payload.coupon_code || generateCouponCode()),
+      payload: couponPayload,
+      couponCode,
     });
   }
 

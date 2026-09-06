@@ -150,6 +150,9 @@ export type AdminPartnerFormPayload = {
   student_emails?: string;
   valid_from?: string | null;
   valid_to?: string | null;
+  coupon_amount?: number | null;
+  coupon_code?: string | null;
+  access_mode?: string;
 };
 
 export function buildAdminPartnerRegistrationInput(
@@ -171,6 +174,7 @@ export function buildAdminPartnerRegistrationInput(
     payload.college_name = form.colleges?.[0] || null;
     if (form.partner_kind === "referral") {
       payload.referral_apply_mode = form.referral_apply_mode || "referral_only";
+      payload.access_mode = form.access_mode || form.referral_apply_mode || "referral_only";
     }
     if (
       form.partner_kind === "coupon" ||
@@ -182,6 +186,8 @@ export function buildAdminPartnerRegistrationInput(
       payload.student_emails = form.student_emails || "";
       payload.valid_from = form.valid_from || null;
       payload.valid_to = form.valid_to || null;
+      payload.coupon_amount = form.coupon_amount ?? null;
+      payload.coupon_code = form.coupon_code || null;
     }
   }
 

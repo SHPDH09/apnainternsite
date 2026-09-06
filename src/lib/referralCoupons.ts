@@ -18,11 +18,29 @@ export type ReferralCouponRow = {
   application_id: string | null;
   click_count: number;
   redemption_count: number;
+  coupon_amount: number | null;
   created_at: string;
   updated_at: string;
 };
 
 const COUPON_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export function generateCouponCodeFromName(fullName: string, uniqueSuffix = ""): string {
+  const parts = fullName
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, "")
+    .split(/\s+/)
+    .filter(Boolean);
+  let base =
+    parts.length >= 2
+      ? `${parts[0]}${parts[parts.length - 1]}`
+      : parts[0] || "PARTNER";
+  base = base.replace(/[^A-Z0-9]/g, "").slice(0, 14);
+  if (!base) base = "PARTNER";
+  const tail = uniqueSuffix.replace(/[^A-Z0-9]/g, "").slice(0, 4);
+  return tail ? `CPN-${base}-${tail}` : `CPN-${base}`;
+}
 
 export function generateCouponCode(): string {
   let s = "CPN-";
@@ -63,6 +81,11 @@ export async function createReferralCouponFromPayload(
   }
 ): Promise<ReferralCouponRow> {
   const code = (opts.couponCode || generateCouponCode()).trim().toUpperCase();
+  const amountRaw = opts.payload.coupon_amount;
+  const couponAmount =
+    amountRaw != null && String(amountRaw).trim() !== "" && !Number.isNaN(Number(amountRaw))
+      ? Number(amountRaw)
+      : null;
   const row = {
     referral_partner_id: opts.referralPartnerId,
     coupon_code: code,
@@ -76,6 +99,7 @@ export async function createReferralCouponFromPayload(
     ),
     valid_from: opts.payload.valid_from ? String(opts.payload.valid_from) : null,
     valid_to: opts.payload.valid_to ? String(opts.payload.valid_to) : null,
+    coupon_amount: couponAmount,
     active: true,
     application_id: opts.applicationId || null,
   };
@@ -99,6 +123,28 @@ export async function fetchCouponsForPartner(
     throw error;
   }
   return (data || []) as ReferralCouponRow[];
+}
+
+export async function updateReferralCoupon(
+  client: SupabaseClient,
+  couponId: string,
+  patch: Partial<{
+    coupon_code: string;
+    university_name: string | null;
+    college_name: string | null;
+    internship_domain: string | null;
+    max_students: number | null;
+    valid_from: string | null;
+    valid_to: string | null;
+    coupon_amount: number | null;
+    active: boolean;
+  }>
+): Promise<void> {
+  const { error } = await client
+    .from("referral_coupons")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", couponId);
+  if (error) throw error;
 }
 
 export async function logReferralCouponClick(

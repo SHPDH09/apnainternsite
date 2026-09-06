@@ -37,6 +37,7 @@ import {
   adminCreatePartnerDirect,
   buildAdminPartnerRegistrationInput,
 } from "@/lib/adminPartnerCreate";
+import { generateCouponCodeFromName } from "@/lib/referralCoupons";
 import { cn } from "@/lib/utils";
 
 const PARTNER_TABS: Array<{ kind: PartnerKind; label: string; icon: typeof Store }> = [
@@ -75,6 +76,9 @@ export function AdminAddPartnerDialog({ open, onOpenChange, defaultKind = "refer
   const [studentEmails, setStudentEmails] = useState("");
   const [validFrom, setValidFrom] = useState("");
   const [validTo, setValidTo] = useState("");
+
+  const [couponAmount, setCouponAmount] = useState("");
+  const [couponCode, setCouponCode] = useState("");
 
   const showCouponFields =
     kind === "coupon" ||
@@ -120,6 +124,8 @@ export function AdminAddPartnerDialog({ open, onOpenChange, defaultKind = "refer
     setStudentEmails("");
     setValidFrom("");
     setValidTo("");
+    setCouponAmount("");
+    setCouponCode("");
   };
 
   const handleSubmit = async () => {
@@ -159,6 +165,9 @@ export function AdminAddPartnerDialog({ open, onOpenChange, defaultKind = "refer
         student_emails: studentEmails,
         valid_from: validFrom || null,
         valid_to: validTo || null,
+        coupon_amount: couponAmount.trim() ? Number(couponAmount) : null,
+        coupon_code: couponCode.trim() || (fullName.trim() ? generateCouponCodeFromName(fullName.trim()) : null),
+        access_mode: kind === "coupon" ? "coupon_only" : referralApplyMode,
       });
 
       await adminCreatePartnerDirect(supabase, user.id, input);
@@ -324,6 +333,19 @@ export function AdminAddPartnerDialog({ open, onOpenChange, defaultKind = "refer
                 {showCouponFields ? (
                   <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
                     <p className="text-sm font-bold text-amber-900">Coupon details</p>
+                    <div className="space-y-1.5">
+                      <Label>Coupon code</Label>
+                      <Input
+                        className="font-mono uppercase"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                        placeholder={fullName.trim() ? generateCouponCodeFromName(fullName.trim()) : "CPN-NAME"}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Coupon amount (₹)</Label>
+                      <Input type="number" min={0} value={couponAmount} onChange={(e) => setCouponAmount(e.target.value)} />
+                    </div>
                     {couponFields}
                   </div>
                 ) : null}

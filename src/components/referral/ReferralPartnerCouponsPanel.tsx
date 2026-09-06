@@ -19,6 +19,7 @@ import {
   buildRegisterUrlWithCoupon,
   createReferralCouponFromPayload,
   fetchCouponsForPartner,
+  generateCouponCodeFromName,
   type ReferralCouponRow,
 } from "@/lib/referralCoupons";
 import { getPublicRegisterUrlWithRef } from "@/lib/referral";
@@ -26,10 +27,16 @@ import { getPublicRegisterUrlWithRef } from "@/lib/referral";
 type Props = {
   partnerId: string;
   referralCode: string;
+  partnerName?: string;
   isActive?: boolean;
 };
 
-export function ReferralPartnerCouponsPanel({ partnerId, referralCode, isActive = true }: Props) {
+export function ReferralPartnerCouponsPanel({
+  partnerId,
+  referralCode,
+  partnerName = "",
+  isActive = true,
+}: Props) {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<ReferralCouponRow[]>([]);
   const [saving, setSaving] = useState(false);
@@ -37,6 +44,7 @@ export function ReferralPartnerCouponsPanel({ partnerId, referralCode, isActive 
   const [college, setCollege] = useState("");
   const [domain, setDomain] = useState("");
   const [maxStudents, setMaxStudents] = useState("");
+  const [couponAmount, setCouponAmount] = useState("");
   const [validFrom, setValidFrom] = useState("");
   const [validTo, setValidTo] = useState("");
 
@@ -66,15 +74,18 @@ export function ReferralPartnerCouponsPanel({ partnerId, referralCode, isActive 
           college_name: college.trim(),
           internship_domain: domain.trim(),
           max_students: maxStudents ? Number(maxStudents) : null,
+          coupon_amount: couponAmount.trim() ? Number(couponAmount) : null,
           valid_from: validFrom || null,
           valid_to: validTo || null,
         },
+        couponCode: generateCouponCodeFromName(partnerName || "PARTNER"),
       });
       toast.success("Coupon created.");
       setUniversity("");
       setCollege("");
       setDomain("");
       setMaxStudents("");
+      setCouponAmount("");
       setValidFrom("");
       setValidTo("");
       await reload();
@@ -131,6 +142,10 @@ export function ReferralPartnerCouponsPanel({ partnerId, referralCode, isActive 
             <Input type="number" min={1} value={maxStudents} onChange={(e) => setMaxStudents(e.target.value)} className="h-9" />
           </div>
           <div className="space-y-1.5">
+            <Label className="text-xs">Coupon amount (₹)</Label>
+            <Input type="number" min={0} step={1} value={couponAmount} onChange={(e) => setCouponAmount(e.target.value)} className="h-9" />
+          </div>
+          <div className="space-y-1.5">
             <Label className="text-xs">Valid from</Label>
             <Input type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} className="h-9" />
           </div>
@@ -150,6 +165,7 @@ export function ReferralPartnerCouponsPanel({ partnerId, referralCode, isActive 
           <TableHeader>
             <TableRow>
               <TableHead>Code</TableHead>
+              <TableHead>Amount</TableHead>
               <TableHead>Scope</TableHead>
               <TableHead>Validity</TableHead>
               <TableHead>Tracking</TableHead>
@@ -160,6 +176,9 @@ export function ReferralPartnerCouponsPanel({ partnerId, referralCode, isActive 
             {rows.map((row) => (
               <TableRow key={row.id}>
                 <TableCell className="font-mono text-xs font-bold">{row.coupon_code}</TableCell>
+                <TableCell className="text-xs font-semibold">
+                  {row.coupon_amount != null ? `₹${row.coupon_amount}` : "—"}
+                </TableCell>
                 <TableCell className="text-xs">
                   <p>{row.university_name || "Any university"}</p>
                   <p className="text-slate-500">{row.college_name || "Any college"} · {row.internship_domain || "Any domain"}</p>
@@ -183,7 +202,7 @@ export function ReferralPartnerCouponsPanel({ partnerId, referralCode, isActive 
             ))}
             {!rows.length ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-slate-500 py-6">
+                <TableCell colSpan={6} className="text-center text-sm text-slate-500 py-6">
                   No coupons yet. Create one above or apply from the homepage as a coupon partner.
                 </TableCell>
               </TableRow>

@@ -28,6 +28,8 @@ import {
 } from "@/lib/partnerApplicationAdmin";
 import { PortalSectionHeader } from "@/components/portal/portalDashboardUi";
 import { AdminAddPartnerDialog } from "@/components/admin/AdminAddPartnerDialog";
+import { PartnerApproveDialog } from "@/components/admin/PartnerApproveDialog";
+import type { ApprovePartnerOptions } from "@/lib/partnerApplicationAdmin";
 
 type CafePending = {
   id: string;
@@ -47,6 +49,8 @@ export function PartnerApplicationsPanel() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addKind, setAddKind] = useState<"referral" | "cyber_cafe" | "coupon">("referral");
+  const [approveTarget, setApproveTarget] = useState<PartnerApplicationRow | null>(null);
+  const [approveOpen, setApproveOpen] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -71,19 +75,26 @@ export function PartnerApplicationsPanel() {
     void reload();
   }, [reload]);
 
-  const approveApp = async (app: PartnerApplicationRow) => {
+  const approveApp = async (app: PartnerApplicationRow, options: ApprovePartnerOptions = {}) => {
     setBusyId(app.id);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error("Admin session required");
-      await approvePartnerApplication(supabase, app, user.id);
+      await approvePartnerApplication(supabase, app, user.id, options);
       toast.success(`${PARTNER_KIND_LABELS[app.partner_kind]} approved.`);
+      setApproveOpen(false);
+      setApproveTarget(null);
       await reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Approve failed.");
     } finally {
       setBusyId(null);
     }
+  };
+
+  const openApproveDialog = (app: PartnerApplicationRow) => {
+    setApproveTarget(app);
+    setApproveOpen(true);
   };
 
   const rejectApp = async (app: PartnerApplicationRow) => {
@@ -191,7 +202,7 @@ export function PartnerApplicationsPanel() {
                 <TableCell className="text-xs">{app.contact_number || "—"}</TableCell>
                 <TableCell className="text-xs">{new Date(app.created_at).toLocaleString()}</TableCell>
                 <TableCell className="text-right space-x-2">
-                  <Button size="sm" className="gap-1" disabled={busyId === app.id} onClick={() => void approveApp(app)}>
+                  <Button size="sm" className="gap-1" disabled={busyId === app.id} onClick={() => openApproveDialog(app)}>
                     {busyId === app.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
                     Approve
                   </Button>
@@ -228,6 +239,17 @@ export function PartnerApplicationsPanel() {
           </TableBody>
         </Table>
       </Card>
+
+      <PartnerApproveDialog
+        open={approveOpen}
+        onOpenChange={(o) => {
+          setApproveOpen(o);
+          if (!o) setApproveTarget(null);
+        }}
+        application={approveTarget}
+        busy={!!approveTarget && busyId === approveTarget.id}
+        onConfirm={(options) => (approveTarget ? approveApp(approveTarget, options) : undefined)}
+      />
 
       <AdminAddPartnerDialog
         open={addOpen}
