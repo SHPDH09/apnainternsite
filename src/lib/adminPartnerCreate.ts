@@ -1,9 +1,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { approvePartnerApplication } from "@/lib/partnerApplicationAdmin";
 import {
+  fetchPartnerApplicationForUser,
+  fetchPendingPartnerApplications,
+  submitPartnerApplication,
+  type PartnerApplicationRow,
   type PartnerKind,
   type PartnerRegistrationInput,
 } from "@/lib/partnerApplications";
 import { readAccessTokenFromClient } from "@/lib/partnerApplicationSubmitApi";
+
+function isAdminPartnerApiUnavailable(err: unknown): boolean {
+  const msg = String(err instanceof Error ? err.message : err).toLowerCase();
+  return (
+    /404|503|502|504|cannot post|failed to fetch|network|database_url|not configured|method not allowed|function_invocation/i.test(
+      msg
+    ) || msg.includes("<!doctype html>")
+  );
+}
 
 export async function adminCreatePartnerViaApi(
   accessToken: string,
@@ -55,16 +69,67 @@ export async function adminCreatePartnerViaApi(
   };
 }
 
+async function resolveApplicationForApproval(
+  client: SupabaseClient,
+  input: PartnerRegistrationInput,
+  userId: string,
+  applicationId?: string
+): Promise<PartnerApplicationRow> {
+  if (applicationId) {
+    const { data, error } = await client
+      .from("partner_applications")
+      .select("*")
+      .eq("id", applicationId)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return data as PartnerApplicationRow;
+  }
+
+  const byUser = await fetchPartnerApplicationForUser(client, userId);
+  if (byUser) return byUser;
+
+  const pending = await fetchPendingPartnerApplications(client);
+  const match = pending.find(
+    (row) =>
+      row.email.trim().toLowerCase() === input.email.trim().toLowerCase() &&
+      row.partner_kind === input.partner_kind
+  );
+  if (match) return match;
+
+  throw new Error(
+    "Partner account was created but the application record could not be loaded for approval."
+  );
+}
+
+/** Fallback when /api/admin-partner-register is unavailable (Lambda not deployed / no Vercel DATABASE_URL). */
+async function adminCreatePartnerViaSubmitAndApprove(
+  client: SupabaseClient,
+  reviewerId: string,
+  input: PartnerRegistrationInput
+): Promise<void> {
+  const { userId, applicationId } = await submitPartnerApplication(client, input);
+  const app = await resolveApplicationForApproval(client, input, userId, applicationId);
+  await approvePartnerApplication(client, app, reviewerId);
+}
+
 export async function adminCreatePartnerDirect(
   client: SupabaseClient,
-  _reviewerId: string,
+  reviewerId: string,
   input: PartnerRegistrationInput
 ): Promise<void> {
   const token = await readAccessTokenFromClient(client);
   if (!token) {
     throw new Error("Admin session required");
   }
-  await adminCreatePartnerViaApi(token, input);
+
+  try {
+    await adminCreatePartnerViaApi(token, input);
+    return;
+  } catch (err) {
+    if (!isAdminPartnerApiUnavailable(err)) throw err;
+  }
+
+  await adminCreatePartnerViaSubmitAndApprove(client, reviewerId, input);
 }
 
 export type AdminPartnerFormPayload = {
