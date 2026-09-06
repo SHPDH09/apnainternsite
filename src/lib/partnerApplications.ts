@@ -90,6 +90,54 @@ function isMissingTable(error: unknown): boolean {
   return /42P01|partner_applications|schema cache|does not exist/i.test(msg);
 }
 
+/** Create partner_applications on RDS when missing (RPC + API). Never throws. */
+async function tryBootstrapPartnerApplicationsTables(client: SupabaseClient): Promise<void> {
+  try {
+    await client.rpc("admin_ensure_partner_applications");
+  } catch {
+    /* RPC may be unavailable until Lambda is redeployed */
+  }
+
+  if (typeof window === "undefined") return;
+  try {
+    const { data: sessionData } = await client.auth.getSession();
+    const token = sessionData.session?.access_token?.trim();
+    if (!token) return;
+    const origin = window.location.origin.replace(/\/$/, "");
+    await fetch(`${origin}/api/ensure-partner-applications`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    });
+  } catch {
+    /* optional bootstrap */
+  }
+}
+
+async function insertPartnerApplicationRow(
+  client: SupabaseClient,
+  row: Record<string, unknown>
+): Promise<string | undefined> {
+  await tryBootstrapPartnerApplicationsTables(client);
+
+  const attempt = async () => {
+    const { data, error } = await client
+      .from("partner_applications")
+      .insert(row)
+      .select("id")
+      .single();
+    if (error) throw error;
+    return data?.id as string | undefined;
+  };
+
+  try {
+    return await attempt();
+  } catch (err) {
+    if (!isMissingTable(err)) throw err;
+    await tryBootstrapPartnerApplicationsTables(client);
+    return await attempt();
+  }
+}
+
 export async function submitPartnerApplication(
   directoryClient: SupabaseClient,
   input: PartnerRegistrationInput
@@ -111,20 +159,16 @@ export async function submitPartnerApplication(
       phone: input.contact_number.trim(),
     });
     try {
-      const { data } = await directoryClient
-        .from("partner_applications")
-        .insert({
-          auth_user_id: userId,
-          partner_kind: "cyber_cafe",
-          status: "pending",
-          full_name: input.full_name.trim(),
-          email: normalizedEmail,
-          contact_number: input.contact_number.trim(),
-          payload: input.payload,
-        })
-        .select("id")
-        .single();
-      return { userId, applicationId: data?.id };
+      const applicationId = await insertPartnerApplicationRow(directoryClient, {
+        auth_user_id: userId,
+        partner_kind: "cyber_cafe",
+        status: "pending",
+        full_name: input.full_name.trim(),
+        email: normalizedEmail,
+        contact_number: input.contact_number.trim(),
+        payload: input.payload,
+      });
+      return { userId, applicationId };
     } catch (err) {
       if (isMissingTable(err)) return { userId };
       throw err;
@@ -143,32 +187,34 @@ export async function submitPartnerApplication(
     throw new Error("Account created but sign-in failed. Try logging in from the partner login page.");
   }
 
-  const { data, error } = await authClient.from("partner_applications").insert({
-    auth_user_id: userId,
-    partner_kind: input.partner_kind,
-    status: "pending",
-    full_name: input.full_name.trim(),
-    email: normalizedEmail,
-    contact_number: input.contact_number.trim(),
-    payload: input.payload,
-  }).select("id").single();
-
-  if (error) {
-    if (isMissingTable(error)) {
+  let applicationId: string | undefined;
+  try {
+    applicationId = await insertPartnerApplicationRow(authClient, {
+      auth_user_id: userId,
+      partner_kind: input.partner_kind,
+      status: "pending",
+      full_name: input.full_name.trim(),
+      email: normalizedEmail,
+      contact_number: input.contact_number.trim(),
+      payload: input.payload,
+    });
+  } catch (err) {
+    if (isMissingTable(err)) {
       throw new Error(
-        "Partner applications are not set up on the database yet. Ask admin to run aws/scripts/60-rds-partner-applications-coupons.sql"
+        "Partner applications could not be saved. Please try again in a moment or contact support."
       );
     }
-    throw error;
+    throw err;
   }
 
-  return { userId, applicationId: data?.id };
+  return { userId, applicationId };
 }
 
 export async function fetchPartnerApplicationForUser(
   client: SupabaseClient,
   userId: string
 ): Promise<PartnerApplicationRow | null> {
+  await tryBootstrapPartnerApplicationsTables(client);
   const { data, error } = await client
     .from("partner_applications")
     .select("*")
@@ -186,6 +232,7 @@ export async function fetchPartnerApplicationForUser(
 export async function fetchPendingPartnerApplications(
   client: SupabaseClient
 ): Promise<PartnerApplicationRow[]> {
+  await tryBootstrapPartnerApplicationsTables(client);
   const { data, error } = await client
     .from("partner_applications")
     .select("*")

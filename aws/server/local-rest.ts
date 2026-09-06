@@ -9,6 +9,10 @@ import { getRpcDef } from "./rpc-registry";
 import { callRpc } from "./db";
 import { verifyToken } from "./local-jwt";
 import { ensureCmsTable, isCmsTable, isMissingRelationError } from "./cms-bootstrap";
+import {
+  ensurePartnerApplicationsTables,
+  isPartnerApplicationsTable,
+} from "./partner-applications-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
@@ -34,9 +38,15 @@ async function withCmsRetry<T>(table: string, run: () => Promise<T>): Promise<T>
   try {
     return await run();
   } catch (err) {
-    if (isCmsTable(table) && isMissingRelationError(err, table)) {
-      await ensureCmsTable(table);
-      return await run();
+    if (isMissingRelationError(err, table)) {
+      if (isCmsTable(table)) {
+        await ensureCmsTable(table);
+        return await run();
+      }
+      if (isPartnerApplicationsTable(table)) {
+        await ensurePartnerApplicationsTables();
+        return await run();
+      }
     }
     throw err;
   }
