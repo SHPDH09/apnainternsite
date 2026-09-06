@@ -11,6 +11,9 @@ export type ReferralPartnerSelf = {
 };
 
 const PARTNER_SELF_SELECT =
+  "id, auth_user_id, referral_code, full_name, email, active";
+
+const PARTNER_SELF_SELECT_WITH_AVATAR =
   "id, auth_user_id, referral_code, full_name, email, active, profile_image_url";
 
 function partnerFromRpcPayload(raw: unknown): ReferralPartnerSelf | null {
@@ -95,30 +98,41 @@ export async function fetchReferralPartnerSelf(
   userId: string,
   email?: string | null
 ): Promise<ReferralPartnerSelf | null> {
-  const { data: byAuth, error: authErr } = await client
-    .from("referral_partners")
-    .select(PARTNER_SELF_SELECT)
-    .eq("auth_user_id", userId)
-    .maybeSingle();
+  const loadBy = async (select: string) => {
+    const { data: byAuth, error: authErr } = await client
+      .from("referral_partners")
+      .select(select)
+      .eq("auth_user_id", userId)
+      .maybeSingle();
 
-  if (!authErr && byAuth?.referral_code) {
-    return byAuth as ReferralPartnerSelf;
+    if (!authErr && byAuth?.referral_code) {
+      return byAuth as ReferralPartnerSelf;
+    }
+
+    const normalizedEmail = String(email || "")
+      .trim()
+      .toLowerCase();
+    if (!normalizedEmail) return null;
+
+    const { data: byEmail, error: emailErr } = await client
+      .from("referral_partners")
+      .select(select)
+      .ilike("email", normalizedEmail)
+      .eq("active", true)
+      .maybeSingle();
+
+    if (emailErr || !byEmail?.referral_code) return null;
+    return byEmail as ReferralPartnerSelf;
+  };
+
+  let partner = await loadBy(PARTNER_SELF_SELECT_WITH_AVATAR);
+  if (partner?.referral_code) return partner;
+
+  // Older RDS schemas may not have profile_image_url yet.
+  if (partner === null) {
+    partner = await loadBy(PARTNER_SELF_SELECT);
   }
-
-  const normalizedEmail = String(email || "")
-    .trim()
-    .toLowerCase();
-  if (!normalizedEmail) return null;
-
-  const { data: byEmail, error: emailErr } = await client
-    .from("referral_partners")
-    .select(PARTNER_SELF_SELECT)
-    .ilike("email", normalizedEmail)
-    .eq("active", true)
-    .maybeSingle();
-
-  if (emailErr || !byEmail?.referral_code) return null;
-  return byEmail as ReferralPartnerSelf;
+  return partner?.referral_code ? partner : null;
 }
 
 export async function loadReferralPartnerSelf(
