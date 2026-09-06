@@ -8,6 +8,7 @@ import { BrandLogo } from "@/components/brand/BrandLogo";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Card } from "@/components/ui/card";
 import { captureReferralFromUrl, logReferralClickFromUrl } from "@/lib/referral";
+import { captureCouponFromUrl, logCouponClickFromUrl } from "@/lib/referralCoupons";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteLoader } from "@/components/SiteLoader";
 
@@ -20,7 +21,9 @@ const Register = () => {
 
   useEffect(() => {
     captureReferralFromUrl();
+    captureCouponFromUrl();
     logReferralClickFromUrl(supabase);
+    logCouponClickFromUrl(supabase);
   }, []);
 
   useEffect(() => {

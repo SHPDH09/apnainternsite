@@ -28,6 +28,8 @@ import AssignmentResult from "./pages/AssignmentResult.tsx";
 import PaymentStatus from "./pages/PaymentStatus.tsx";
 import CyberCafeRegister from "./pages/CyberCafeRegister.tsx";
 import CyberCafeDashboard from "./pages/CyberCafeDashboard.tsx";
+import PartnerRegister from "./pages/PartnerRegister.tsx";
+import PartnerApplicationDashboard from "./pages/PartnerApplicationDashboard.tsx";
 import { VisitorTracker } from "./components/VisitorTracker";
 import { SitePopupsHost } from "./components/NoticePopup";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -200,6 +202,8 @@ const App = () => (
           <Route path="/assignment/:id" element={<AssignmentTest />} />
           <Route path="/assignment/:id/result" element={<AssignmentResult />} />
           <Route path="/payment-status" element={<PaymentStatus />} />
+          <Route path="/partner/register" element={<PartnerRegister />} />
+          <Route path="/partner/dashboard" element={<PartnerApplicationDashboard />} />
           <Route path="/cybercafe" element={<CyberCafeRegister />} />
           <Route
             path="/cybercafe/dashboard"

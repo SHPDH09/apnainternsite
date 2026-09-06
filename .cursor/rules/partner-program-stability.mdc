@@ -1,0 +1,10 @@
+# Partner program stability
+
+When changing partner self-apply, applications queue, referral coupons, or homepage partner section:
+
+- **Do not remove** Admin → Partners → Partner Applications, Cyber Cafes, or Referrals tabs.
+- **Do not break** existing cyber cafe (`/cybercafe`) or referral (`?ref=`) student registration flows.
+- **Preserve** locked dashboard until admin verify for new partner applications.
+- **Preserve** referral click tracking (`referral_clicks`, `log_referral_click`) — coupon tracking is additive.
+- **Do not gate** core admin/student features behind partner application tables.
+- If another task touches partners, **leave approval + coupon logic unchanged** unless the user explicitly asks.

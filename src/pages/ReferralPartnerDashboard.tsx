@@ -40,7 +40,9 @@ import {
   MousePointerClick,
   User,
   Shield,
+  Ticket,
 } from "lucide-react";
+import { ReferralPartnerCouponsPanel } from "@/components/referral/ReferralPartnerCouponsPanel";
 import { SharedProfilePanel } from "@/components/SharedProfilePanel";
 import { StaffSecurityPanel } from "@/components/staff/StaffAccountPanels";
 import { toast } from "sonner";
@@ -96,7 +98,7 @@ function chartHeight(rows: number) {
   return Math.min(320, Math.max(160, 36 + rows * 36));
 }
 
-type Section = "dashboard" | "referrals" | "profile" | "security";
+type Section = "dashboard" | "referrals" | "coupons" | "profile" | "security";
 
 type PartnerSelf = {
   id: string;
@@ -311,6 +313,20 @@ export default function ReferralPartnerDashboard() {
       >
         <Users className="size-4 shrink-0" />
         Referrals
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setSection("coupons");
+          setNavOpen(false);
+        }}
+        className={cn(
+          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors text-left",
+          section === "coupons" ? "bg-primary text-primary-foreground shadow-sm" : "text-slate-600 hover:bg-slate-100"
+        )}
+      >
+        <Ticket className="size-4 shrink-0" />
+        Coupons
       </button>
       <button
         type="button"
@@ -599,6 +615,14 @@ export default function ReferralPartnerDashboard() {
                 </div>
               </Card>
             </div>
+          )}
+
+          {section === "coupons" && partner && (
+            <ReferralPartnerCouponsPanel
+              partnerId={partner.id}
+              referralCode={partner.referral_code}
+              isActive={section === "coupons"}
+            />
           )}
 
           {section === "profile" && (

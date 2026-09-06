@@ -126,6 +126,7 @@ import {
   isEngineeringUniversityName,
   resolveEngineeringUniversityNames,
 } from "@/lib/studentTrack";
+import { PartnerApplicationsPanel } from "@/components/admin/PartnerApplicationsPanel";
 import { ReferralsPanel } from "@/components/admin/ReferralsPanel";
 import { CollegeRostersPanel } from "@/components/admin/CollegeRostersPanel";
 import { FeesManagementPanel } from "@/components/admin/FeesManagementPanel";
@@ -2653,6 +2654,13 @@ export default function Admin() {
       if (key === "course-management" && denied("can_manage_courses")) return false;
       if (key === "cybercafe" && denied("can_manage_cybercafe")) return false;
       if (key === "referrals" && denied("can_manage_referrals")) return false;
+      if (
+        key === "partner-applications" &&
+        denied("can_manage_referrals") &&
+        denied("can_manage_cybercafe")
+      ) {
+        return false;
+      }
       if (key === "college-rosters" && denied("can_manage_college_rosters")) return false;
       if (key === "settings" && denied("can_manage_settings") && denied("can_manage_institutions")) {
         return true; // keep settings reachable for other admin tasks
@@ -4729,6 +4737,10 @@ Apna Intern Team`;
                   </div>
                 </Card>
               </div>
+            </TabsContent>
+
+            <TabsContent value="partner-applications">
+              <PartnerApplicationsPanel />
             </TabsContent>
 
             <TabsContent value="referrals">

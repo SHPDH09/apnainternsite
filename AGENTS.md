@@ -44,4 +44,5 @@ Health: `GET http://127.0.0.1:3000/api/health`
 - Do not remove Admin sidebar items; see `.cursor/rules/admin-sidebar-stability.mdc`.
 - Do not break Admin → Keys load/save resilience; see `.cursor/rules/dashboard-service-keys-stability.mdc`.
 - Do not break blog CMS storage routes or S3 fallback; see `.cursor/rules/blog-storage-stability.mdc`.
+- Do not break partner apply/verify flows; see `.cursor/rules/partner-program-stability.mdc`.
 - When pushing at the user’s request, follow `.cursor/rules/git-push-main.mdc`.

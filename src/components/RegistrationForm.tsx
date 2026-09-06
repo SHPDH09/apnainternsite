@@ -31,6 +31,7 @@ import { adminUpsertStudentProfile } from "@/lib/adminProfileUpsert";
 import { createEphemeralSupabaseAuthClient } from "@/lib/createSubUser";
 import { buildStudentCredentialLoginLink } from "@/lib/authRoutes";
 import { captureReferralFromUrl, peekStoredReferralCode, resolveValidReferralCode, logReferralClickFromUrl } from "@/lib/referral";
+import { recordCouponRedemptionIfAny } from "@/lib/referralCoupons";
 import { formatRupees, isBeuStudent } from "@/lib/feeRules";
 import { defaultPasswordForCollege } from "@/lib/collegeDefaultPassword";
 import { resolveStudentFeeBreakdown } from "@/lib/collegeFees";
@@ -1407,6 +1408,17 @@ export const RegistrationForm = ({
         );
       } catch {
         /* CRM convert is best-effort; payment path also converts */
+      }
+
+      try {
+        await recordCouponRedemptionIfAny(supabase, {
+          email: normalizedEmail,
+          universityName: selectedUniForRef,
+          collegeName: selectedCollegeForRef,
+          domain: departmentName || subject || undefined,
+        });
+      } catch {
+        /* coupon redemption tracking is optional */
       }
 
       setSuccess(true);

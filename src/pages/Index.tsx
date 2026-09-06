@@ -49,8 +49,9 @@ import { HomeTrustSection } from "@/components/home/HomeTrustSection";
 import { HomeOutcomesSection } from "@/components/home/HomeOutcomesSection";
 import { HomeUniversitiesSection } from "@/components/home/HomeUniversitiesSection";
 import { HomeFaqSection } from "@/components/home/HomeFaqSection";
-import { HomeFinalCta } from "@/components/home/HomeFinalCta";
+import { HomePartnerSection } from "@/components/home/HomePartnerSection";
 import { HomeBlogSection } from "@/components/home/HomeBlogSection";
+import { HomeFinalCta } from "@/components/home/HomeFinalCta";
 import { HomeCoursesSections } from "@/components/courses/HomeCoursesSections";
 import { fetchPublicBlogPosts, type SiteBlogPost } from "@/lib/siteBlogApi";
 import {
@@ -476,6 +477,8 @@ const Index = () => {
       />
 
       <HomeFaqSection faqs={faqs} />
+
+      <HomePartnerSection />
 
       <HomeBlogSection posts={blogPosts} />
 

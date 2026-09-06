@@ -303,6 +303,7 @@ export function buildAdminNavGroups(
     icon: Store,
     accent: "#6366F1",
     items: [
+      { kind: "tab", value: "partner-applications", label: "Partner Applications", icon: ClipboardList },
       { kind: "tab", value: "cybercafe", label: "Cyber Cafes", icon: Store },
       { kind: "tab", value: "referrals", label: "Referrals", icon: Share2 },
       { kind: "tab", value: "college-rosters", label: "College Rosters", icon: FileSpreadsheet },
