@@ -318,6 +318,44 @@ export function buildServiceAccessPatch(
   return patch;
 }
 
+/** Unlock one dashboard service for the logged-in student after payment (metadata only). */
+export async function unlockStudentServiceForUser(
+  client: SupabaseClient,
+  userId: string,
+  metadata: unknown,
+  serviceKey: StudentServiceKey,
+  paymentMeta?: { paymentId: string; amountPaise: number }
+): Promise<void> {
+  const meta = parseStudentMetadata(metadata);
+  const current = readStudentServiceAccess(meta);
+  const patch = buildServiceAccessPatch([serviceKey], true);
+  const prevPayments =
+    meta.service_unlock_payments &&
+    typeof meta.service_unlock_payments === "object" &&
+    !Array.isArray(meta.service_unlock_payments)
+      ? (meta.service_unlock_payments as Record<string, unknown>)
+      : {};
+
+  const nextMeta: Record<string, unknown> = {
+    ...meta,
+    service_access: mergeStudentServiceAccessPatch(current, patch),
+  };
+
+  if (paymentMeta?.paymentId) {
+    nextMeta.service_unlock_payments = {
+      ...prevPayments,
+      [serviceKey]: {
+        payment_id: paymentMeta.paymentId,
+        amount_paise: paymentMeta.amountPaise,
+        paid_at: new Date().toISOString(),
+      },
+    };
+  }
+
+  const { error } = await client.from("students").update({ metadata: nextMeta }).eq("id", userId);
+  if (error) throw error;
+}
+
 export async function fetchDashboardServiceKeys(
   client: SupabaseClient
 ): Promise<DashboardServiceKeysRow> {

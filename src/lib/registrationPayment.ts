@@ -229,7 +229,8 @@ export async function runRegistrationRazorpayCheckout(opts: {
     ORDER_API_ENABLED &&
     opts.studentData &&
     purpose !== "course_purchase" &&
-    purpose !== "internship_upgrade";
+    purpose !== "internship_upgrade" &&
+    purpose !== "service_unlock";
 
   const scriptReady = loadRazorpayCheckout();
 

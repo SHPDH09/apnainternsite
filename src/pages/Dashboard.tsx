@@ -55,6 +55,7 @@ import {
   type StudentServiceKey,
 } from "@/lib/studentServiceKeys";
 import { StudentServiceLockDialog } from "@/components/student/StudentServiceLockDialog";
+import { payToUnlockStudentService } from "@/lib/studentServiceUnlockPayment";
 import { normalizeOfferLetterProfile } from "@/lib/offerLetterProfile";
 import { loadStudentDashboardProfile } from "@/lib/loadStudentDashboardProfile";
 import { displayRegistrationId } from "@/lib/registrationId";
@@ -122,6 +123,7 @@ const Dashboard = () => {
   const [liveClasses, setLiveClasses] = useState<any[]>([]);
   const [systemSettings, setSystemSettings] = useState<any[]>([]);
   const [serviceLockKey, setServiceLockKey] = useState<StudentServiceKey | null>(null);
+  const [serviceUnlockPaying, setServiceUnlockPaying] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const offerLetterRef = useRef<HTMLDivElement>(null);
   const certRef = useRef<HTMLDivElement>(null);
@@ -433,6 +435,41 @@ const Dashboard = () => {
   const goUnlockInternship = useCallback(() => {
     navigate(internshipUpgradePaymentPath());
   }, [navigate]);
+
+  const handleServiceUnlockPay = useCallback(async () => {
+    if (!serviceLockAccess || !profile || serviceUnlockPaying) return;
+    const uid = localStorage.getItem("impersonate_id") || currentUserId;
+    if (!uid) {
+      toast.error("Sign in again to continue payment.");
+      return;
+    }
+
+    setServiceUnlockPaying(true);
+    try {
+      const result = await payToUnlockStudentService(supabase, {
+        userId: uid,
+        profile,
+        access: serviceLockAccess,
+      });
+
+      if (result.success) {
+        toast.success(`${serviceLockAccess.config.label} unlocked successfully!`);
+        setServiceLockKey(null);
+        await loadDashboard();
+        return;
+      }
+
+      if (result.cancelled) {
+        toast.message("Payment cancelled. You can try again when ready.");
+      } else {
+        toast.error("Payment could not be completed. Please try again.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Payment failed.");
+    } finally {
+      setServiceUnlockPaying(false);
+    }
+  }, [serviceLockAccess, profile, serviceUnlockPaying, currentUserId, loadDashboard]);
 
   const downloadCert = async () => {
     if (!hasRequiredCertificateIdentityFields(profile)) {
@@ -1138,9 +1175,11 @@ const Dashboard = () => {
               <StudentServiceLockDialog
                 open={serviceLockKey != null}
                 onOpenChange={(open) => {
-                  if (!open) setServiceLockKey(null);
+                  if (!open && !serviceUnlockPaying) setServiceLockKey(null);
                 }}
                 access={serviceLockAccess}
+                onPay={() => void handleServiceUnlockPay()}
+                paying={serviceUnlockPaying}
               />
               {documentActions.hiddenPdfNodes}
               <StudentDocumentPreviewDialog

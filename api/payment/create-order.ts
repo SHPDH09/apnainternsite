@@ -42,13 +42,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const regPhone = String(studentData?.contact_number || studentData?.contact || '').trim();
     const purpose = String(studentData?.purpose || '').trim().toLowerCase();
     const source = String(studentData?.source || '').trim().toLowerCase();
-    // Existing students buying a course / unlocking internship / clearing unpaid upload
-    // already have email+phone in the directory — do not block checkout.
-    const skipAvailabilityCheck =
-      purpose === 'course_purchase' ||
-      purpose === 'internship_upgrade' ||
-      source.includes('unpaid_student') ||
-      source.includes('course_');
+  // Existing students buying a course / unlocking internship / clearing unpaid upload
+  // or paying to unlock a single dashboard service — skip registration availability.
+  const skipAvailabilityCheck =
+    purpose === 'course_purchase' ||
+    purpose === 'internship_upgrade' ||
+    purpose === 'service_unlock' ||
+    source.includes('unpaid_student') ||
+    source.includes('course_') ||
+    source.includes('dashboard_service_unlock');
 
     if (regEmail && regPhone && !skipAvailabilityCheck) {
       try {

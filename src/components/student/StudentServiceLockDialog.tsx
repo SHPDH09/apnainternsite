@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Lock, IndianRupee } from "lucide-react";
+import { Lock, IndianRupee, Loader2 } from "lucide-react";
 import {
   formatPaiseAsRupees,
   type ResolvedStudentServiceAccess,
@@ -18,9 +18,10 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   access: ResolvedStudentServiceAccess | null;
   onPay?: () => void;
+  paying?: boolean;
 };
 
-export function StudentServiceLockDialog({ open, onOpenChange, access, onPay }: Props) {
+export function StudentServiceLockDialog({ open, onOpenChange, access, onPay, paying = false }: Props) {
   if (!access) return null;
 
   const { config, feeBreakdown } = access;
@@ -66,12 +67,13 @@ export function StudentServiceLockDialog({ open, onOpenChange, access, onPay }: 
         )}
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={paying}>
             Close
           </Button>
           {hasFee && onPay ? (
-            <Button type="button" className="font-black" onClick={onPay}>
-              Pay {formatPaiseAsRupees(feeBreakdown.totalPaise)}
+            <Button type="button" className="font-black gap-2" onClick={onPay} disabled={paying}>
+              {paying ? <Loader2 className="size-4 animate-spin" /> : null}
+              Pay Now
             </Button>
           ) : null}
         </DialogFooter>
