@@ -45,6 +45,7 @@ import {
   formatPaiseAsRupees,
   getServiceKeyConfig,
   loadDashboardServiceKeysForAdmin,
+  normalizeDashboardServiceKeysRow,
   saveDashboardServiceKeys,
   type StudentServiceKey,
   type StudentServiceKeyConfig,
@@ -175,6 +176,8 @@ export function StudentServiceKeysPanel({ client, currentUserId, isActive = true
       const { row } = await loadDashboardServiceKeysForAdmin(client);
       setServiceConfigs(row.services);
     } catch (err) {
+      console.warn("[StudentServiceKeysPanel] load failed:", err);
+      setServiceConfigs(normalizeDashboardServiceKeysRow(null).services);
       toast.error(err instanceof Error ? err.message : "Failed to load service keys.");
     } finally {
       setLoading(false);
