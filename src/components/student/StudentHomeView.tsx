@@ -237,7 +237,7 @@ function LearningCard({
         <span
           className={`text-xs font-medium ${showLocked ? "text-amber-700" : "text-slate-500"}`}
         >
-          {locked ? "Locked — payment required" : serviceLocked ? "Locked — pay to unlock" : module.statusLabel}
+          {locked ? "Locked — payment required" : serviceLocked ? "Locked — contact admin" : module.statusLabel}
         </span>
         <span
           className={`size-8 rounded-lg ${a.button} ${a.buttonHover} text-white flex items-center justify-center shrink-0`}
