@@ -1,0 +1,10 @@
+# Dashboard service keys stability
+
+When changing Admin → **Keys** (`StudentServiceKeysPanel`, `studentServiceKeys.ts`, `dashboardServiceKeysFallbackStorage.ts`):
+
+- **Do not revert or weaken** the resilient load path: `loadDashboardServiceKeysForAdmin` must **never throw** to the UI; missing RDS table / RPC / S3 must fall back to built-in defaults.
+- **Never show** `Failed to load service keys` (or any error toast) when defaults or S3 fallback can be used — the panel must always open editable.
+- **Do not replace** `loadDashboardServiceKeysForAdmin` with a direct `fetchDashboardServiceKeys` that throws on missing `dashboard_service_keys`.
+- **Preserve save fallback**: RDS upsert when table exists; otherwise S3 JSON at `admin/dashboard-service-keys.json` in the logos bucket.
+- **Do not remove** bootstrap helpers (`tryBootstrapDashboardServiceKeysTable`, `/api/ensure-dashboard-service-keys`, `admin_ensure_dashboard_service_keys` RPC) unless replacing with equivalent behavior.
+- If another task touches nearby admin code, **leave Keys load/save logic unchanged** unless the user explicitly asks to modify Keys again.
