@@ -593,10 +593,17 @@ export async function restRpc(req: Request, res: Response) {
       return;
     }
     const def = getRpcDef(name);
-    // Admin/student RPCs require a valid session JWT (sets auth.uid() on RDS).
-    if (name.startsWith("admin_") || name.startsWith("student_")) {
+    // Session RPCs require JWT so auth.uid() is set on RDS (RLS + SECURITY DEFINER lookups).
+    const requiresJwt =
+      def?.auth === "auth" ||
+      def?.auth === "admin" ||
+      name.startsWith("admin_") ||
+      name.startsWith("student_") ||
+      name.startsWith("sync_") ||
+      name.startsWith("get_referral_partner_");
+    if (requiresJwt) {
       if (def?.auth === "public") {
-        // registry-public student_* (e.g. repair) — allow without token
+        // registry-public RPCs (e.g. repair) — allow without token
       } else if (!jwt) {
         res.status(401).json({ message: "JWT required" });
         return;

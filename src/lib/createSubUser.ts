@@ -281,6 +281,22 @@ async function finalizeReferralPartnerPortal(
     email: string;
   }
 ): Promise<void> {
+  const linkArgs = {
+    target_user_id: params.userId,
+    p_partner_id: params.partnerId,
+    partner_email: params.email,
+    partner_full_name: params.fullName.trim() || params.email,
+    p_login_secret: params.loginSecret,
+  };
+
+  const { error: linkError } = await sessionSupabase.rpc("link_referral_partner_portal", linkArgs);
+  if (!linkError) return;
+
+  const linkMsg = linkError.message || "";
+  if (!/link_referral_partner_portal|does not exist|42883/i.test(linkMsg)) {
+    throw new Error(friendlyReferralPartnerError(linkError));
+  }
+
   const { error: rpcError } = await sessionSupabase.rpc("finalize_referral_partner_creation", {
     target_user_id: params.userId,
     p_partner_id: params.partnerId,
@@ -293,7 +309,7 @@ async function finalizeReferralPartnerPortal(
     const msg = rpcError.message || "";
     if (/finalize_referral_partner_creation|does not exist|42883/i.test(msg)) {
       throw new Error(
-        "Database function finalize_referral_partner_creation is missing. Apply referral partner migrations (20260515135500 + 20260515140000)."
+        "Database function link_referral_partner_portal is missing. Apply aws/scripts/61-rds-referral-partner-portal-sync.sql and aws/scripts/62-rds-referral-partner-session-load.sql."
       );
     }
     throw new Error(friendlyReferralPartnerError(rpcError));

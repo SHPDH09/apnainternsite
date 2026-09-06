@@ -7,7 +7,7 @@ import {
   buildWhatsAppShareUrl,
   getPublicRegisterUrlWithRef,
 } from "@/lib/referral";
-import { loadReferralPartnerSelf, type ReferralPartnerSelf } from "@/lib/referralPartnerPortal";
+import { loadReferralPartnerSelf } from "@/lib/referralPartnerPortal";
 import {
   fetchReferralPartnerStats,
   fetchReferralPartnerStudents,
