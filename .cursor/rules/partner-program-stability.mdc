@@ -9,3 +9,5 @@ When changing partner self-apply, applications queue, referral coupons, or homep
 - **Do not gate** core admin/student features behind partner application tables.
 - If another task touches partners, **leave approval + coupon logic unchanged** unless the user explicitly asks.
 - **Preserve** auto-bootstrap for `partner_applications` (`ensurePartnerApplicationsTables`, `/api/ensure-partner-applications`) — do not remove in favor of manual SQL-only errors.
+- **Preserve** admin-side partner creation via `/api/admin-partner-register` (server-side auth + approve) — do not route admin add-partner through public `submitPartnerApplication` (breaks admin session).
+- **Preserve** Vercel direct routing for `/api/admin-partner-register` (see `vercel.json` rewrite exception + `.vercelignore` whitelist) — do not proxy only this route to Lambda staging before the function is deployed there.
