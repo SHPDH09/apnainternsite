@@ -138,6 +138,13 @@ import { CertificateManagementPanel } from "@/components/admin/CertificateManage
 import { EngineeringDirectoryPanel } from "@/components/admin/EngineeringDirectoryPanel";
 import { StaffManagementPanel } from "@/components/admin/StaffManagementPanel";
 import { IdCardManagementPanel } from "@/components/admin/IdCardManagementPanel";
+import { AdminProfilePanel } from "@/components/admin/AdminProfilePanel";
+import { AdminActivityLogsPanel } from "@/components/admin/AdminActivityLogsPanel";
+import {
+  logAdminAction as writeAdminLog,
+  resolveActorContext,
+  type ActorContext,
+} from "@/lib/adminActionLog";
 import {
   emptyStaffPermissions,
   normalizeStaffPermissions,
@@ -281,6 +288,7 @@ export default function Admin() {
   const [cyberCafes, setCyberCafes] = useState<any[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentUserEmail, setCurrentUserEmail] = useState("");
+  const actorContextRef = useRef<ActorContext | null>(null);
   const consentUploadInputRef = useRef<HTMLInputElement>(null);
   const consentUploadStudentRef = useRef<StudentDirectoryStudent | null>(null);
   const [isAIBuilderOpen, setIsAIBuilderOpen] = useState(false);
@@ -908,24 +916,16 @@ export default function Admin() {
     setAllLeadsComms(leads);
   };
 
-  const logAdminAction = async (action_type: string, entity_type: string, description: string, metadata: any = {}) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      await supabase.from("admin_logs").insert({
-        user_id: session.user.id,
-        admin_email: session.user.email,
-        action_type,
-        entity_type,
-        description,
-        metadata,
-        created_at: new Date().toISOString()
-      });
-    } catch (err) {
-      console.error("Log Action Error:", err);
-    }
-  };
+  const logAdminAction = useCallback(
+    async (action_type: string, entity_type: string, description: string, metadata: any = {}) => {
+      await writeAdminLog(
+        supabase,
+        { action_type, entity_type, description, metadata },
+        actorContextRef.current
+      );
+    },
+    []
+  );
 
   const handleResendCredentials = async (student: any) => {
     if (
@@ -1297,6 +1297,9 @@ export default function Admin() {
     if (!session) return false;
     setCurrentUserId(session.user.id);
     setCurrentUserEmail(session.user.email || "");
+    void resolveActorContext(supabase, session.user.id, session.user.email || "").then((ctx) => {
+      actorContextRef.current = ctx;
+    });
 
     const [u, c, ce, dm, cl, ss, ap, notifs, asgnResult, cyber, customStaff] =
       await Promise.all([
@@ -4405,6 +4408,19 @@ Apna Intern Team`;
                 currentUserId={currentUserId}
                 isActive={activeTab === "keys"}
               />
+            </TabsContent>
+
+            <TabsContent value="profile" className="mt-0">
+              <AdminProfilePanel
+                userId={currentUserId}
+                userEmail={currentUserEmail}
+                isActive={activeTab === "profile"}
+                onLogAction={logAdminAction}
+              />
+            </TabsContent>
+
+            <TabsContent value="activity-logs" className="mt-0">
+              <AdminActivityLogsPanel isActive={activeTab === "activity-logs"} />
             </TabsContent>
 
             <TabsContent value="settings" className="space-y-6">

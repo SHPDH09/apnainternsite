@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { StudentDocumentId } from "@/hooks/useStudentDocumentActions";
 import type { LearningPanelTab } from "@/components/student/StudentLearningPanel";
 import { parseStudentMetadata } from "@/lib/studentPaymentAccess";
+import {
+  readDashboardServiceKeysFallback,
+  writeDashboardServiceKeysFallback,
+} from "@/lib/dashboardServiceKeysFallbackStorage";
 
 export const STUDENT_SERVICE_KEYS = [
   "classes",
@@ -318,18 +322,151 @@ export function buildServiceAccessPatch(
   return patch;
 }
 
-export async function fetchDashboardServiceKeys(
+function serviceKeysErrorText(error: unknown): string {
+  if (error && typeof error === "object") {
+    const e = error as { message?: string; details?: string; code?: string };
+    return [e.message, e.details, e.code].filter(Boolean).join(" — ");
+  }
+  return error instanceof Error ? error.message : String(error ?? "");
+}
+
+export function isDashboardServiceKeysTableMissing(error: unknown): boolean {
+  const msg = serviceKeysErrorText(error);
+  return (
+    /42P01|undefined_table|PGRST205/i.test(msg) ||
+    /relation ["']?public\.dashboard_service_keys["']? does not exist/i.test(msg) ||
+    /Could not find the table ['"]public\.dashboard_service_keys['"]/i.test(msg) ||
+    (/dashboard_service_keys/i.test(msg) &&
+      (/schema cache/i.test(msg) || /does not exist/i.test(msg)))
+  );
+}
+
+function isDashboardServiceKeysBootstrapUnavailable(error: unknown): boolean {
+  const msg = serviceKeysErrorText(error);
+  return (
+    isDashboardServiceKeysTableMissing(error) ||
+    /42883|admin_ensure_dashboard_service_keys|function .* does not exist|JWT required|401|403/i.test(
+      msg
+    )
+  );
+}
+
+async function tryBootstrapDashboardServiceKeysTable(client: SupabaseClient): Promise<void> {
+  try {
+    await client.rpc("admin_ensure_dashboard_service_keys");
+  } catch {
+    /* RPC may be unavailable until Lambda is redeployed */
+  }
+
+  if (typeof window === "undefined") return;
+  try {
+    const { data: sessionData } = await client.auth.getSession();
+    const token = sessionData.session?.access_token?.trim();
+    if (!token) return;
+    const origin = window.location.origin.replace(/\/$/, "");
+    await fetch(`${origin}/api/ensure-dashboard-service-keys`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    });
+  } catch {
+    /* optional bootstrap */
+  }
+}
+
+/** Create dashboard_service_keys on RDS when missing (admin RPC / API). Never throws. */
+export async function ensureDashboardServiceKeysTable(client: SupabaseClient): Promise<boolean> {
+  try {
+    await tryBootstrapDashboardServiceKeysTable(client);
+    const { error } = await client.from("dashboard_service_keys").select("id").eq("id", 1).limit(1);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+async function readRdsDashboardServiceKeysRow(
   client: SupabaseClient
-): Promise<DashboardServiceKeysRow> {
+): Promise<DashboardServiceKeysRow | null> {
   const { data, error } = await client
     .from("dashboard_service_keys")
     .select("*")
     .eq("id", 1)
     .maybeSingle();
-  if (error) throw error;
-  const normalized = normalizeDashboardServiceKeysRow((data as Record<string, unknown>) || null);
-  cachedServiceKeys = normalized;
-  return normalized;
+  if (error) {
+    if (isDashboardServiceKeysTableMissing(error)) return null;
+    throw error;
+  }
+  if (!data) return null;
+  return normalizeDashboardServiceKeysRow(data as Record<string, unknown>);
+}
+
+async function readMergedDashboardServiceKeysRow(
+  client: SupabaseClient
+): Promise<DashboardServiceKeysRow> {
+  try {
+    const rdsRow = await readRdsDashboardServiceKeysRow(client);
+    if (rdsRow) return rdsRow;
+  } catch (err) {
+    if (!isDashboardServiceKeysBootstrapUnavailable(err)) throw err;
+  }
+
+  const base = normalizeDashboardServiceKeysRow(null);
+  try {
+    const fallbackServices = await readDashboardServiceKeysFallback(client);
+    if (!fallbackServices) return base;
+
+    const services = { ...base.services } as Partial<Record<StudentServiceKey, StudentServiceKeyConfig>>;
+    for (const key of STUDENT_SERVICE_KEYS) {
+      const patch = fallbackServices[key];
+      if (patch) services[key] = mergeServiceConfig(DEFAULT_SERVICE_CONFIGS[key], patch);
+    }
+    return { ...base, services };
+  } catch {
+    return base;
+  }
+}
+
+export async function fetchDashboardServiceKeys(
+  client: SupabaseClient
+): Promise<DashboardServiceKeysRow> {
+  try {
+    const row = await readMergedDashboardServiceKeysRow(client);
+    cachedServiceKeys = row;
+    return row;
+  } catch (err) {
+    console.warn("[fetchDashboardServiceKeys] falling back to defaults:", err);
+    const row = normalizeDashboardServiceKeysRow(null);
+    cachedServiceKeys = row;
+    return row;
+  }
+}
+
+export async function loadDashboardServiceKeysForAdmin(
+  client: SupabaseClient
+): Promise<{ row: DashboardServiceKeysRow; persisted: boolean }> {
+  try {
+    await tryBootstrapDashboardServiceKeysTable(client);
+    const rdsRow = await readRdsDashboardServiceKeysRow(client);
+    if (rdsRow) {
+      cachedServiceKeys = rdsRow;
+      return { row: rdsRow, persisted: true };
+    }
+
+    const row = await readMergedDashboardServiceKeysRow(client);
+    cachedServiceKeys = row;
+    let fallbackOnly = false;
+    try {
+      fallbackOnly = Boolean(await readDashboardServiceKeysFallback(client));
+    } catch {
+      /* optional S3 snapshot */
+    }
+    return { row, persisted: fallbackOnly };
+  } catch (err) {
+    console.warn("[loadDashboardServiceKeysForAdmin] falling back to defaults:", err);
+    const row = normalizeDashboardServiceKeysRow(null);
+    cachedServiceKeys = row;
+    return { row, persisted: false };
+  }
 }
 
 export async function saveDashboardServiceKeys(
@@ -337,7 +474,8 @@ export async function saveDashboardServiceKeys(
   services: Partial<Record<StudentServiceKey, StudentServiceKeyConfig>>,
   updatedBy: string | null
 ): Promise<DashboardServiceKeysRow> {
-  const current = await fetchDashboardServiceKeys(client);
+  await tryBootstrapDashboardServiceKeysTable(client);
+  const current = await readMergedDashboardServiceKeysRow(client);
   const merged = { ...current.services } as Partial<Record<StudentServiceKey, StudentServiceKeyConfig>>;
   for (const key of STUDENT_SERVICE_KEYS) {
     if (services[key]) {
@@ -350,13 +488,34 @@ export async function saveDashboardServiceKeys(
     updated_by: updatedBy,
     updated_at: new Date().toISOString(),
   };
+
   const { data, error } = await client
     .from("dashboard_service_keys")
     .upsert(payload)
     .select("*")
     .single();
-  if (error) throw error;
-  const normalized = normalizeDashboardServiceKeysRow(data as Record<string, unknown>);
+
+  if (!error && data) {
+    const normalized = normalizeDashboardServiceKeysRow(data as Record<string, unknown>);
+    cachedServiceKeys = normalized;
+    return normalized;
+  }
+
+  if (error && !isDashboardServiceKeysTableMissing(error)) {
+    throw error;
+  }
+
+  await writeDashboardServiceKeysFallback(
+    client,
+    merged as Record<string, StudentServiceKeyConfig>,
+    updatedBy
+  );
+  const normalized: DashboardServiceKeysRow = {
+    id: 1,
+    services: merged,
+    updated_at: payload.updated_at,
+    updated_by: updatedBy,
+  };
   cachedServiceKeys = normalized;
   return normalized;
 }

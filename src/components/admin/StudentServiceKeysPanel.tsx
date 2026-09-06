@@ -42,9 +42,10 @@ import { paymentRowQualifiesAsPaid } from "@/lib/studentPaymentAccess";
 import {
   STUDENT_SERVICE_KEYS,
   applyStudentServiceAccessBatch,
-  fetchDashboardServiceKeys,
   formatPaiseAsRupees,
   getServiceKeyConfig,
+  loadDashboardServiceKeysForAdmin,
+  normalizeDashboardServiceKeysRow,
   saveDashboardServiceKeys,
   type StudentServiceKey,
   type StudentServiceKeyConfig,
@@ -172,10 +173,14 @@ export function StudentServiceKeysPanel({ client, currentUserId, isActive = true
   const reloadConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const row = await fetchDashboardServiceKeys(client);
+      const { row, persisted } = await loadDashboardServiceKeysForAdmin(client);
       setServiceConfigs(row.services);
+      if (!persisted) {
+        toast.message("Using default service key settings (database table not ready yet). You can still edit and save.");
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load service keys.");
+      console.warn("[StudentServiceKeysPanel] load failed:", err);
+      setServiceConfigs(normalizeDashboardServiceKeysRow(null).services);
     } finally {
       setLoading(false);
     }

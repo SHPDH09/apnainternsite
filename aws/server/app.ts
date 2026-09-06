@@ -19,6 +19,7 @@ import rpcByName from "../../api/rpc-call";
 import dataSelect from "../../api/data-select";
 import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
 import ensureBlogCms from "../../api/ensure-blog-cms";
+import ensureDashboardServiceKeys from "../../api/ensure-dashboard-service-keys";
 import rdsApplyAll from "./rds-apply-all-route.js";
 import { loadRootEnv } from "./load-env";
 import { ensureAllCmsTables } from "./cms-bootstrap";
@@ -198,6 +199,7 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/admin-register", handler: adminRegister },
     { method: "post", path: "/api/bootstrap-grant-admin", handler: bootstrapGrantAdmin },
     { method: "post", path: "/api/ensure-blog-cms", handler: ensureBlogCms },
+    { method: "post", path: "/api/ensure-dashboard-service-keys", handler: ensureDashboardServiceKeys },
     { method: "post", path: "/api/rds-apply-all", handler: rdsApplyAll },
     { method: "all", path: "/api/admin-tasks", handler: adminTasks },
     { method: "post", path: "/api/razorpay-recovery", handler: razorpayRecovery },
