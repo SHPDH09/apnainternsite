@@ -24,12 +24,12 @@ export const REFERRAL_APPLY_MODE_OPTIONS: Array<{
   {
     value: "coupon_only",
     label: "Coupon only",
-    description: "Apply for scoped discount coupons by university, college, and domain.",
+    description: "Apply as a coupon partner — configure coupon scope in your dashboard after approval.",
   },
   {
     value: "both",
     label: "Referral + Coupon",
-    description: "Get both a referral link and an initial coupon after verification.",
+    description: "Referral link plus coupons — set coupon details in your dashboard after approval.",
   },
 ];
 

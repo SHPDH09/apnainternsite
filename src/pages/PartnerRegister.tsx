@@ -70,7 +70,6 @@ export default function PartnerRegister() {
 
   const [unis, setUnis] = useState<Array<{ id: string; name: string }>>([]);
   const [colleges, setColleges] = useState<Array<{ id: string; name: string; university_id: string }>>([]);
-  const [domains, setDomains] = useState<string[]>([]);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -83,15 +82,6 @@ export default function PartnerRegister() {
   const [referralApplyMode, setReferralApplyMode] = useState<ReferralApplyMode>("referral_only");
   const [selectedUnis, setSelectedUnis] = useState<string[]>([]);
   const [selectedColleges, setSelectedColleges] = useState<string[]>([]);
-  const [domain, setDomain] = useState("");
-  const [maxStudents, setMaxStudents] = useState("");
-  const [studentEmails, setStudentEmails] = useState("");
-  const [validFrom, setValidFrom] = useState("");
-  const [validTo, setValidTo] = useState("");
-
-  const showCouponFields =
-    kind === "coupon" ||
-    (kind === "referral" && (referralApplyMode === "coupon_only" || referralApplyMode === "both"));
 
   const formTitle =
     kind === "referral"
@@ -100,14 +90,12 @@ export default function PartnerRegister() {
 
   useEffect(() => {
     void (async () => {
-      const [{ data: uniData }, collegeRows, { data: domainRows }] = await Promise.all([
+      const [{ data: uniData }, collegeRows] = await Promise.all([
         supabase.from("universities").select("id, name").order("name"),
         fetchAllCollegesCatalog(supabase),
-        supabase.from("internship_domains").select("name").order("name"),
       ]);
       setUnis((uniData || []) as Array<{ id: string; name: string }>);
       setColleges(collegeRows);
-      setDomains((domainRows || []).map((d) => String((d as { name: string }).name)).filter(Boolean));
     })();
   }, []);
 
@@ -206,14 +194,6 @@ export default function PartnerRegister() {
       payload.referral_apply_mode = referralApplyMode;
     }
 
-    if (showCouponFields) {
-      payload.internship_domain = domain.trim() || null;
-      payload.max_students = maxStudents ? Number(maxStudents) : null;
-      payload.student_emails = studentEmails;
-      payload.valid_from = validFrom || null;
-      payload.valid_to = validTo || null;
-    }
-
     setLoading(true);
     try {
       await submitPartnerApplication(supabase, {
@@ -233,40 +213,6 @@ export default function PartnerRegister() {
       setLoading(false);
     }
   };
-
-  const couponFields = (
-    <>
-      <div className="space-y-1.5">
-        <Label>Internship domain</Label>
-        <Select value={domain} onValueChange={setDomain}>
-          <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
-          <SelectContent>
-            {domains.map((d) => (
-              <SelectItem key={d} value={d}>{d}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Max students</Label>
-        <Input type="number" min={1} value={maxStudents} onChange={(e) => setMaxStudents(e.target.value)} />
-      </div>
-      <div className="space-y-1.5">
-        <Label>Specific student emails (optional, comma-separated)</Label>
-        <Textarea value={studentEmails} onChange={(e) => setStudentEmails(e.target.value)} rows={3} />
-      </div>
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Valid from</Label>
-          <Input type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Valid to</Label>
-          <Input type="date" value={validTo} onChange={(e) => setValidTo(e.target.value)} />
-        </div>
-      </div>
-    </>
-  );
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -453,13 +399,6 @@ export default function PartnerRegister() {
                   showAllOption={false}
                   emptyLabel="Select universities first"
                 />
-
-                {showCouponFields ? (
-                  <div className="space-y-4 rounded-2xl border border-amber-200/80 bg-amber-50/40 p-4">
-                    <p className="text-sm font-bold text-amber-900">Coupon details</p>
-                    {couponFields}
-                  </div>
-                ) : null}
               </>
             )}
 
