@@ -318,6 +318,36 @@ export function buildServiceAccessPatch(
   return patch;
 }
 
+function serviceKeysErrorText(error: unknown): string {
+  if (error && typeof error === "object") {
+    const e = error as { message?: string; details?: string; code?: string };
+    return [e.message, e.details, e.code].filter(Boolean).join(" — ");
+  }
+  return error instanceof Error ? error.message : String(error ?? "");
+}
+
+export function isDashboardServiceKeysTableMissing(error: unknown): boolean {
+  const msg = serviceKeysErrorText(error);
+  return (
+    /42P01|undefined_table/i.test(msg) ||
+    /relation ["']?public\.dashboard_service_keys["']? does not exist/i.test(msg) ||
+    /Could not find the table ['"]public\.dashboard_service_keys['"]/i.test(msg)
+  );
+}
+
+/** Create dashboard_service_keys on RDS when missing (admin RPC). */
+export async function ensureDashboardServiceKeysTable(client: SupabaseClient): Promise<boolean> {
+  try {
+    const { error } = await client.rpc("admin_ensure_dashboard_service_keys");
+    if (!error) return true;
+    if (isDashboardServiceKeysTableMissing(error)) return false;
+    throw error;
+  } catch (err) {
+    if (isDashboardServiceKeysTableMissing(err)) return false;
+    throw err;
+  }
+}
+
 export async function fetchDashboardServiceKeys(
   client: SupabaseClient
 ): Promise<DashboardServiceKeysRow> {
@@ -326,10 +356,37 @@ export async function fetchDashboardServiceKeys(
     .select("*")
     .eq("id", 1)
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    if (isDashboardServiceKeysTableMissing(error)) {
+      return normalizeDashboardServiceKeysRow(null);
+    }
+    throw error;
+  }
   const normalized = normalizeDashboardServiceKeysRow((data as Record<string, unknown>) || null);
   cachedServiceKeys = normalized;
   return normalized;
+}
+
+export async function loadDashboardServiceKeysForAdmin(
+  client: SupabaseClient
+): Promise<{ row: DashboardServiceKeysRow; persisted: boolean }> {
+  await ensureDashboardServiceKeysTable(client);
+  const { data, error } = await client
+    .from("dashboard_service_keys")
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) {
+    if (isDashboardServiceKeysTableMissing(error)) {
+      const row = normalizeDashboardServiceKeysRow(null);
+      cachedServiceKeys = row;
+      return { row, persisted: false };
+    }
+    throw error;
+  }
+  const row = normalizeDashboardServiceKeysRow((data as Record<string, unknown>) || null);
+  cachedServiceKeys = row;
+  return { row, persisted: true };
 }
 
 export async function saveDashboardServiceKeys(
@@ -337,6 +394,7 @@ export async function saveDashboardServiceKeys(
   services: Partial<Record<StudentServiceKey, StudentServiceKeyConfig>>,
   updatedBy: string | null
 ): Promise<DashboardServiceKeysRow> {
+  await ensureDashboardServiceKeysTable(client);
   const current = await fetchDashboardServiceKeys(client);
   const merged = { ...current.services } as Partial<Record<StudentServiceKey, StudentServiceKeyConfig>>;
   for (const key of STUDENT_SERVICE_KEYS) {
@@ -355,7 +413,14 @@ export async function saveDashboardServiceKeys(
     .upsert(payload)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) {
+    if (isDashboardServiceKeysTableMissing(error)) {
+      throw new Error(
+        "Service keys storage is not ready yet. Retry in a moment or redeploy the API/Lambda."
+      );
+    }
+    throw error;
+  }
   const normalized = normalizeDashboardServiceKeysRow(data as Record<string, unknown>);
   cachedServiceKeys = normalized;
   return normalized;
