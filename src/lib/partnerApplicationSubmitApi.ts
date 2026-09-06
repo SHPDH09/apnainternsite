@@ -1,5 +1,15 @@
 import type { PartnerKind } from "@/lib/partnerApplications";
 
+/** True when the partner submit/bootstrap API route is missing or proxied to stale Lambda. */
+export function isPartnerSubmitApiUnavailable(err: unknown): boolean {
+  const msg = String(err instanceof Error ? err.message : err).toLowerCase();
+  return (
+    /404|503|502|504|405|cannot post|not found|failed to fetch|network|method not allowed|function_invocation|<!doctype html>|staging\/api\//i.test(
+      msg
+    )
+  );
+}
+
 export async function submitPartnerApplicationViaApi(
   accessToken: string,
   input: {
@@ -34,7 +44,11 @@ export async function submitPartnerApplicationViaApi(
   }
 
   if (!res.ok || body.ok !== true || !body.id) {
-    throw new Error(body.message || body.detail || `Partner application failed (${res.status})`);
+    const errMsg = body.message || body.detail || `Partner application failed (${res.status})`;
+    if (isPartnerSubmitApiUnavailable(errMsg) || isPartnerSubmitApiUnavailable(text)) {
+      throw new Error(`Cannot POST /api/partner-application-submit (${res.status})`);
+    }
+    throw new Error(errMsg);
   }
 
   return body.id;

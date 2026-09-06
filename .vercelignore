@@ -12,6 +12,8 @@ api/**
 !api/request-otp.ts
 !api/auth/forgot-password.ts
 !api/admin-partner-register.ts
+!api/partner-application-submit.ts
+!api/ensure-partner-applications.ts
 !api/lib/**
 
 aws/**

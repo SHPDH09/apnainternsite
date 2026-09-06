@@ -9,6 +9,7 @@ import { signInStudentWithPassword } from "@/lib/studentAuthLogin";
 import {
   readAccessTokenFromClient,
   submitPartnerApplicationViaApi,
+  isPartnerSubmitApiUnavailable,
 } from "@/lib/partnerApplicationSubmitApi";
 
 export type PartnerKind = "cyber_cafe" | "referral" | "coupon";
@@ -147,8 +148,7 @@ async function insertPartnerApplicationRow(
         payload: input.payload,
       });
     } catch (apiErr) {
-      const msg = String(apiErr instanceof Error ? apiErr.message : apiErr);
-      if (!/404|not found|503|502|504|failed to fetch|network/i.test(msg)) {
+      if (!isPartnerSubmitApiUnavailable(apiErr)) {
         throw apiErr;
       }
     }
