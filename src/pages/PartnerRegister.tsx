@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Loader2, Store, Share2, Ticket } from "lucide-react";
+import { Loader2, Store, Share2, Ticket, MailCheck } from "lucide-react";
 import { toast } from "sonner";
 import { SiteNav } from "@/components/SiteNav";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -16,6 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 import { supabase } from "@/integrations/supabase/client";
 import { REGISTRATION_PASSWORD_MIN_LENGTH } from "@/lib/registrationPassword";
 import {
@@ -25,11 +30,18 @@ import {
   type PartnerKind,
   type ReferralApplyMode,
 } from "@/lib/partnerApplications";
+import {
+  clearPartnerVerifiedEmail,
+  isPartnerEmailVerified,
+  sendPartnerRegistrationOtp,
+  verifyPartnerRegistrationOtp,
+} from "@/lib/partnerEmailOtp";
 import { REFERRAL_TYPE_OPTIONS } from "@/lib/referral";
 import { fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
 import { MultiSelectCheckboxGroup } from "@/components/admin/MultiSelectCheckboxGroup";
 import { collegesForUniversityNames } from "@/lib/classLinkTargeting";
 import { cn } from "@/lib/utils";
+import { isLocalDevEnvironment } from "@/lib/isLocalDev";
 
 const PARTNER_TABS: Array<{ kind: PartnerKind; label: string; icon: typeof Store }> = [
   { kind: "referral", label: "Referral", icon: Share2 },
@@ -50,6 +62,12 @@ export default function PartnerRegister() {
   const Icon = activeTab.icon;
 
   const [loading, setLoading] = useState(false);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
+
   const [unis, setUnis] = useState<Array<{ id: string; name: string }>>([]);
   const [colleges, setColleges] = useState<Array<{ id: string; name: string; university_id: string }>>([]);
   const [domains, setDomains] = useState<string[]>([]);
@@ -58,8 +76,8 @@ export default function PartnerRegister() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [contact, setContact] = useState("");
+  const [address, setAddress] = useState("");
   const [shopName, setShopName] = useState("");
-  const [location, setLocation] = useState("");
   const [city, setCity] = useState("");
   const [referralType, setReferralType] = useState("partner");
   const [referralApplyMode, setReferralApplyMode] = useState<ReferralApplyMode>("referral_only");
@@ -93,6 +111,14 @@ export default function PartnerRegister() {
     })();
   }, []);
 
+  useEffect(() => {
+    setEmailVerified(isPartnerEmailVerified(email));
+    if (!isPartnerEmailVerified(email)) {
+      setOtpCode("");
+      setDevOtpHint(null);
+    }
+  }, [email]);
+
   const collegeOptions = useMemo(
     () => collegesForUniversityNames(colleges, unis, selectedUnis),
     [colleges, unis, selectedUnis]
@@ -102,10 +128,53 @@ export default function PartnerRegister() {
     setParams({ type: next }, { replace: true });
   };
 
+  const handleSendOtp = async () => {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized.includes("@")) {
+      toast.error("Enter a valid email before requesting a code.");
+      return;
+    }
+    setOtpSending(true);
+    try {
+      clearPartnerVerifiedEmail();
+      setEmailVerified(false);
+      const result = await sendPartnerRegistrationOtp(supabase, normalized);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.devOtp && isLocalDevEnvironment()) {
+        setDevOtpHint(result.devOtp);
+      }
+      toast.success("Verification code sent to your email.");
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    setOtpVerifying(true);
+    try {
+      const result = await verifyPartnerRegistrationOtp(supabase, email, otpCode);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      setEmailVerified(true);
+      toast.success("Email verified. You can submit your application.");
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim() || !email.trim() || !password.trim() || !contact.trim()) {
-      toast.error("Name, email, password, and contact are required.");
+    if (!fullName.trim() || !email.trim() || !password.trim() || !contact.trim() || !address.trim()) {
+      toast.error("Name, email, phone, address, and password are required.");
+      return;
+    }
+    if (!emailVerified || !isPartnerEmailVerified(email)) {
+      toast.error("Verify your email with the OTP code before submitting.");
       return;
     }
     if (password.trim().length < REGISTRATION_PASSWORD_MIN_LENGTH) {
@@ -113,20 +182,19 @@ export default function PartnerRegister() {
       return;
     }
 
-    const payload: Record<string, unknown> = { city: city.trim() || null };
+    const payload: Record<string, unknown> = {
+      address: address.trim(),
+      city: city.trim() || null,
+    };
 
     if (kind === "cyber_cafe") {
-      if (!shopName.trim() || !location.trim()) {
-        toast.error("Shop name and location are required for cyber cafe partners.");
+      if (!shopName.trim()) {
+        toast.error("Shop name is required for cyber cafe partners.");
         return;
       }
       payload.shop_name = shopName.trim();
-      payload.location = location.trim();
+      payload.location = address.trim();
     } else {
-      if (!selectedUnis.length) {
-        toast.error("Select at least one university.");
-        return;
-      }
       payload.universities = selectedUnis;
       payload.colleges = selectedColleges;
       payload.referral_type = referralType;
@@ -156,6 +224,7 @@ export default function PartnerRegister() {
         contact_number: contact.trim(),
         payload,
       });
+      clearPartnerVerifiedEmail();
       toast.success("Application submitted! Log in to track verification status.");
       navigate("/partner/dashboard");
     } catch (err) {
@@ -208,7 +277,7 @@ export default function PartnerRegister() {
             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Partner application</p>
             <h1 className="mt-2 text-2xl font-black text-slate-900">Apply as a partner</h1>
             <p className="mt-2 text-sm text-slate-600">
-              Choose cyber cafe, referral, or coupon. Dashboard unlocks after admin verification.
+              Verify your email, then submit. Dashboard unlocks after admin verification.
             </p>
           </div>
 
@@ -223,9 +292,7 @@ export default function PartnerRegister() {
                   onClick={() => switchKind(tab.kind)}
                   className={cn(
                     "flex flex-col items-center gap-1 rounded-xl px-2 py-3 text-xs font-bold transition sm:flex-row sm:justify-center sm:gap-2 sm:text-sm",
-                    active
-                      ? "bg-white text-primary shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
+                    active ? "bg-white text-primary shadow-sm" : "text-slate-600 hover:text-slate-900"
                   )}
                 >
                   <TabIcon className="size-4 shrink-0" />
@@ -251,13 +318,65 @@ export default function PartnerRegister() {
                 <Label>Full name</Label>
                 <Input value={fullName} onChange={(e) => setFullName(e.target.value)} required />
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 sm:col-span-2">
                 <Label>Email</Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                <div className="flex gap-2">
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0 font-bold"
+                    disabled={otpSending || !email.trim()}
+                    onClick={() => void handleSendOtp()}
+                  >
+                    {otpSending ? <Loader2 className="size-4 animate-spin" /> : "Send code"}
+                  </Button>
+                </div>
               </div>
+
+              <div className="space-y-2 sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                <Label className="flex items-center gap-2">
+                  <MailCheck className="size-4 text-primary" />
+                  Email verification
+                  {emailVerified ? (
+                    <span className="text-xs font-bold text-emerald-600">Verified</span>
+                  ) : null}
+                </Label>
+                <InputOTP maxLength={6} value={otpCode} onChange={setOtpCode}>
+                  <InputOTPGroup>
+                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                      <InputOTPSlot key={i} index={i} />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
+                {devOtpHint ? (
+                  <p className="text-xs text-amber-700">Dev OTP: {devOtpHint}</p>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="font-bold"
+                  disabled={otpVerifying || otpCode.length !== 6}
+                  onClick={() => void handleVerifyOtp()}
+                >
+                  {otpVerifying ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+                  Verify email
+                </Button>
+              </div>
+
               <div className="space-y-1.5">
-                <Label>Contact number</Label>
+                <Label>Phone</Label>
                 <Input value={contact} onChange={(e) => setContact(e.target.value)} required />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Address</Label>
+                <Textarea value={address} onChange={(e) => setAddress(e.target.value)} rows={2} required />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Password</Label>
@@ -266,16 +385,10 @@ export default function PartnerRegister() {
             </div>
 
             {kind === "cyber_cafe" ? (
-              <>
-                <div className="space-y-1.5">
-                  <Label>Shop name</Label>
-                  <Input value={shopName} onChange={(e) => setShopName(e.target.value)} required />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Location</Label>
-                  <Input value={location} onChange={(e) => setLocation(e.target.value)} required />
-                </div>
-              </>
+              <div className="space-y-1.5">
+                <Label>Shop name</Label>
+                <Input value={shopName} onChange={(e) => setShopName(e.target.value)} required />
+              </div>
             ) : (
               <>
                 {kind === "referral" ? (
@@ -311,7 +424,7 @@ export default function PartnerRegister() {
                 ) : null}
 
                 <div className="space-y-1.5">
-                  <Label>City</Label>
+                  <Label>City (optional)</Label>
                   <Input value={city} onChange={(e) => setCity(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
@@ -326,7 +439,7 @@ export default function PartnerRegister() {
                   </Select>
                 </div>
                 <MultiSelectCheckboxGroup
-                  label="Universities"
+                  label="Universities (optional)"
                   options={unis.map((u) => ({ id: u.name, name: u.name }))}
                   selectedValues={selectedUnis}
                   onChange={setSelectedUnis}
@@ -350,7 +463,7 @@ export default function PartnerRegister() {
               </>
             )}
 
-            <Button type="submit" className="w-full font-black" disabled={loading}>
+            <Button type="submit" className="w-full font-black" disabled={loading || !emailVerified}>
               {loading ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
               Submit application
             </Button>

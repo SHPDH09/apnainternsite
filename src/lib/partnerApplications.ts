@@ -101,12 +101,13 @@ export async function submitPartnerApplication(
   }
 
   if (input.partner_kind === "cyber_cafe") {
+    const location = String(input.payload.location || input.payload.address || "").trim();
     const { userId } = await registerCybercafePartner(directoryClient, {
       owner_name: input.full_name.trim(),
       email: normalizedEmail,
       password,
       shop_name: String(input.payload.shop_name || "").trim(),
-      location: String(input.payload.location || "").trim(),
+      location,
       phone: input.contact_number.trim(),
     });
     try {

@@ -27,6 +27,7 @@ import {
   rejectPartnerApplication,
 } from "@/lib/partnerApplicationAdmin";
 import { PortalSectionHeader } from "@/components/portal/portalDashboardUi";
+import { AdminAddPartnerDialog } from "@/components/admin/AdminAddPartnerDialog";
 
 type CafePending = {
   id: string;
@@ -44,6 +45,8 @@ export function PartnerApplicationsPanel() {
   const [apps, setApps] = useState<PartnerApplicationRow[]>([]);
   const [cafes, setCafes] = useState<CafePending[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addKind, setAddKind] = useState<"referral" | "cyber_cafe" | "coupon">("referral");
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -127,9 +130,28 @@ export function PartnerApplicationsPanel() {
         subtitle="Verify cyber cafe, referral, and coupon partner requests. Dashboards stay locked until you approve."
         action={
           <div className="flex flex-wrap gap-2">
+            <Button
+              className="font-black gap-2"
+              onClick={() => {
+                setAddKind("referral");
+                setAddOpen(true);
+              }}
+            >
+              <Plus className="size-4" /> Add referral / coupon
+            </Button>
+            <Button
+              variant="secondary"
+              className="font-black gap-2"
+              onClick={() => {
+                setAddKind("cyber_cafe");
+                setAddOpen(true);
+              }}
+            >
+              <Plus className="size-4" /> Add cyber cafe
+            </Button>
             <Button asChild variant="outline" className="font-black gap-2">
               <Link to="/partner/register">
-                <Plus className="size-4" /> Public apply page
+                Public apply page
               </Link>
             </Button>
             <Button variant="outline" onClick={() => void reload()}>Refresh</Button>
@@ -162,6 +184,9 @@ export function PartnerApplicationsPanel() {
                 <TableCell>
                   <p className="font-bold text-sm">{app.full_name}</p>
                   <p className="text-xs text-slate-500">{app.email}</p>
+                  {app.payload?.address ? (
+                    <p className="text-[10px] text-slate-400 line-clamp-1">{String(app.payload.address)}</p>
+                  ) : null}
                 </TableCell>
                 <TableCell className="text-xs">{app.contact_number || "—"}</TableCell>
                 <TableCell className="text-xs">{new Date(app.created_at).toLocaleString()}</TableCell>
@@ -203,6 +228,13 @@ export function PartnerApplicationsPanel() {
           </TableBody>
         </Table>
       </Card>
+
+      <AdminAddPartnerDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        defaultKind={addKind}
+        onCreated={() => void reload()}
+      />
     </div>
   );
 }
