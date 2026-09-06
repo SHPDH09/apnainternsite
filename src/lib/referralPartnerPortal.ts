@@ -21,17 +21,13 @@ const PARTNER_SELF_SELECT =
 const PARTNER_SELF_SELECT_WITH_AVATAR =
   "id, auth_user_id, referral_code, full_name, email, active, access_mode, profile_image_url";
 
-function partnerFromRpcPayload(raw: unknown): ReferralPartnerSelf | null {
-  const row = raw as {
-    id?: string;
-    auth_user_id?: string | null;
-    referral_code?: string;
-    full_name?: string;
-    email?: string;
-    active?: boolean;
-    profile_image_url?: string | null;
-    access_mode?: string | null;
-  } | null;
+const PARTNER_SELF_SELECT_LEGACY =
+  "id, auth_user_id, referral_code, full_name, email, active";
+
+const PARTNER_SELF_SELECT_LEGACY_WITH_AVATAR =
+  "id, auth_user_id, referral_code, full_name, email, active, profile_image_url";
+
+function rowToPartnerSelf(row: Record<string, unknown>): ReferralPartnerSelf | null {
   if (!row?.id || !row.referral_code) return null;
   return {
     id: String(row.id),
@@ -40,9 +36,14 @@ function partnerFromRpcPayload(raw: unknown): ReferralPartnerSelf | null {
     full_name: String(row.full_name || ""),
     email: String(row.email || ""),
     active: row.active !== false,
-    profile_image_url: row.profile_image_url ?? null,
+    profile_image_url: (row.profile_image_url as string | null | undefined) ?? null,
     access_mode: normalizePartnerAccessMode(row.access_mode),
   };
+}
+
+function partnerFromRpcPayload(raw: unknown): ReferralPartnerSelf | null {
+  const row = raw as Record<string, unknown> | null;
+  return rowToPartnerSelf(row || {});
 }
 
 /** Load partner via SECURITY DEFINER RPC (works even when RLS blocks table reads). */
@@ -113,7 +114,10 @@ export async function fetchReferralPartnerSelf(
       .maybeSingle();
 
     if (!authErr && byAuth?.referral_code) {
-      return byAuth as ReferralPartnerSelf;
+      return rowToPartnerSelf(byAuth as Record<string, unknown>);
+    }
+    if (authErr && !/access_mode|profile_image_url|42703|column/i.test(authErr.message || "")) {
+      return null;
     }
 
     const normalizedEmail = String(email || "")
@@ -129,17 +133,21 @@ export async function fetchReferralPartnerSelf(
       .maybeSingle();
 
     if (emailErr || !byEmail?.referral_code) return null;
-    return byEmail as ReferralPartnerSelf;
+    return rowToPartnerSelf(byEmail as Record<string, unknown>);
   };
 
-  let partner = await loadBy(PARTNER_SELF_SELECT_WITH_AVATAR);
-  if (partner?.referral_code) return partner;
+  const selectChain = [
+    PARTNER_SELF_SELECT_WITH_AVATAR,
+    PARTNER_SELF_SELECT,
+    PARTNER_SELF_SELECT_LEGACY_WITH_AVATAR,
+    PARTNER_SELF_SELECT_LEGACY,
+  ];
 
-  // Older RDS schemas may not have profile_image_url yet.
-  if (partner === null) {
-    partner = await loadBy(PARTNER_SELF_SELECT);
+  for (const select of selectChain) {
+    const partner = await loadBy(select);
+    if (partner?.referral_code) return partner;
   }
-  return partner?.referral_code ? partner : null;
+  return null;
 }
 
 export async function loadReferralPartnerSelf(

@@ -231,21 +231,36 @@ export const ReferralsPanel = () => {
 
       const overview = await fetchAdminReferralOverview(supabase);
       if (overview.length === 0) {
-        const { data, error } = await supabase
-          .from("referral_partners")
-          .select(
-            "id, full_name, email, contact_number, referral_code, city, college_name, referral_type, active, created_at, auth_user_id, partner_login_secret, access_mode"
-          )
-          .order("created_at", { ascending: false });
-        if (error) {
-          if (error.code === "42P01" || error.message?.includes("does not exist")) {
+        const partnerSelectWithAccess =
+          "id, full_name, email, contact_number, referral_code, city, college_name, referral_type, active, created_at, auth_user_id, partner_login_secret, access_mode";
+        const partnerSelectLegacy =
+          "id, full_name, email, contact_number, referral_code, city, college_name, referral_type, active, created_at, auth_user_id, partner_login_secret";
+
+        let data: PartnerRow[] | null = null;
+        let loadErr: { code?: string; message?: string } | null = null;
+        for (const select of [partnerSelectWithAccess, partnerSelectLegacy]) {
+          const res = await supabase.from("referral_partners").select(select).order("created_at", { ascending: false });
+          if (!res.error && res.data) {
+            data = (res.data || []).map((row) => ({
+              ...(row as PartnerRow),
+              access_mode: (row as PartnerRow).access_mode ?? "both",
+            }));
+            break;
+          }
+          loadErr = res.error;
+          if (!/access_mode|42703|column/i.test(res.error?.message || "")) break;
+        }
+
+        if (!data) {
+          const error = loadErr;
+          if (error?.code === "42P01" || error?.message?.includes("does not exist")) {
             toast.error("Referral tables not found. Run the latest Supabase migration.");
             setRows([]);
             return;
           }
           throw error;
         }
-        const partners = (data || []) as PartnerRow[];
+        const partners = data;
         const enriched = await Promise.all(
           partners.map(async (p) => {
             const code = String(p.referral_code || "").trim();
