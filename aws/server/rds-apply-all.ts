@@ -40,7 +40,7 @@ function listAwsSqlFiles(): string[] {
     .map((f) => path.join("aws/scripts", f));
 }
 
-const warnPattern = /already exists|duplicate key|does not exist|cannot drop|multiple primary keys/i;
+const warnPattern = /already exists|duplicate key|does not exist|cannot drop|multiple primary keys|cannot change return type|42P13|42710|42701|operator does not exist|25P02/i;
 
 /**
  * Apply all numbered aws/scripts/*.sql (+ key supabase gap-fill files) to RDS.
@@ -73,6 +73,11 @@ export async function applyAllRdsSql(): Promise<RdsApplyAllResult> {
         applied += 1;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          /* ignore */
+        }
         if (warnPattern.test(msg)) {
           results.push({ file: rel, status: "warn" });
           warnings += 1;

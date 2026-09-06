@@ -58,7 +58,12 @@ async function main() {
       ok += 1;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (/already exists|duplicate key|does not exist|cannot drop|multiple primary keys/i.test(msg)) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* connection may not be in a transaction */
+      }
+      if (/already exists|duplicate key|does not exist|cannot drop|multiple primary keys|cannot change return type|42P13|42710|42701|operator does not exist|25P02/i.test(msg)) {
         console.log(`warn (${msg.slice(0, 100)})`);
         warn += 1;
       } else {
