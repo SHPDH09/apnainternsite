@@ -99,11 +99,20 @@ export function resolveStorageUrl(url: string | null | undefined): string | null
 /** Build a public URL for a freshly uploaded object. */
 export function publicStorageObjectUrl(appBucket: string, objectPath: string): string {
   const cleanPath = objectPath.replace(/^\/+/, "").split(/[?#]/)[0];
+  const encodedPath = cleanPath
+    .split("/")
+    .filter(Boolean)
+    .map((p) => encodeURIComponent(p))
+    .join("/");
+  const apiBase = resolveSupabaseUrl();
+  // Prefer same-origin storage proxy (Lambda reads private S3); direct S3 as fallback.
+  if (apiBase && !apiBase.includes("supabase.co")) {
+    return `${apiBase.replace(/\/$/, "")}/storage/v1/object/public/${appBucket}/${encodedPath}`;
+  }
   const direct = toDirectS3Url(appBucket, cleanPath);
   if (direct) return direct;
-  const apiBase = resolveSupabaseUrl();
   if (apiBase) {
-    return `${apiBase}/storage/v1/object/public/${appBucket}/${cleanPath}`;
+    return `${apiBase}/storage/v1/object/public/${appBucket}/${encodedPath}`;
   }
   return cleanPath;
 }
@@ -125,6 +134,15 @@ export function storageObjectUrlCandidates(
 
   const path = (filePath || "").replace(/^\/+/, "").split(/[?#]/)[0];
   if (path) {
+    const apiBase = resolveSupabaseUrl();
+    if (apiBase && !apiBase.includes("supabase.co")) {
+      const encodedPath = path
+        .split("/")
+        .filter(Boolean)
+        .map((p) => encodeURIComponent(p))
+        .join("/");
+      add(`${apiBase.replace(/\/$/, "")}/storage/v1/object/public/${appBucket}/${encodedPath}`);
+    }
     const base = path.split("/").filter(Boolean).pop();
     // Prefer basename first: legacy S3 sync used flat keys while DB kept uploaderId/file.
     if (base && base !== path) add(publicStorageObjectUrl(appBucket, base));
