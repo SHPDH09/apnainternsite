@@ -18,7 +18,7 @@
     "build": "vite build && node scripts/postbuild-cloudflare.mjs",
     "vercel-build": "vite build",
     "build:cloudflare": "npm run build",
-    "deploy:workers": "wrangler deploy",
+    "deploy:workers": "npm run build && wrangler deploy",
     "deploy:cloudflare": "npm run build && node scripts/wrangler-deploy-ci.mjs",
     "deploy:cloudflare:ci": "node scripts/wrangler-deploy-ci.mjs",
     "deploy": "node scripts/wrangler-deploy-ci.mjs",
