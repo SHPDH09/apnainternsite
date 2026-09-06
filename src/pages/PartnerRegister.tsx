@@ -20,25 +20,34 @@ import { supabase } from "@/integrations/supabase/client";
 import { REGISTRATION_PASSWORD_MIN_LENGTH } from "@/lib/registrationPassword";
 import {
   PARTNER_KIND_LABELS,
+  REFERRAL_APPLY_MODE_OPTIONS,
   submitPartnerApplication,
   type PartnerKind,
+  type ReferralApplyMode,
 } from "@/lib/partnerApplications";
 import { REFERRAL_TYPE_OPTIONS } from "@/lib/referral";
 import { fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
 import { MultiSelectCheckboxGroup } from "@/components/admin/MultiSelectCheckboxGroup";
 import { collegesForUniversityNames } from "@/lib/classLinkTargeting";
+import { cn } from "@/lib/utils";
 
-const ICONS: Record<PartnerKind, typeof Store> = {
-  cyber_cafe: Store,
-  referral: Share2,
-  coupon: Ticket,
-};
+const PARTNER_TABS: Array<{ kind: PartnerKind; label: string; icon: typeof Store }> = [
+  { kind: "referral", label: "Referral", icon: Share2 },
+  { kind: "cyber_cafe", label: "Cyber Cafe", icon: Store },
+  { kind: "coupon", label: "Coupon", icon: Ticket },
+];
+
+function parsePartnerKind(raw: string | null): PartnerKind {
+  if (raw === "cyber_cafe" || raw === "referral" || raw === "coupon") return raw;
+  return "referral";
+}
 
 export default function PartnerRegister() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const kind = (params.get("type") || "referral") as PartnerKind;
-  const Icon = ICONS[kind] || Share2;
+  const [params, setParams] = useSearchParams();
+  const kind = parsePartnerKind(params.get("type"));
+  const activeTab = PARTNER_TABS.find((t) => t.kind === kind) || PARTNER_TABS[0];
+  const Icon = activeTab.icon;
 
   const [loading, setLoading] = useState(false);
   const [unis, setUnis] = useState<Array<{ id: string; name: string }>>([]);
@@ -53,6 +62,7 @@ export default function PartnerRegister() {
   const [location, setLocation] = useState("");
   const [city, setCity] = useState("");
   const [referralType, setReferralType] = useState("partner");
+  const [referralApplyMode, setReferralApplyMode] = useState<ReferralApplyMode>("referral_only");
   const [selectedUnis, setSelectedUnis] = useState<string[]>([]);
   const [selectedColleges, setSelectedColleges] = useState<string[]>([]);
   const [domain, setDomain] = useState("");
@@ -60,6 +70,15 @@ export default function PartnerRegister() {
   const [studentEmails, setStudentEmails] = useState("");
   const [validFrom, setValidFrom] = useState("");
   const [validTo, setValidTo] = useState("");
+
+  const showCouponFields =
+    kind === "coupon" ||
+    (kind === "referral" && (referralApplyMode === "coupon_only" || referralApplyMode === "both"));
+
+  const formTitle =
+    kind === "referral"
+      ? REFERRAL_APPLY_MODE_OPTIONS.find((o) => o.value === referralApplyMode)?.label ?? "Referral Partner"
+      : PARTNER_KIND_LABELS[kind];
 
   useEffect(() => {
     void (async () => {
@@ -78,6 +97,10 @@ export default function PartnerRegister() {
     () => collegesForUniversityNames(colleges, unis, selectedUnis),
     [colleges, unis, selectedUnis]
   );
+
+  const switchKind = (next: PartnerKind) => {
+    setParams({ type: next }, { replace: true });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,7 +134,11 @@ export default function PartnerRegister() {
       payload.college_name = selectedColleges[0] || null;
     }
 
-    if (kind === "coupon") {
+    if (kind === "referral") {
+      payload.referral_apply_mode = referralApplyMode;
+    }
+
+    if (showCouponFields) {
       payload.internship_domain = domain.trim() || null;
       payload.max_students = maxStudents ? Number(maxStudents) : null;
       payload.student_emails = studentEmails;
@@ -138,18 +165,83 @@ export default function PartnerRegister() {
     }
   };
 
+  const couponFields = (
+    <>
+      <div className="space-y-1.5">
+        <Label>Internship domain</Label>
+        <Select value={domain} onValueChange={setDomain}>
+          <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
+          <SelectContent>
+            {domains.map((d) => (
+              <SelectItem key={d} value={d}>{d}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Max students</Label>
+        <Input type="number" min={1} value={maxStudents} onChange={(e) => setMaxStudents(e.target.value)} />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Specific student emails (optional, comma-separated)</Label>
+        <Textarea value={studentEmails} onChange={(e) => setStudentEmails(e.target.value)} rows={3} />
+      </div>
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label>Valid from</Label>
+          <Input type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Valid to</Label>
+          <Input type="date" value={validTo} onChange={(e) => setValidTo(e.target.value)} />
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50">
       <SiteNav />
       <main className="mx-auto max-w-2xl px-4 py-10">
         <Card className="p-6 md:p-8 shadow-elegant border-none">
+          <div className="mb-6 text-center">
+            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Partner application</p>
+            <h1 className="mt-2 text-2xl font-black text-slate-900">Apply as a partner</h1>
+            <p className="mt-2 text-sm text-slate-600">
+              Choose cyber cafe, referral, or coupon. Dashboard unlocks after admin verification.
+            </p>
+          </div>
+
+          <div className="mb-6 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1">
+            {PARTNER_TABS.map((tab) => {
+              const TabIcon = tab.icon;
+              const active = kind === tab.kind;
+              return (
+                <button
+                  key={tab.kind}
+                  type="button"
+                  onClick={() => switchKind(tab.kind)}
+                  className={cn(
+                    "flex flex-col items-center gap-1 rounded-xl px-2 py-3 text-xs font-bold transition sm:flex-row sm:justify-center sm:gap-2 sm:text-sm",
+                    active
+                      ? "bg-white text-primary shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  <TabIcon className="size-4 shrink-0" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="mb-6 flex items-center gap-3">
             <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
               <Icon className="size-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-900">{PARTNER_KIND_LABELS[kind]} Application</h1>
-              <p className="text-sm text-slate-600">Dashboard unlocks after admin verification.</p>
+              <h2 className="text-lg font-black text-slate-900">{formTitle}</h2>
+              <p className="text-sm text-slate-600">{PARTNER_KIND_LABELS[kind]} application</p>
             </div>
           </div>
 
@@ -186,6 +278,38 @@ export default function PartnerRegister() {
               </>
             ) : (
               <>
+                {kind === "referral" ? (
+                  <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <Label className="text-sm font-black text-slate-900">What do you want to apply for?</Label>
+                    <div className="grid gap-2">
+                      {REFERRAL_APPLY_MODE_OPTIONS.map((option) => (
+                        <label
+                          key={option.value}
+                          className={cn(
+                            "flex cursor-pointer gap-3 rounded-xl border p-3 transition",
+                            referralApplyMode === option.value
+                              ? "border-primary bg-primary/5"
+                              : "border-slate-200 bg-white hover:border-slate-300"
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="referral_apply_mode"
+                            value={option.value}
+                            checked={referralApplyMode === option.value}
+                            onChange={() => setReferralApplyMode(option.value)}
+                            className="mt-1"
+                          />
+                          <span>
+                            <span className="block text-sm font-bold text-slate-900">{option.label}</span>
+                            <span className="block text-xs text-slate-600">{option.description}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="space-y-1.5">
                   <Label>City</Label>
                   <Input value={city} onChange={(e) => setCity(e.target.value)} />
@@ -216,42 +340,15 @@ export default function PartnerRegister() {
                   showAllOption={false}
                   emptyLabel="Select universities first"
                 />
+
+                {showCouponFields ? (
+                  <div className="space-y-4 rounded-2xl border border-amber-200/80 bg-amber-50/40 p-4">
+                    <p className="text-sm font-bold text-amber-900">Coupon details</p>
+                    {couponFields}
+                  </div>
+                ) : null}
               </>
             )}
-
-            {kind === "coupon" ? (
-              <>
-                <div className="space-y-1.5">
-                  <Label>Internship domain</Label>
-                  <Select value={domain} onValueChange={setDomain}>
-                    <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
-                    <SelectContent>
-                      {domains.map((d) => (
-                        <SelectItem key={d} value={d}>{d}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Max students</Label>
-                  <Input type="number" min={1} value={maxStudents} onChange={(e) => setMaxStudents(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Specific student emails (optional, comma-separated)</Label>
-                  <Textarea value={studentEmails} onChange={(e) => setStudentEmails(e.target.value)} rows={3} />
-                </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label>Valid from</Label>
-                    <Input type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Valid to</Label>
-                    <Input type="date" value={validTo} onChange={(e) => setValidTo(e.target.value)} />
-                  </div>
-                </div>
-              </>
-            ) : null}
 
             <Button type="submit" className="w-full font-black" disabled={loading}>
               {loading ? <Loader2 className="size-4 animate-spin mr-2" /> : null}

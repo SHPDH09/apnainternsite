@@ -9,6 +9,45 @@ import { signInStudentWithPassword } from "@/lib/studentAuthLogin";
 
 export type PartnerKind = "cyber_cafe" | "referral" | "coupon";
 
+export type ReferralApplyMode = "referral_only" | "coupon_only" | "both";
+
+export const REFERRAL_APPLY_MODE_OPTIONS: Array<{
+  value: ReferralApplyMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "referral_only",
+    label: "Referral link only",
+    description: "Share your referral link and track clicks and registrations.",
+  },
+  {
+    value: "coupon_only",
+    label: "Coupon only",
+    description: "Apply for scoped discount coupons by university, college, and domain.",
+  },
+  {
+    value: "both",
+    label: "Referral + Coupon",
+    description: "Get both a referral link and an initial coupon after verification.",
+  },
+];
+
+export function referralApplyModeLabel(mode: unknown): string {
+  const hit = REFERRAL_APPLY_MODE_OPTIONS.find((o) => o.value === mode);
+  return hit?.label ?? "Referral link only";
+}
+
+export function shouldCreateCouponOnApproval(
+  partnerKind: PartnerKind,
+  payload: Record<string, unknown>
+): boolean {
+  if (partnerKind === "coupon") return true;
+  if (partnerKind !== "referral") return false;
+  const mode = String(payload.referral_apply_mode || "referral_only") as ReferralApplyMode;
+  return mode === "coupon_only" || mode === "both";
+}
+
 export type PartnerApplicationRow = {
   id: string;
   auth_user_id: string;

@@ -10,6 +10,7 @@ import {
 import { fetchAllCollegesCatalog, resolveUniversityId } from "@/lib/institutionCatalog";
 import { displayCollegeName } from "@/lib/collegeDisplay";
 import type { PartnerApplicationRow } from "@/lib/partnerApplications";
+import { shouldCreateCouponOnApproval } from "@/lib/partnerApplications";
 import { createReferralCouponFromPayload, generateCouponCode } from "@/lib/referralCoupons";
 
 async function savePartnerAssignments(
@@ -135,7 +136,7 @@ export async function approvePartnerApplication(
     fullName: app.full_name,
   });
 
-  if (app.partner_kind === "coupon") {
+  if (shouldCreateCouponOnApproval(app.partner_kind, payload)) {
     await createReferralCouponFromPayload(client, {
       referralPartnerId: inserted.id,
       applicationId: app.id,

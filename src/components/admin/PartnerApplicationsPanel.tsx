@@ -18,6 +18,7 @@ import {
   fetchCybercafePendingApplications,
   fetchPendingPartnerApplications,
   PARTNER_KIND_LABELS,
+  referralApplyModeLabel,
   type PartnerApplicationRow,
 } from "@/lib/partnerApplications";
 import {
@@ -127,7 +128,7 @@ export function PartnerApplicationsPanel() {
         action={
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" className="font-black gap-2">
-              <Link to="/partner/register?type=referral">
+              <Link to="/partner/register">
                 <Plus className="size-4" /> Public apply page
               </Link>
             </Button>
@@ -150,7 +151,14 @@ export function PartnerApplicationsPanel() {
           <TableBody>
             {apps.map((app) => (
               <TableRow key={app.id}>
-                <TableCell><Badge>{PARTNER_KIND_LABELS[app.partner_kind]}</Badge></TableCell>
+                <TableCell>
+                  <Badge>{PARTNER_KIND_LABELS[app.partner_kind]}</Badge>
+                  {app.partner_kind === "referral" && app.payload?.referral_apply_mode ? (
+                    <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                      {referralApplyModeLabel(app.payload.referral_apply_mode)}
+                    </p>
+                  ) : null}
+                </TableCell>
                 <TableCell>
                   <p className="font-bold text-sm">{app.full_name}</p>
                   <p className="text-xs text-slate-500">{app.email}</p>
