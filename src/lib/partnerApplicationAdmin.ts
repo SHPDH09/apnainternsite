@@ -51,6 +51,51 @@ async function savePartnerAssignments(
   if (error && !/42P01|does not exist/i.test(error.message || "")) throw error;
 }
 
+async function linkReferralPartnerPortal(
+  client: SupabaseClient,
+  params: {
+    userId: string;
+    partnerId: string;
+    email: string;
+    fullName: string;
+    loginSecret: string;
+  }
+): Promise<void> {
+  const { error: linkErr } = await client.rpc("link_referral_partner_portal", {
+    target_user_id: params.userId,
+    p_partner_id: params.partnerId,
+    partner_email: params.email.trim().toLowerCase(),
+    partner_full_name: params.fullName.trim(),
+    p_login_secret: params.loginSecret.trim(),
+  });
+
+  if (!linkErr) {
+    const { error: pwdErr } = await client.rpc("admin_reset_user_password", {
+      target_user_id: params.userId,
+      new_pass: params.loginSecret.trim(),
+    });
+    if (pwdErr && !/admin_reset_user_password|does not exist|42883/i.test(pwdErr.message || "")) {
+      throw new Error(pwdErr.message || "Could not set promoter login password");
+    }
+    return;
+  }
+
+  const msg = linkErr.message || "";
+  if (!/link_referral_partner_portal|does not exist|42883/i.test(msg)) {
+    await createReferralPartnerWithoutServiceRole(client, {
+      email: params.email,
+      loginSecret: params.loginSecret,
+      partnerId: params.partnerId,
+      fullName: params.fullName,
+    });
+    return;
+  }
+
+  throw new Error(
+    "Referral portal link is not set up on the database yet. Apply aws/scripts/61-rds-referral-partner-portal-sync.sql"
+  );
+}
+
 export async function approvePartnerApplication(
   client: SupabaseClient,
   app: PartnerApplicationRow,
@@ -85,31 +130,44 @@ export async function approvePartnerApplication(
 
   let code = generateReferralCode();
   let inserted: { id: string; referral_code: string } | null = null;
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const { data, error } = await client
-      .from("referral_partners")
-      .insert({
-        full_name: app.full_name,
-        email: app.email,
-        contact_number: app.contact_number || "",
-        city: String(payload.city || "").trim() || null,
-        college_name: String(payload.college_name || payload.colleges?.[0] || "").trim() || null,
-        referral_type: String(payload.referral_type || "partner"),
-        referral_code: code,
-        auth_user_id: app.auth_user_id,
-        active: true,
-      })
-      .select("id, referral_code")
-      .single();
-    if (!error && data) {
-      inserted = data;
-      break;
+
+  const { data: existingPartner } = await client
+    .from("referral_partners")
+    .select("id, referral_code")
+    .ilike("email", app.email.trim())
+    .maybeSingle();
+
+  if (existingPartner?.id && existingPartner.referral_code) {
+    inserted = {
+      id: String(existingPartner.id),
+      referral_code: String(existingPartner.referral_code),
+    };
+  } else {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const { data, error } = await client
+        .from("referral_partners")
+        .insert({
+          full_name: app.full_name,
+          email: app.email,
+          contact_number: app.contact_number || "",
+          city: String(payload.city || "").trim() || null,
+          college_name: String(payload.college_name || payload.colleges?.[0] || "").trim() || null,
+          referral_type: String(payload.referral_type || "partner"),
+          referral_code: code,
+          active: true,
+        })
+        .select("id, referral_code")
+        .single();
+      if (!error && data) {
+        inserted = data;
+        break;
+      }
+      if (error?.code === "23505" && /referral_code/i.test(error.message || "")) {
+        code = generateReferralCode();
+        continue;
+      }
+      throw error;
     }
-    if (error?.code === "23505" && /referral_code/i.test(error.message || "")) {
-      code = generateReferralCode();
-      continue;
-    }
-    throw error;
   }
   if (!inserted) throw new Error("Could not create referral partner record");
 
@@ -129,11 +187,12 @@ export async function approvePartnerApplication(
   }
 
   const loginSecret = generateReferralPartnerLoginCode();
-  await createReferralPartnerWithoutServiceRole(client, {
-    email: app.email,
-    loginSecret,
+  await linkReferralPartnerPortal(client, {
+    userId: app.auth_user_id,
     partnerId: inserted.id,
+    email: app.email,
     fullName: app.full_name,
+    loginSecret,
   });
 
   if (shouldCreateCouponOnApproval(app.partner_kind, payload)) {

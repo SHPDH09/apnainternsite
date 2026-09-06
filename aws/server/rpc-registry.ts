@@ -159,6 +159,11 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["target_user_id", "p_partner_id", "p_login_secret", "partner_full_name", "partner_email"],
     auth: "admin",
   },
+  link_referral_partner_portal: {
+    args: ["target_user_id", "p_partner_id", "partner_email", "partner_full_name", "p_login_secret"],
+    auth: "admin",
+  },
+  sync_referral_partner_portal_for_session: { args: [], auth: "auth" },
   detach_referral_partner_portal: { args: ["p_partner_id"], auth: "admin" },
   resolve_auth_user_id_by_email: { args: ["p_email"], auth: "admin" },
   student_mark_attendance: { args: [], auth: "auth" },

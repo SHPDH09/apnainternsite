@@ -7,6 +7,7 @@ import {
   buildWhatsAppShareUrl,
   getPublicRegisterUrlWithRef,
 } from "@/lib/referral";
+import { loadReferralPartnerSelf, type ReferralPartnerSelf } from "@/lib/referralPartnerPortal";
 import {
   fetchReferralPartnerStats,
   fetchReferralPartnerStudents,
@@ -229,19 +230,14 @@ export default function ReferralPartnerDashboard() {
         return;
       }
       setSessionUser(session.user);
-      const { data: me, error: meErr } = await supabase
-        .from("referral_partners")
-        .select("id, auth_user_id, referral_code, full_name, email, active, profile_image_url")
-        .eq("auth_user_id", session.user.id)
-        .maybeSingle();
+      const me = await loadReferralPartnerSelf(supabase, session.user.id, session.user.email);
       if (cancelled) return;
-      if (meErr || !me?.referral_code) {
-        console.error(meErr);
+      if (!me?.referral_code) {
         setPartner(null);
         setLoading(false);
         return;
       }
-      setPartner(me as PartnerSelf);
+      setPartner(me);
       const st = await fetchReferralPartnerStats(supabase);
       if (!cancelled) setStats(st);
       if (!cancelled) setLoading(false);
