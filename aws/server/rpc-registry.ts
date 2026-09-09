@@ -46,6 +46,7 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
 
   // ── Public catalogs / registration ────────────────────────────────────────
   list_public_universities: { args: [], auth: "public" },
+  list_public_company_partners: { args: [], auth: "public" },
   list_public_colleges: { args: ["p_university_id"], auth: "public" },
   get_registration_universities: { args: [], auth: "public" },
   get_registration_colleges: { args: ["p_university_id"], auth: "public" },

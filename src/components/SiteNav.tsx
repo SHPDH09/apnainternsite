@@ -29,6 +29,7 @@ const PRIMARY_LINKS: NavItem[] = [
   { to: "/#mous", label: "MOUs" },
   { to: "/verify", label: "Verify" },
   { to: "/contact", label: "Contact" },
+  { to: "/company/register", label: "Company Partner" },
 ];
 
 export const SiteNav = () => {
