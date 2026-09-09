@@ -62,6 +62,7 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   comms: "Communications",
   cybercafe: "Cyber Cafes",
   referrals: "Referrals",
+  companies: "Companies",
   "college-rosters": "College Rosters",
   "fees-management": "Fees Management",
   "course-management": "Course Management",

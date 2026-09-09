@@ -9,9 +9,9 @@ import {
   isAdminIntentionalLogout,
 } from '@/lib/adminAuthSession';
 import { isStudentPortalSessionActive } from '@/lib/studentAuthSession';
-import { fetchCybercafeExists, fetchRolesForUser } from '@/lib/portalAuth';
+import { fetchCompanyPartnerExists, fetchCybercafeExists, fetchRolesForUser } from '@/lib/portalAuth';
 
-export type UserRole = 'super_admin' | 'admin' | 'staff' | 'student' | 'cybercafe' | 'college_admin' | 'referral_partner';
+export type UserRole = 'super_admin' | 'admin' | 'staff' | 'student' | 'cybercafe' | 'college_admin' | 'referral_partner' | 'company_partner';
 
 const ROLES_CACHE_PREFIX = 'ezyintern_cached_roles_';
 
@@ -83,12 +83,18 @@ export const useAuth = () => {
 
         if (cancelled) return;
 
-        const cybercafe = await fetchCybercafeExists(supabase, session.user.id);
+        const [cybercafe, companyPartner] = await Promise.all([
+          fetchCybercafeExists(supabase, session.user.id),
+          fetchCompanyPartnerExists(supabase, session.user.id),
+        ]);
 
         if (cancelled) return;
 
         if (cybercafe && !rolesList.includes('cybercafe')) {
           rolesList.push('cybercafe');
+        }
+        if (companyPartner && !rolesList.includes('company_partner')) {
+          rolesList.push('company_partner');
         }
 
         if (rolesList.length === 0) {

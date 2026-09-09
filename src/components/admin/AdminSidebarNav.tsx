@@ -27,6 +27,7 @@ import {
   Users,
   Wrench,
   Award,
+  Building2,
 } from "lucide-react";
 import { TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -306,6 +307,7 @@ export function buildAdminNavGroups(
       { kind: "tab", value: "partner-applications", label: "Partner Applications", icon: ClipboardList },
       { kind: "tab", value: "cybercafe", label: "Cyber Cafes", icon: Store },
       { kind: "tab", value: "referrals", label: "Referrals", icon: Share2 },
+      { kind: "tab", value: "companies", label: "Companies", icon: Building2 },
       { kind: "tab", value: "college-rosters", label: "College Rosters", icon: FileSpreadsheet },
     ],
   });

@@ -1,18 +1,20 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import {
   COLLEGE_DASHBOARD_PATH,
+  COMPANY_DASHBOARD_PATH,
   REFERRAL_DASHBOARD_PATH,
 } from "@/lib/authRoutes";
 import {
   canAccessStudentDashboard,
   STUDENT_POST_UNPAID_LOGIN_PATH,
 } from "@/lib/studentPaymentAccess";
-import { fetchCybercafeExists, fetchRolesForUser } from "@/lib/portalAuth";
+import { fetchCompanyPartnerExists, fetchCybercafeExists, fetchRolesForUser } from "@/lib/portalAuth";
 import { isOwnerAdminEmail } from "@/lib/supabaseEnv";
 
 export type PortalLoginRouteContext = {
   isCollegeLoginRoute: boolean;
   isReferralLoginRoute: boolean;
+  isCompanyLoginRoute: boolean;
   isAdminLoginRoute: boolean;
 };
 
@@ -33,7 +35,11 @@ export async function finishPortalLoginAfterAuth(
   const isStaffMember = rolesList.includes("staff");
   const hasCollegeAdmin = rolesList.includes("college_admin");
   const hasReferralPartner = rolesList.includes("referral_partner");
-  const cybercafe = await fetchCybercafeExists(client, user.id);
+  const hasCompanyPartner = rolesList.includes("company_partner");
+  const [cybercafe, companyPartner] = await Promise.all([
+    fetchCybercafeExists(client, user.id),
+    fetchCompanyPartnerExists(client, user.id),
+  ]);
 
   const isAdminPortalAccount =
     rolesList.includes("super_admin") ||
@@ -61,6 +67,16 @@ export async function finishPortalLoginAfterAuth(
           "You do not have access to the referral promoter portal. Use the email that received your promoter invitation.",
       };
     }
+  } else if (ctx.isCompanyLoginRoute) {
+    if (!hasCompanyPartner && !companyPartner) {
+      await client.auth.signOut();
+      return {
+        ok: false,
+        signedOut: true,
+        message:
+          "You do not have access to the company portal. Register your company or wait for admin approval.",
+      };
+    }
   } else if (ctx.isAdminLoginRoute) {
     if (!isAdminPortalAccount) {
       if (isOwnerAdminEmail(user.email)) {
@@ -81,6 +97,8 @@ export async function finishPortalLoginAfterAuth(
       isStaffMember ||
       hasCollegeAdmin ||
       hasReferralPartner ||
+      hasCompanyPartner ||
+      companyPartner ||
       cybercafe;
     if (elevatedForStudentBlock) {
       await client.auth.signOut();
@@ -97,11 +115,13 @@ export async function finishPortalLoginAfterAuth(
   let needsPaymentPrompt = false;
   if (ctx.isCollegeLoginRoute) destination = COLLEGE_DASHBOARD_PATH;
   else if (ctx.isReferralLoginRoute) destination = REFERRAL_DASHBOARD_PATH;
+  else if (ctx.isCompanyLoginRoute) destination = COMPANY_DASHBOARD_PATH;
   else if (rolesList.includes("super_admin")) destination = "/admin";
   else if (isStaffMember) destination = "/staff-dashboard";
   else if (rolesList.includes("admin")) destination = "/admin";
   else if (hasCollegeAdmin) destination = COLLEGE_DASHBOARD_PATH;
   else if (hasReferralPartner) destination = REFERRAL_DASHBOARD_PATH;
+  else if (hasCompanyPartner || companyPartner) destination = COMPANY_DASHBOARD_PATH;
   else if (cybercafe) destination = "/cybercafe/dashboard";
   else {
     // Student path — one payment/directory check (coalesced; reused by StudentDashboardGate)
