@@ -8,10 +8,10 @@ import { execFileSync } from "node:child_process";
 const fn = process.env.LAMBDA_FUNCTION_NAME || "ezyintern-api-staging";
 const region = process.env.AWS_DEFAULT_REGION || "ap-south-1";
 
-const smtpHost = process.env.SMTP_HOST || "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com";
-const smtpUser = process.env.SMTP_USER || "inp-3u5sedrqj7kqwjazxwmph2th";
-const smtpPass = process.env.SMTP_PASS || "";
-const mailFromAddress = process.env.MAIL_FROM_ADDRESS || "info@apnaintern.in";
+const smtpHost = process.env.SMTP_HOST || "mail1.apnamail.in";
+const smtpUser = process.env.SMTP_USER || "info@apnamail.in";
+const smtpPass = (process.env.SMTP_PASS || "").replace(/[\s-]+/g, "");
+const mailFromAddress = process.env.MAIL_FROM_ADDRESS || "info@apnamail.in";
 
 if (!smtpPass) {
   console.error("SMTP_PASS missing — set GitHub secret SMTP_PASS or export locally");

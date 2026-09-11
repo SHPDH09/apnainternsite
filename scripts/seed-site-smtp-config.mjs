@@ -6,14 +6,11 @@
  */
 import pg from "pg";
 
-const host =
-  process.env.SMTP_HOST?.trim() ||
-  "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com";
+const host = process.env.SMTP_HOST?.trim() || "mail1.apnamail.in";
 const port = process.env.SMTP_PORT?.trim() || "587";
-const user =
-  process.env.SMTP_USER?.trim() || "inp-3u5sedrqj7kqwjazxwmph2th";
-const pass = process.env.SMTP_PASS?.trim() || "";
-const mailFrom = process.env.MAIL_FROM_ADDRESS?.trim() || "info@apnaintern.in";
+const user = process.env.SMTP_USER?.trim() || "info@apnamail.in";
+const pass = (process.env.SMTP_PASS?.trim() || "").replace(/[\s-]+/g, "");
+const mailFrom = process.env.MAIL_FROM_ADDRESS?.trim() || "info@apnamail.in";
 const databaseUrl = process.env.DATABASE_URL?.trim();
 
 if (!databaseUrl) {

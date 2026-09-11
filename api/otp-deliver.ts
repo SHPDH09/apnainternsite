@@ -4,8 +4,7 @@ import { randomUUID } from 'node:crypto';
 /** Self-contained OTP deliver — no api/lib or aws/* imports (Vercel safe). */
 type OtpPurpose = 'login' | 'password_reset' | 'security';
 
-const MAIL_MANAGER_SMTP_HOST = 'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
-const MAIL_MANAGER_SMTP_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+import { resolveSmtpFromEnv } from './lib/smtpResolve.js';
 const RDS_REST =
   process.env.RDS_REST_URL?.trim() ||
   'https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/v1/password_resets';
@@ -31,14 +30,6 @@ function resolvePurpose(raw: unknown): OtpPurpose {
   return 'password_reset';
 }
 
-function readSmtpPass(): string {
-  return (
-    process.env.SMTP_PASS ||
-    process.env.HOSTINGER_SMTP_PASS ||
-    process.env.MAIL_SMTP_PASS ||
-    ''
-  ).trim();
-}
 
 function buildOtpMail(otp: string, purpose: OtpPurpose): { subject: string; html: string } {
   const copy =
@@ -88,21 +79,21 @@ async function storeOtp(email: string, otp: string): Promise<void> {
 }
 
 async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<string> {
-  const pass = readSmtpPass();
+  const { user, pass, host, port, fromAddress } = resolveSmtpFromEnv();
   if (!pass) {
     throw new Error(
-      'SMTP credentials missing on server. Add SMTP_PASS in Vercel project env, or store Mail Manager SMTP in RDS site_smtp_config.'
+      'SMTP credentials missing on server. Add SMTP_USER and SMTP_PASS in Vercel env, or store SMTP in RDS site_smtp_config.'
     );
   }
   const nodemailer = (await import('nodemailer')).default;
   const transporter = nodemailer.createTransport({
-    host: (process.env.SMTP_HOST || MAIL_MANAGER_SMTP_HOST).trim(),
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: false,
-    auth: { user: (process.env.SMTP_USER || MAIL_MANAGER_SMTP_USER).trim(), pass },
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
     connectionTimeout: 12000,
+    greetingTimeout: 12000,
   });
-  const fromAddress = (process.env.MAIL_FROM_ADDRESS || 'info@apnaintern.in').trim();
   const mail = buildOtpMail(otp, purpose);
   const info = await transporter.sendMail({
     from: { name: 'Apna Intern', address: fromAddress },

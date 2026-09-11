@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import { assertStudentRegistrationAvailableServer } from './lib/registrationAvailability.js';
 import { createStudentAuthWithChosenPassword } from './lib/registrationPassword.js';
-import { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } from './lib/smtpTransport.js';
+import { createSmtpTransporter, resolveSmtpCredentials, sesMailHeaders } from './lib/smtpTransport.js';
 import { getServerDb } from './lib/getServerDb.js';
 import {
   bumpRegistrationId,
@@ -186,12 +186,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // 8. Send Email (Directly using nodemailer to avoid brittle internal fetch)
     try {
-      const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
-      if (!SMTP_USER || !SMTP_PASS) {
+      const smtpCreds = await resolveSmtpCredentials();
+      if (!smtpCreds.user || !smtpCreds.pass) {
         throw new Error("SMTP credentials missing");
       }
 
-      const transporter = await createSmtpTransporter();
+      const transporter = await createSmtpTransporter(smtpCreds);
       const mailOptions = {
         ...sesMailHeaders(),
         to: normalizedEmail,

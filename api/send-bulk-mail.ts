@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   createSmtpTransporter,
-  getSmtpCredentials,
+  resolveSmtpCredentials,
   sesMailHeaders,
 } from './lib/smtpTransport.js';
 import { formatSmtpError, isSesIdentityNotVerifiedError } from './lib/smtpErrors.js';
@@ -98,12 +98,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
-    if (!SMTP_USER || !SMTP_PASS) {
-      return res.status(500).json({ success: false, message: 'SMTP Credentials missing' });
+    const smtpCreds = await resolveSmtpCredentials();
+    if (!smtpCreds.user || !smtpCreds.pass) {
+      return res.status(500).json({ success: false, message: 'SMTP credentials missing' });
     }
 
-    const transporter = await createSmtpTransporter();
+    const transporter = await createSmtpTransporter(smtpCreds);
     const html = bulkAnnouncementHtml(message);
     const { from, sender } = sesMailHeaders();
     let sent = 0;

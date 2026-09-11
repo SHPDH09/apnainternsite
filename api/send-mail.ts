@@ -123,13 +123,15 @@ function canUseSesApi(): boolean {
   if (process.env.USE_SES_API === 'false') return false;
   if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
   const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').toLowerCase();
-  if (host.includes('mail-manager-smtp') || host.includes('hostinger')) return false;
+  if (host.includes('mail-manager-smtp') || host.includes('hostinger') || host.includes('apnamail')) return false;
   if (host && !host.includes('amazonaws.com')) return false;
   return Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.USE_SES_API === 'true' || process.env.AWS_EXECUTION_ENV);
 }
 
-const MAIL_MANAGER_SMTP_HOST = 'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
-const MAIL_MANAGER_SMTP_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+import {
+  resolveMailFromAddress as resolveMailFromAddressShared,
+  resolveSmtpFromEnv,
+} from './lib/smtpResolve.js';
 const RDS_REST =
   process.env.RDS_REST_URL?.trim() ||
   'https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/v1/password_resets';
@@ -157,24 +159,6 @@ async function storeOtpInRds(normalizedEmail: string, code: string): Promise<voi
   }
 }
 
-function isStaleSmtpConfig(host: string, user: string): boolean {
-  const h = host.toLowerCase();
-  const u = user.toLowerCase();
-  return (
-    h.includes('hostinger') ||
-    h.includes('email-smtp.') ||
-    u === 'info@apnaintern.in' ||
-    (u.includes('@apnaintern.in') && !u.startsWith('inp-'))
-  );
-}
-
-function resolveSmtpHost(): string {
-  const raw = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || MAIL_MANAGER_SMTP_HOST).trim();
-  const user = (process.env.SMTP_USER || '').trim();
-  if (isStaleSmtpConfig(raw, user)) return MAIL_MANAGER_SMTP_HOST;
-  return raw;
-}
-
 function resolveSmtpPort(): number {
   const raw = process.env.SMTP_PORT || '587';
   const n = parseInt(raw, 10);
@@ -182,11 +166,7 @@ function resolveSmtpPort(): number {
 }
 
 function resolveMailFromAddress(): string {
-  const explicit = (process.env.MAIL_FROM || process.env.SMTP_FROM || '').trim();
-  const angle = explicit.match(/<([^>]+)>/);
-  if (angle) return angle[1].trim();
-  if (explicit.includes('@')) return explicit;
-  return process.env.MAIL_FROM_ADDRESS?.trim() || process.env.SES_FROM_ADDRESS?.trim() || 'info@apnaintern.in';
+  return resolveMailFromAddressShared();
 }
 
 function resolveMailFrom(label = 'Apna Intern'): MailFrom {
@@ -200,16 +180,6 @@ function resolveMailFrom(label = 'Apna Intern'): MailFrom {
 function sesMailHeaders(label = 'Apna Intern'): { from: MailFrom; sender: string } {
   const from = resolveMailFrom(label);
   return { from, sender: from.address };
-}
-
-function readSmtpPassFromEnv(): string {
-  return (
-    process.env.SMTP_PASS ||
-    process.env.HOSTINGER_SMTP_PASS ||
-    process.env.MAIL_SMTP_PASS ||
-    process.env.EMAIL_SMTP_PASS ||
-    ''
-  ).trim();
 }
 
 type SmtpCreds = { user: string; pass: string; host: string; port: number; fromAddress: string };
@@ -247,7 +217,7 @@ async function loadSmtpFromDatabase(): Promise<SmtpCreds | null> {
       pass: row.smtp_pass.trim(),
       host: row.smtp_host.trim(),
       port: Number(row.smtp_port) || 587,
-      fromAddress: row.mail_from_address.trim() || 'info@apnaintern.in',
+      fromAddress: row.mail_from_address.trim() || resolveMailFromAddress(),
     };
     return cachedDbSmtp;
   } catch (e) {
@@ -257,23 +227,13 @@ async function loadSmtpFromDatabase(): Promise<SmtpCreds | null> {
 }
 
 async function resolveSmtpCredentials(): Promise<SmtpCreds> {
-  let user = (process.env.SMTP_USER || '').trim();
-  let pass = readSmtpPassFromEnv();
-  let host = resolveSmtpHost();
-  let port = resolveSmtpPort();
-  let fromAddress = resolveMailFromAddress();
+  const envCreds = resolveSmtpFromEnv();
+  if (envCreds.pass) return envCreds;
 
-  if (!pass) {
-    const db = await loadSmtpFromDatabase();
-    if (db) return db;
-  }
+  const db = await loadSmtpFromDatabase();
+  if (db) return db;
 
-  if (!user || isStaleSmtpConfig(host, user)) {
-    user = MAIL_MANAGER_SMTP_USER;
-    host = MAIL_MANAGER_SMTP_HOST;
-  }
-
-  return { user, pass, host, port, fromAddress };
+  return envCreds;
 }
 
 async function createSmtpTransporter(creds?: SmtpCreds) {
@@ -510,7 +470,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           email: recipient,
           channel,
           sesSandboxLimited,
-          message: `Verification code sent to ${recipient}. Check inbox and spam (sender: info@apnaintern.in).${deliveryNote}`,
+          message: `Verification code sent to ${recipient}. Check inbox and spam (sender: ${resolveMailFromAddress()}).${deliveryNote}`,
           messageId,
         });
       } catch (e) {
