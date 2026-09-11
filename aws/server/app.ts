@@ -19,6 +19,7 @@ import rpcByName from "../../api/rpc-call";
 import dataSelect from "../../api/data-select";
 import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
 import ensureBlogCms from "../../api/ensure-blog-cms";
+import publicBlogPosts from "../../api/public-blog-posts";
 import ensureDashboardServiceKeys from "../../api/ensure-dashboard-service-keys";
 import ensurePartnerApplications from "../../api/ensure-partner-applications";
 import partnerApplicationSubmit from "../../api/partner-application-submit";
@@ -202,6 +203,7 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/admin-register", handler: adminRegister },
     { method: "post", path: "/api/bootstrap-grant-admin", handler: bootstrapGrantAdmin },
     { method: "post", path: "/api/ensure-blog-cms", handler: ensureBlogCms },
+    { method: "get", path: "/api/public-blog-posts", handler: publicBlogPosts },
     { method: "post", path: "/api/ensure-dashboard-service-keys", handler: ensureDashboardServiceKeys },
     { method: "post", path: "/api/ensure-partner-applications", handler: ensurePartnerApplications },
     { method: "post", path: "/api/partner-application-submit", handler: partnerApplicationSubmit },
