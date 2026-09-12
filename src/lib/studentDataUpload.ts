@@ -5,6 +5,22 @@ import { siteApiUrl } from "@/lib/siteApi";
 
 export type StudentDataUploadMode = "paid" | "unpaid";
 
+/** Columns filled in CSV/Excel — university/college/domain/session/course/branch are set in the UI. */
+export const STUDENT_DATA_UPLOAD_FILE_HEADERS = [
+  "Full Name",
+  "Gender",
+  "Parent Name",
+  "Contact Number",
+  "Email Address",
+  "Subject",
+  "Semester",
+  "Registration Number",
+  "Roll Number",
+  "Mode (Online/Offline)",
+  "Password",
+] as const;
+
+/** @deprecated Use STUDENT_DATA_UPLOAD_FILE_HEADERS — kept for legacy sheet exports. */
 export const STUDENT_DATA_UPLOAD_REQUIRED_HEADERS = [
   "Full Name",
   "Gender",
@@ -24,6 +40,57 @@ export const STUDENT_DATA_UPLOAD_REQUIRED_HEADERS = [
   "Mode (Online/Offline)",
   "Password",
 ] as const;
+
+export type StudentDataUploadContext = {
+  university: string;
+  college: string;
+  internshipDomain: string;
+  session: string;
+  course: string;
+  branch: string;
+};
+
+export function emptyStudentDataUploadContext(): StudentDataUploadContext {
+  return {
+    university: "",
+    college: "",
+    internshipDomain: "",
+    session: "",
+    course: "",
+    branch: "",
+  };
+}
+
+export function isStudentDataUploadContextComplete(
+  context: StudentDataUploadContext
+): boolean {
+  return Boolean(
+    context.university.trim() &&
+      context.college.trim() &&
+      context.internshipDomain.trim() &&
+      context.session.trim() &&
+      context.course.trim() &&
+      (context.branch.trim() || context.course.trim())
+  );
+}
+
+/** Apply admin-selected batch fields to every parsed file row. */
+export function applyStudentDataUploadContext(
+  rows: StudentDataUploadRow[],
+  context: StudentDataUploadContext
+): StudentDataUploadRow[] {
+  const branch = context.branch.trim() || "General";
+  return rows.map((row) => ({
+    ...row,
+    university: context.university.trim(),
+    college: context.college.trim(),
+    internshipDomain: context.internshipDomain.trim(),
+    session: context.session.trim(),
+    degree: context.course.trim(),
+    department: branch,
+    subject: row.subject.trim() || branch,
+  }));
+}
 
 export type StudentDataUploadRow = {
   rowNumber: number;
@@ -258,7 +325,7 @@ export function parseStudentDataUploadSheetRows(rawRows: unknown[][]): StudentDa
   );
   if (headerIndex < 0) {
     throw new Error(
-      `Could not find a header row. Expected columns: ${STUDENT_DATA_UPLOAD_REQUIRED_HEADERS.join(", ")}.`
+      `Could not find a header row. Expected columns such as: ${STUDENT_DATA_UPLOAD_FILE_HEADERS.join(", ")}.`
     );
   }
 
@@ -266,9 +333,14 @@ export function parseStudentDataUploadSheetRows(rawRows: unknown[][]): StudentDa
   const mapped = new Set(Object.values(columnMap));
   for (const required of [
     "fullName",
+    "gender",
+    "parentName",
     "contactNumber",
     "email",
+    "semester",
     "registrationNumber",
+    "rollNumber",
+    "mode",
     "password",
   ] as RowField[]) {
     if (!mapped.has(required)) {
@@ -318,24 +390,39 @@ function validateSingleRow(row: StudentDataUploadRow): string | null {
   if (phone.length < 10) return "Contact Number must have at least 10 digits.";
   const email = row.email.trim().toLowerCase();
   if (!email.includes("@")) return "Email Address is required.";
-  if (!row.university.trim()) return "University is required.";
-  if (!row.college.trim()) return "College is required.";
-  if (!row.degree.trim()) return "Degree (UG/PG) is required.";
-  if (!row.department.trim()) return "Department is required.";
-  if (!row.subject.trim()) return "Subject is required.";
-  if (!row.session.trim()) return "Session is required.";
   if (!row.semester.trim()) return "Semester is required.";
   if (!row.registrationNumber.trim()) return "Registration Number is required.";
   if (!row.rollNumber.trim()) return "Roll Number is required.";
-  if (!row.internshipDomain.trim()) return "Internship Domain is required.";
   if (!row.mode.trim()) return "Mode (Online/Offline) is required.";
   if (row.password.trim().length < 5) return "Password must be at least 5 characters.";
   return null;
 }
 
+function validateRowWithContext(
+  row: StudentDataUploadRow,
+  context: StudentDataUploadContext
+): string | null {
+  const base = validateSingleRow(row);
+  if (base) return base;
+  if (!context.university.trim()) return "Select university before import.";
+  if (!context.college.trim()) return "Select college before import.";
+  if (!context.internshipDomain.trim()) return "Select internship domain before import.";
+  if (!context.session.trim()) return "Select session before import.";
+  if (!context.course.trim()) return "Select course before import.";
+  if (!context.branch.trim() && !context.course.trim()) return "Select branch before import.";
+  if (!row.university.trim()) return "University is missing after batch apply.";
+  if (!row.college.trim()) return "College is missing after batch apply.";
+  if (!row.degree.trim()) return "Course is missing after batch apply.";
+  if (!row.department.trim()) return "Branch is missing after batch apply.";
+  if (!row.internshipDomain.trim()) return "Internship domain is missing after batch apply.";
+  if (!row.session.trim()) return "Session is missing after batch apply.";
+  return null;
+}
+
 /** Mandatory-field validation only. Contact/email duplicates are allowed. */
 export function validateStudentDataUploadRows(
-  rows: StudentDataUploadRow[]
+  rows: StudentDataUploadRow[],
+  context?: StudentDataUploadContext
 ): StudentDataUploadValidationError[] {
   const errors: StudentDataUploadValidationError[] = [];
   if (rows.length === 0) {
@@ -343,8 +430,18 @@ export function validateStudentDataUploadRows(
     return errors;
   }
 
+  if (context && !isStudentDataUploadContextComplete(context)) {
+    errors.push({
+      rowNumber: 0,
+      message: "Complete university, college, domain, session, course, and branch before import.",
+    });
+    return errors;
+  }
+
   for (const row of rows) {
-    const message = validateSingleRow(row);
+    const message = context
+      ? validateRowWithContext(row, context)
+      : validateSingleRow(row);
     if (message) errors.push({ rowNumber: row.rowNumber, message });
   }
   return errors;
@@ -1223,30 +1320,26 @@ export function downloadFailedStudentDataUploadRows(
   URL.revokeObjectURL(link.href);
 }
 
+function sampleFileRow(): string[] {
+  return [
+    "Priya Sharma",
+    "Female",
+    "Ramesh Sharma",
+    "9876543210",
+    "priya.sharma@example.com",
+    "History",
+    "Semester 4",
+    "REG2024001",
+    "ROLL101",
+    "Online",
+    "pass123",
+  ];
+}
+
 export function downloadStudentDataUploadCsvTemplate(): void {
   const csv = Papa.unparse({
-    fields: [...STUDENT_DATA_UPLOAD_REQUIRED_HEADERS],
-    data: [
-      [
-        "Priya Sharma",
-        "Female",
-        "Ramesh Sharma",
-        "9876543210",
-        "priya.sharma@example.com",
-        "Example University",
-        "Example College",
-        "UG",
-        "Arts",
-        "History",
-        "2024-28",
-        "4",
-        "REG2024001",
-        "ROLL101",
-        "Digital Marketing",
-        "Online",
-        "pass123",
-      ],
-    ],
+    fields: [...STUDENT_DATA_UPLOAD_FILE_HEADERS],
+    data: [sampleFileRow()],
   });
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
@@ -1258,26 +1351,8 @@ export function downloadStudentDataUploadCsvTemplate(): void {
 
 export function downloadStudentDataUploadXlsxTemplate(): void {
   const sheet = XLSX.utils.aoa_to_sheet([
-    [...STUDENT_DATA_UPLOAD_REQUIRED_HEADERS],
-    [
-      "Priya Sharma",
-      "Female",
-      "Ramesh Sharma",
-      "9876543210",
-      "priya.sharma@example.com",
-      "Example University",
-      "Example College",
-      "UG",
-      "Arts",
-      "History",
-      "2024-28",
-      "4",
-      "REG2024001",
-      "ROLL101",
-      "Digital Marketing",
-      "Online",
-      "pass123",
-    ],
+    [...STUDENT_DATA_UPLOAD_FILE_HEADERS],
+    sampleFileRow(),
   ]);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, "Students");
