@@ -2,9 +2,10 @@
  * Shared SMTP env resolution (no pg/aws imports — safe for all Vercel mail routes).
  */
 
-export const DEFAULT_MAIL_FROM_ADDRESS = "info@apnamail.in";
-export const DEFAULT_SMTP_HOST = "mail1.apnamail.in";
-export const DEFAULT_SMTP_USER = "info@apnamail.in";
+export const DEFAULT_MAIL_FROM_ADDRESS = "info@apnaintern.in";
+export const DEFAULT_SMTP_HOST =
+  "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com";
+export const DEFAULT_SMTP_USER = "inp-3u5sedrqj7kqwjazxwmph2th";
 
 const LEGACY_MAIL_MANAGER_HOST =
   "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com";

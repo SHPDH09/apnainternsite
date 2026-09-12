@@ -2,9 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomUUID } from 'node:crypto';
 
 /** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
-const DEFAULT_MAIL_FROM = 'info@apnamail.in';
-const DEFAULT_SMTP_HOST = 'mail1.apnamail.in';
-const DEFAULT_SMTP_USER = 'info@apnamail.in';
+const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
+const DEFAULT_SMTP_HOST = 'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
+const DEFAULT_SMTP_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
 const LEGACY_MAIL_MANAGER_HOST =
   'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
 const LEGACY_MAIL_MANAGER_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';

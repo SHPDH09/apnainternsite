@@ -4,12 +4,10 @@ import { randomUUID } from 'node:crypto';
 /** Self-contained OTP deliver — no api/lib or aws/* imports (Vercel safe). */
 type OtpPurpose = 'login' | 'password_reset' | 'security';
 
-const DEFAULT_MAIL_FROM = 'info@apnamail.in';
-const DEFAULT_SMTP_HOST = 'mail1.apnamail.in';
-const DEFAULT_SMTP_USER = 'info@apnamail.in';
-const LEGACY_MAIL_MANAGER_HOST =
+const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
+const MAIL_MANAGER_SMTP_HOST =
   'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
-const LEGACY_MAIL_MANAGER_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+const MAIL_MANAGER_SMTP_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
 
 const RDS_REST =
   process.env.RDS_REST_URL?.trim() ||
@@ -40,27 +38,8 @@ function resolveMailFromAddress(): string {
   return (
     process.env.MAIL_FROM_ADDRESS?.trim() ||
     process.env.SES_FROM_ADDRESS?.trim() ||
-    process.env.SMTP_USER?.trim() ||
     DEFAULT_MAIL_FROM
   );
-}
-
-function defaultHostForUser(user: string): string {
-  const u = user.toLowerCase();
-  if (u.endsWith('@apnamail.in')) return DEFAULT_SMTP_HOST;
-  if (u.endsWith('@gmail.com') || u.includes('gmail')) return 'smtp.gmail.com';
-  return DEFAULT_SMTP_HOST;
-}
-
-function shouldUseLegacyMailManager(user: string, pass: string, host: string): boolean {
-  if (pass.trim()) return false;
-  if (!user.trim()) return true;
-  const h = host.toLowerCase();
-  const u = user.toLowerCase();
-  if (u === 'info@apnaintern.in') return true;
-  if (u.includes('@apnaintern.in') && !u.startsWith('inp-')) return true;
-  if (h.includes('email-smtp.')) return true;
-  return false;
 }
 
 function resolveSmtpFromEnv(): {
@@ -70,20 +49,24 @@ function resolveSmtpFromEnv(): {
   port: number;
   fromAddress: string;
 } {
-  let user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim();
   const pass = readSmtpPassFromEnv();
-  const explicitHost = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').trim();
-  let host = explicitHost || defaultHostForUser(user);
+  const host = (process.env.SMTP_HOST || MAIL_MANAGER_SMTP_HOST).trim();
+  const user = (process.env.SMTP_USER || MAIL_MANAGER_SMTP_USER).trim();
   const portRaw = process.env.SMTP_PORT || '587';
   const port = Number.parseInt(portRaw, 10);
-  const fromAddress = resolveMailFromAddress();
+  return {
+    user,
+    pass,
+    host,
+    port: Number.isFinite(port) ? port : 587,
+    fromAddress: resolveMailFromAddress(),
+  };
+}
 
-  if (shouldUseLegacyMailManager(user, pass, host)) {
-    user = LEGACY_MAIL_MANAGER_USER;
-    host = LEGACY_MAIL_MANAGER_HOST;
-  }
-
-  return { user, pass, host, port: Number.isFinite(port) ? port : 587, fromAddress };
+function canUseSesApi(): boolean {
+  return Boolean(
+    process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
+  );
 }
 
 function parseBody(req: VercelRequest): Record<string, unknown> {
@@ -106,7 +89,7 @@ function resolvePurpose(raw: unknown): OtpPurpose {
   return 'password_reset';
 }
 
-function buildOtpMail(otp: string, purpose: OtpPurpose): { subject: string; html: string } {
+function buildOtpMail(otp: string, purpose: OtpPurpose): { subject: string; html: string; text: string } {
   const copy =
     purpose === 'login'
       ? {
@@ -127,7 +110,8 @@ function buildOtpMail(otp: string, purpose: OtpPurpose): { subject: string; html
           };
   const year = new Date().getFullYear();
   const html = `<!DOCTYPE html><html lang="en"><body style="margin:0;padding:0;background:#f1f5f9;font-family:system-ui,sans-serif;"><table role="presentation" width="100%" style="background:#f1f5f9;padding:32px 16px;"><tr><td align="center"><table role="presentation" width="100%" style="max-width:560px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;"><tr><td style="padding:28px 32px 8px;text-align:center;"><p style="margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;">Apna Intern</p><h1 style="margin:0;font-size:22px;color:#0f172a;">${copy.headline}</h1></td></tr><tr><td style="padding:8px 32px 0;text-align:center;"><p style="margin:0;font-size:15px;color:#475569;">${copy.lead}</p></td></tr><tr><td style="padding:28px 32px;text-align:center;"><p style="margin:0;font-size:36px;font-weight:700;letter-spacing:.35em;color:#1e40af;font-family:monospace;">${otp}</p><p style="margin:20px 0 0;font-size:13px;color:#64748b;">Valid for 15 minutes. Check spam if you do not see this email.</p></td></tr><tr><td style="padding:20px 32px;background:#f8fafc;text-align:center;border-top:1px solid #e2e8f0;"><p style="margin:0;font-size:11px;color:#94a3b8;">© ${year} Apna Intern</p></td></tr></table></td></tr></table></body></html>`;
-  return { subject: copy.subject, html };
+  const text = `Apna Intern — ${copy.headline}\n\n${copy.lead}\n\nYour verification code: ${otp}\n\nValid for 15 minutes.\n`;
+  return { subject: copy.subject, html, text };
 }
 
 async function storeOtp(email: string, otp: string): Promise<void> {
@@ -158,12 +142,45 @@ function isSmtpAuthError(e: unknown): boolean {
   return raw.includes('535') || raw.includes('authentication credentials invalid') || raw.includes('invalid login');
 }
 
-async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<string> {
+function isSesIdentityNotVerifiedError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return raw.includes('not verified') || raw.includes('messagerejected');
+}
+
+async function sendOtpViaSesApi(
+  to: string,
+  mail: { subject: string; html: string; text: string }
+): Promise<string> {
+  const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
+  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+  const client = new SESv2Client({ region });
+  const fromAddress = resolveMailFromAddress();
+  const result = await client.send(
+    new SendEmailCommand({
+      FromEmailAddress: `Apna Intern <${fromAddress}>`,
+      Destination: { ToAddresses: [to] },
+      ReplyToAddresses: ['info@apnamail.in'],
+      Content: {
+        Simple: {
+          Subject: { Data: mail.subject, Charset: 'UTF-8' },
+          Body: {
+            Html: { Data: mail.html, Charset: 'UTF-8' },
+            Text: { Data: mail.text, Charset: 'UTF-8' },
+          },
+        },
+      },
+    })
+  );
+  return String(result.MessageId || 'ses');
+}
+
+async function sendOtpViaSmtp(
+  to: string,
+  mail: { subject: string; html: string }
+): Promise<string> {
   const { user, pass, host, port, fromAddress } = resolveSmtpFromEnv();
   if (!pass) {
-    throw new Error(
-      'SMTP credentials missing on server. Add SMTP_USER and SMTP_PASS in Vercel env.'
-    );
+    throw new Error('SMTP credentials missing on server.');
   }
   const nodemailer = (await import('nodemailer')).default;
   const transporter = nodemailer.createTransport({
@@ -174,15 +191,32 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
     connectionTimeout: 12000,
     greetingTimeout: 12000,
   });
-  const mail = buildOtpMail(otp, purpose);
   const info = await transporter.sendMail({
     from: { name: 'Apna Intern', address: fromAddress },
     sender: fromAddress,
-    to: email,
+    replyTo: 'info@apnamail.in',
+    to,
     subject: mail.subject,
     html: mail.html,
+    text: mail.text,
   });
   return String(info.messageId || '');
+}
+
+async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<string> {
+  const mail = buildOtpMail(otp, purpose);
+
+  if (canUseSesApi()) {
+    try {
+      return await sendOtpViaSesApi(email, mail);
+    } catch (sesErr) {
+      if (!isSesIdentityNotVerifiedError(sesErr) && !isSmtpAuthError(sesErr)) {
+        console.warn('SES OTP send failed, trying SMTP:', sesErr instanceof Error ? sesErr.message : sesErr);
+      }
+    }
+  }
+
+  return sendOtpViaSmtp(email, mail);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
