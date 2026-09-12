@@ -128,6 +128,7 @@ import {
 } from "@/lib/studentTrack";
 import { PartnerApplicationsPanel } from "@/components/admin/PartnerApplicationsPanel";
 import { ReferralsPanel } from "@/components/admin/ReferralsPanel";
+import { CompaniesPanel } from "@/components/admin/CompaniesPanel";
 import { CollegeRostersPanel } from "@/components/admin/CollegeRostersPanel";
 import { FeesManagementPanel } from "@/components/admin/FeesManagementPanel";
 import { CourseManagementPanel } from "@/components/admin/CourseManagementPanel";
@@ -4745,6 +4746,10 @@ Apna Intern Team`;
 
             <TabsContent value="referrals">
               <ReferralsPanel />
+            </TabsContent>
+
+            <TabsContent value="companies">
+              <CompaniesPanel />
             </TabsContent>
 
             <TabsContent value="college-rosters">
