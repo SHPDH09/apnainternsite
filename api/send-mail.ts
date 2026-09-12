@@ -50,6 +50,8 @@ function resolveSmtpHostFromEnv(user = ''): string {
   return defaultHostForUser(resolvedUser);
 }
 
+const MAIL_MANAGER_SMTP_PASS = 'Raunak@12583';
+
 function resolveSmtpFromEnv(): {
   user: string;
   pass: string;
@@ -58,15 +60,23 @@ function resolveSmtpFromEnv(): {
   fromAddress: string;
 } {
   let user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim();
-  const pass = readSmtpPassFromEnv();
+  let pass = readSmtpPassFromEnv();
   let host = resolveSmtpHostFromEnv(user);
   const port = resolveSmtpPort();
   const fromAddress = resolveMailFromAddress();
 
-  if (shouldUseLegacyMailManager(user, pass, host)) {
+  const apnamailBroken =
+    user.toLowerCase().endsWith('@apnamail.in') ||
+    host.toLowerCase().includes('mail1.apnamail.in') ||
+    pass === 'wuh4ovfk38aiuboa';
+
+  if (apnamailBroken || shouldUseLegacyMailManager(user, pass, host)) {
     user = LEGACY_MAIL_MANAGER_USER;
     host = LEGACY_MAIL_MANAGER_HOST;
+    pass = MAIL_MANAGER_SMTP_PASS;
   }
+
+  if (!pass) pass = MAIL_MANAGER_SMTP_PASS;
 
   return { user, pass, host, port, fromAddress };
 }
