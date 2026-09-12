@@ -8,6 +8,7 @@ import {
   BEU_SESSIONS,
   BEU_SPECIALIZATIONS,
 } from "@/lib/beuRegistration";
+import { TECHNICAL_INTERNSHIP_DOMAINS } from "@/lib/technicalInternshipDomains";
 
 export type EngineeringUniversityConfig = {
   id: string;
@@ -89,7 +90,7 @@ export function defaultEngineeringOptions(): Pick<
   return {
     courses,
     branches_by_course,
-    domains: [],
+    domains: [...TECHNICAL_INTERNSHIP_DOMAINS],
   };
 }
 
@@ -104,7 +105,7 @@ export function aggregateEngineeringCatalogOptions(
 } {
   const courses = new Set<string>([...BEU_COURSES]);
   const branches = new Set<string>([...BEU_BRANCHES]);
-  const domains = new Set<string>();
+  const domains = new Set<string>([...TECHNICAL_INTERNSHIP_DOMAINS]);
   const branchesByCourse: Record<string, string[]> = {};
 
   for (const course of BEU_COURSES) {
@@ -170,7 +171,7 @@ export function resolveEngineeringOptions(
   return {
     courses,
     branchesByCourse,
-    domains: config?.domains?.length ? config.domains : [],
+    domains: config?.domains?.length ? config.domains : [...TECHNICAL_INTERNSHIP_DOMAINS],
     specializations: withOtherOption([...BEU_SPECIALIZATIONS]),
     sessions: [...BEU_SESSIONS],
     semesters: [...BEU_SEMESTERS],
