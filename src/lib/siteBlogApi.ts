@@ -280,10 +280,43 @@ async function ensureUniqueSlug(
   return `${slug}-${Date.now()}`;
 }
 
+async function fetchPublicBlogPostsViaApi(
+  opts?: { featuredOnly?: boolean; limit?: number; postType?: BlogPostType; slug?: string }
+): Promise<SiteBlogPost[] | null> {
+  if (typeof fetch === "undefined") return null;
+  const origin =
+    typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+  if (!origin) return null;
+
+  const params = new URLSearchParams();
+  if (opts?.featuredOnly) params.set("featured", "true");
+  if (opts?.postType) params.set("postType", opts.postType);
+  if (opts?.limit && opts.limit > 0) params.set("limit", String(opts.limit));
+  if (opts?.slug) params.set("slug", opts.slug);
+  const qs = params.toString();
+
+  try {
+    const res = await fetch(`${origin}/api/public-blog-posts${qs ? `?${qs}` : ""}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { ok?: boolean; posts?: SiteBlogPost[] };
+    if (!json.ok || !Array.isArray(json.posts)) return null;
+    return json.posts.map(mapCoverUrl);
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchPublicBlogPosts(
   client: SupabaseClient,
   opts?: { featuredOnly?: boolean; limit?: number; postType?: BlogPostType }
 ): Promise<SiteBlogPost[]> {
+  const viaApi = await fetchPublicBlogPostsViaApi(opts);
+  if (viaApi !== null) {
+    return sortBlogPosts(viaApi.filter(isBlogPostPublic));
+  }
+
   try {
     await ensureSiteBlogStorage(client);
   } catch {
@@ -346,6 +379,12 @@ export async function fetchPublicBlogPostBySlug(
 ): Promise<SiteBlogPost | null> {
   const normalized = slug.trim().toLowerCase();
   if (!normalized) return null;
+
+  const viaApi = await fetchPublicBlogPostsViaApi({ slug: normalized });
+  if (viaApi !== null) {
+    const hit = viaApi.find((p) => p.slug.toLowerCase() === normalized);
+    return hit && isBlogPostPublic(hit) ? hit : null;
+  }
 
   try {
     await ensureSiteBlogStorage(client);

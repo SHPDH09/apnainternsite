@@ -107,7 +107,37 @@ function isStorageReadUnavailable(error: unknown): boolean {
   );
 }
 
+async function fetchJsonText(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { cache: "no-store", redirect: "follow" });
+    if (res.ok) return await res.text();
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location")?.trim();
+      if (location) {
+        const follow = await fetch(location, { cache: "no-store" });
+        if (follow.ok) return await follow.text();
+      }
+    }
+  } catch {
+    /* try next candidate */
+  }
+  return null;
+}
+
 async function readEnvelope(client: SupabaseClient): Promise<FallbackBlogPost[]> {
+  if (typeof window !== "undefined") {
+    const origin = window.location.origin.replace(/\/$/, "");
+    try {
+      const res = await fetch(`${origin}/api/public-blog-posts`, { cache: "no-store" });
+      if (res.ok) {
+        const json = (await res.json()) as { ok?: boolean; posts?: FallbackBlogPost[] };
+        if (json.ok && Array.isArray(json.posts)) return json.posts.map((row) => normalizePost(row));
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
   const candidates: string[] = [];
   if (typeof window !== "undefined") {
     const origin = window.location.origin.replace(/\/$/, "");
@@ -116,17 +146,17 @@ async function readEnvelope(client: SupabaseClient): Promise<FallbackBlogPost[]>
   const viaHelper = publicStorageObjectUrl("logos", FALLBACK_OBJECT_PATH);
   if (viaHelper && !candidates.includes(viaHelper)) candidates.push(viaHelper);
 
+  const s3Bucket =
+    import.meta.env.VITE_S3_BUCKET_LOGOS || "apnaintern-308946946129-staging-logos";
+  const s3Region = import.meta.env.VITE_AWS_REGION || "ap-south-1";
+  const directS3 = `https://${s3Bucket}.s3.${s3Region}.amazonaws.com/${FALLBACK_OBJECT_PATH}`;
+  if (!candidates.includes(directS3)) candidates.push(directS3);
+
   for (const publicUrl of candidates) {
-    try {
-      const res = await fetch(publicUrl, { cache: "no-store" });
-      if (res.ok) return parseEnvelope(await res.text());
-      if (res.status !== 404) {
-        const body = await res.text().catch(() => "");
-        if (/not implemented|not_found/i.test(body)) continue;
-        if (res.status === 403 || res.status === 401) continue;
-      }
-    } catch (err) {
-      if (!isStorageReadUnavailable(err)) continue;
+    const text = await fetchJsonText(publicUrl);
+    if (text) {
+      const rows = parseEnvelope(text);
+      if (rows.length) return rows;
     }
   }
 
