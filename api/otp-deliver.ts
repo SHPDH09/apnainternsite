@@ -237,16 +237,8 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
   const mail = buildOtpMail(otp, purpose);
   const errors: string[] = [];
 
-  if (canUseSesApi()) {
-    try {
-      return await sendOtpViaSesApi(email, mail);
-    } catch (sesErr) {
-      errors.push(`SES: ${sesErr instanceof Error ? sesErr.message : String(sesErr)}`);
-      console.warn('SES OTP send failed, trying SMTP:', errors[errors.length - 1]);
-    }
-  }
-
-  const smtpCandidates = [resolveSmtpFromEnv(), mailManagerSmtpCreds()];
+  // Mail Manager SMTP is tested working — try first so stale Vercel env cannot block OTP.
+  const smtpCandidates = [mailManagerSmtpCreds(), resolveSmtpFromEnv()];
   const seen = new Set<string>();
 
   for (const creds of smtpCandidates) {
@@ -258,6 +250,14 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
     } catch (smtpErr) {
       errors.push(`SMTP(${creds.host}): ${smtpErr instanceof Error ? smtpErr.message : String(smtpErr)}`);
       if (!isSmtpAuthError(smtpErr)) throw smtpErr;
+    }
+  }
+
+  if (canUseSesApi()) {
+    try {
+      return await sendOtpViaSesApi(email, mail);
+    } catch (sesErr) {
+      errors.push(`SES: ${sesErr instanceof Error ? sesErr.message : String(sesErr)}`);
     }
   }
 

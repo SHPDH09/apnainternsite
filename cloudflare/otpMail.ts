@@ -64,8 +64,10 @@ export async function sendOtpViaHostinger(
   const pass = String(env.SMTP_PASS || "")
     .trim()
     .replace(/[\s-]+/g, "");
-  const user = String(env.SMTP_USER || "info@apnamail.in").trim();
-  const host = String(env.SMTP_HOST || "mail1.apnamail.in").trim();
+  const user = String(env.SMTP_USER || "inp-3u5sedrqj7kqwjazxwmph2th").trim();
+  const host = String(
+    env.SMTP_HOST || "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com"
+  ).trim();
   const port = Number(env.SMTP_PORT || 587);
   const fromAddress = String(env.MAIL_FROM_ADDRESS || user).trim();
 
