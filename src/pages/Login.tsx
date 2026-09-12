@@ -382,6 +382,10 @@ const Login = () => {
         );
         if (collegeRpcErr) {
           console.warn("account_may_use_college_login RPC:", collegeRpcErr.message);
+          toast.error(
+            "College login is temporarily unavailable. Please try again or contact support."
+          );
+          return;
         } else if (mayCollege !== true) {
           toast.error(
             "No college administrator account found for this email. Students use the main sign-in; staff use the admin portal."

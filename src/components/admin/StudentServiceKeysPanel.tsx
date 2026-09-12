@@ -365,10 +365,11 @@ export function StudentServiceKeysPanel({ client, currentUserId, isActive = true
     }
     setApplyingAccess(true);
     try {
-      await applyStudentServiceAccessBatch(client, ids, keys, unlocked);
+      const { updated } = await applyStudentServiceAccessBatch(client, ids, keys, unlocked);
       toast.success(
-        `${unlocked ? "Unlocked" : "Locked"} ${keys.length} service(s) for ${ids.length} student(s).`
+        `${unlocked ? "Unlocked" : "Locked"} ${keys.length} service(s) for ${updated} student(s).`
       );
+      await runStudentSearch();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update student access.");
     } finally {

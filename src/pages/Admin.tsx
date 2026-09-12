@@ -4990,7 +4990,11 @@ Apna Intern Team`;
             <div className="flex items-center gap-6 mt-4 pt-4 border-t border-white/10">
               <div className="text-center">
                 <div className="text-2xl font-black text-violet-400">
-                  {selectedAttendanceStudent?.total_days ?? studentAttendanceHistory.length}
+                  {selectedAttendanceStudent?.total_days ??
+                    countProgrammePresentDays(
+                      studentAttendanceHistory,
+                      selectedAttendanceStudent?.university_name
+                    )}
                 </div>
                 <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
                   Programme Days Marked

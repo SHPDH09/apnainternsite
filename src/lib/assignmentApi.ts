@@ -52,6 +52,7 @@ export type AssignmentRow = {
   target_universities?: string[] | null;
   target_colleges?: string[] | null;
   target_domains?: string[] | null;
+  target_modes?: string[] | null;
   recipient_count?: number | null;
   created_at?: string;
   assignment_submissions?: { id: string }[];
