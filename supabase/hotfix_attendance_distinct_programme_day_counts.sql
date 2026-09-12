@@ -20,6 +20,14 @@ AS $$
   SELECT COALESCE(lower(trim(p_name)) ~ 'bnmu|bhupendra\s*narayan\s*mandal', false);
 $$;
 
+CREATE OR REPLACE FUNCTION public.is_brabu_university_name(p_name text)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT COALESCE(lower(trim(p_name)) ~ 'brabu|babasaheb\s*bhimrao\s*ambedkar', false);
+$$;
+
 -- STEP 1 — Remove duplicate attendance rows on the same IST calendar day.
 -- Keep one row per (student, day).
 DELETE FROM public.attendance a
@@ -57,7 +65,9 @@ BEGIN
           THEN att.ist_date BETWEEN DATE '2026-05-23' AND DATE '2026-06-21'
         WHEN public.is_lnmu_university_name(att.university_name)
           THEN att.ist_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-20'
-        ELSE TRUE
+        WHEN public.is_brabu_university_name(att.university_name)
+          THEN att.ist_date BETWEEN DATE '2026-07-01' AND DATE '2026-07-30'
+        ELSE att.ist_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-20'
       END AS in_window
     FROM att
   )

@@ -111,7 +111,7 @@ export async function fetchAdminReferralOverview(
   const { data, error } = await client.rpc("admin_referral_overview");
   if (error) {
     console.warn("admin_referral_overview:", error.message);
-    return [];
+    throw new Error(error.message || "Could not load referral overview.");
   }
   return parseRpcJsonArray<AdminReferralOverviewRow>(data);
 }

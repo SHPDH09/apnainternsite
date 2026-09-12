@@ -334,6 +334,35 @@ async function enrichEnrollments(
   });
 }
 
+/** AWS REST shim ignores PostgREST relation embeds — hydrate categories client-side. */
+async function enrichCourses(client: SupabaseClient, rows: Course[]): Promise<Course[]> {
+  if (!rows.length) return rows;
+
+  const categoryIds = [
+    ...new Set(rows.map((row) => row.category_id).filter(Boolean) as string[]),
+  ];
+  if (!categoryIds.length) return rows;
+
+  const categoryById = new Map<string, Category>();
+  const { data: categories, error } = await client
+    .from("course_categories")
+    .select("*")
+    .in("id", categoryIds);
+  if (error) throw error;
+
+  for (const row of (categories || []) as Record<string, unknown>[]) {
+    const mapped = mapCategory(row);
+    categoryById.set(mapped.id, mapped);
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    category:
+      row.category ||
+      (row.category_id ? categoryById.get(row.category_id) || null : null),
+  }));
+}
+
 async function enrichLeads(client: SupabaseClient, rows: Lead[]): Promise<Lead[]> {
   if (!rows.length) return rows;
   const courseIds = [...new Set(rows.map((r) => r.course_id).filter(Boolean) as string[])];
@@ -477,7 +506,7 @@ export async function toggleCategoryActive(client: SupabaseClient, id: string, i
 export async function listCourses(client: SupabaseClient, filters: CourseListFilters = {}): Promise<Course[]> {
   let q = client
     .from("courses")
-    .select("*, category:course_categories(*)")
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (filters.status && filters.status !== "all") {
@@ -517,7 +546,8 @@ export async function listCourses(client: SupabaseClient, filters: CourseListFil
 
   const { data, error } = await q;
   if (error) throw error;
-  return ((data || []) as Record<string, unknown>[]).map(mapCourse);
+  const mapped = ((data || []) as Record<string, unknown>[]).map(mapCourse);
+  return enrichCourses(client, mapped);
 }
 
 async function fetchCourseRelated(client: SupabaseClient, courseId: string) {
@@ -562,12 +592,12 @@ async function fetchCourseRelated(client: SupabaseClient, courseId: string) {
 export async function getCourseBySlug(client: SupabaseClient, slug: string): Promise<CourseDetail | null> {
   const { data, error } = await client
     .from("courses")
-    .select("*, category:course_categories(*)")
+    .select("*")
     .eq("slug", slug)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const course = mapCourse(data as Record<string, unknown>);
+  const [course] = await enrichCourses(client, [mapCourse(data as Record<string, unknown>)]);
   const related = await fetchCourseRelated(client, course.id);
   return { ...course, ...related };
 }
@@ -575,12 +605,12 @@ export async function getCourseBySlug(client: SupabaseClient, slug: string): Pro
 export async function getCourseById(client: SupabaseClient, id: string): Promise<CourseDetail | null> {
   const { data, error } = await client
     .from("courses")
-    .select("*, category:course_categories(*)")
+    .select("*")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const course = mapCourse(data as Record<string, unknown>);
+  const [course] = await enrichCourses(client, [mapCourse(data as Record<string, unknown>)]);
   const related = await fetchCourseRelated(client, course.id);
   return { ...course, ...related };
 }
@@ -624,9 +654,10 @@ export async function createCourse(
   createdBy?: string
 ): Promise<Course> {
   const payload = buildCoursePayload(input, createdBy);
-  const { data, error } = await client.from("courses").insert(payload).select("*, category:course_categories(*)").single();
+  const { data, error } = await client.from("courses").insert(payload).select("*").single();
   if (error) throw error;
-  return mapCourse(data as Record<string, unknown>);
+  const [course] = await enrichCourses(client, [mapCourse(data as Record<string, unknown>)]);
+  return course;
 }
 
 export async function updateCourse(client: SupabaseClient, id: string, input: CourseInput): Promise<Course> {
@@ -635,10 +666,11 @@ export async function updateCourse(client: SupabaseClient, id: string, input: Co
     .from("courses")
     .update(payload)
     .eq("id", id)
-    .select("*, category:course_categories(*)")
+    .select("*")
     .single();
   if (error) throw error;
-  return mapCourse(data as Record<string, unknown>);
+  const [course] = await enrichCourses(client, [mapCourse(data as Record<string, unknown>)]);
+  return course;
 }
 
 export async function deleteCourse(client: SupabaseClient, id: string): Promise<void> {
