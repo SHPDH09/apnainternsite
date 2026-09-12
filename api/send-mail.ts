@@ -184,17 +184,27 @@ async function sendOtpViaSmtp(
     );
   }
   const transporter = await createSmtpTransporter(smtpCreds);
-  const from = { name: 'Apna Intern', address: smtpCreds.fromAddress };
+  await transporter.verify();
+  const fromAddress = smtpCreds.fromAddress || resolveMailFromAddress();
   const info = await transporter.sendMail({
-    from,
-    sender: smtpCreds.fromAddress,
+    from: { name: 'Apna Intern', address: fromAddress },
+    sender: fromAddress,
     to: recipient,
     subject: mailContent.subject,
     html: mailContent.html,
     text: mailContent.text,
-    replyTo: 'apnaintern.in@gmail.com',
+    replyTo: fromAddress,
   });
-  return String(info.messageId || '');
+  const accepted = Array.isArray(info.accepted) ? info.accepted : [];
+  if (
+    accepted.length === 0 ||
+    !accepted.some((addr) => String(addr).toLowerCase() === recipient.toLowerCase())
+  ) {
+    throw new Error(`SMTP did not accept recipient ${recipient}`);
+  }
+  const messageId = String(info.messageId || '').trim();
+  if (!messageId) throw new Error('SMTP send returned no message id');
+  return messageId;
 }
 
 function canUseSesApi(): boolean {
@@ -511,8 +521,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const otpPurpose = resolveOtpMailPurpose(purposeRaw || 'login');
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      await storeOtpInRds(recipient, code);
-
       const mailContent = buildOtpMailContent(code, otpPurpose);
 
       try {
@@ -525,7 +533,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             channel = 'ses';
           } catch (sesErr) {
             if (isSesIdentityNotVerifiedError(sesErr)) {
-              // SES sandbox — try SMTP fallback; flag so UI can warn about one-time production access.
               console.warn('SES sandbox blocked recipient, trying SMTP:', recipient);
             } else {
               console.warn('SES OTP send failed, trying SMTP:', sesErr instanceof Error ? sesErr.message : sesErr);
@@ -542,6 +549,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           messageId = await sendOtpViaSmtp(recipient, mailContent);
           channel = 'smtp';
         }
+
+        if (!String(messageId || '').trim()) {
+          throw new Error('Email server did not confirm delivery — no message id returned');
+        }
+
+        // Store OTP only after the mail server confirms acceptance.
+        await storeOtpInRds(recipient, code);
 
         const deliveryNote = sesSandboxLimited
           ? ' Amazon SES is still in sandbox — request Production Access once in AWS Console so OTP reaches all users (no per-email verification).'

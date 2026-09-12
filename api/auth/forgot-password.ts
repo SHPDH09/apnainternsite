@@ -66,11 +66,6 @@ async function handleWithRds(
 ) {
   if (action === 'request_otp') {
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    await query(
-      `INSERT INTO public.password_resets (id, email, otp, expires_at)
-       VALUES ($1, $2, $3, now() + interval '15 minutes')`,
-      [randomUUID(), normalizedEmail, generatedOtp]
-    );
 
     try {
       await sendOtpEmail(normalizedEmail, generatedOtp, purpose);
@@ -98,6 +93,12 @@ async function handleWithRds(
         error: formatSmtpError(mailErr, { to: normalizedEmail }),
       });
     }
+
+    await query(
+      `INSERT INTO public.password_resets (id, email, otp, expires_at)
+       VALUES ($1, $2, $3, now() + interval '15 minutes')`,
+      [randomUUID(), normalizedEmail, generatedOtp]
+    );
 
     return res.status(200).json({ success: true, emailSent: true, message: 'OTP sent successfully' });
   }
