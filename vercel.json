@@ -6,7 +6,7 @@
     "SMTP_HOST": "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com",
     "SMTP_USER": "inp-3u5sedrqj7kqwjazxwmph2th",
     "SMTP_PORT": "587",
-    "USE_SES_API": "false",
+    "USE_SES_API": "true",
     "MAIL_FROM": "Apna Intern <info@apnaintern.in>",
     "MAIL_FROM_ADDRESS": "info@apnaintern.in",
     "SMTP_PASS": "Raunak@12583",

@@ -18,6 +18,8 @@ type OtpApiJson = {
   error?: string;
   devOtp?: string;
   sesSandboxLimited?: boolean;
+  messageId?: string;
+  channel?: string;
 };
 
 /** Production OTP — dedicated Vercel route (send-mail is heavier and can crash on import). */
@@ -75,18 +77,29 @@ async function deliverOtpViaServer(
   }
 
   const detail = (body.error || body.message || "").trim();
-  if (!res.ok || body.success !== true || body.emailSent !== true) {
+  const messageId = String(body.messageId || "").trim();
+  if (!res.ok || body.success !== true || body.emailSent !== true || !messageId) {
     const sandboxHint =
-      body.message?.includes('sandbox') || body.error?.includes('not verified')
-        ? ' OTP sab users ke liye bhejne ke liye AWS Console → SES → Request production access (sirf ek baar).'
-        : '';
+      body.message?.includes("sandbox") || body.error?.includes("not verified")
+        ? " Request AWS SES Production Access once (AWS Console → SES) so OTP reaches all inboxes."
+        : "";
+    const missingIdHint =
+      res.ok && body.success === true && body.emailSent === true && !messageId
+        ? " Email server did not confirm delivery — no message id returned."
+        : "";
     return {
       ok: false,
-      error: new Error((detail || `OTP request failed (${res.status})`) + sandboxHint),
+      error: new Error(
+        (detail || missingIdHint || `OTP request failed (${res.status})`) + sandboxHint
+      ),
     };
   }
 
-  return { ok: true, email: body.email || email, sesSandboxLimited: body.sesSandboxLimited };
+  return {
+    ok: true,
+    email: body.email || email,
+    sesSandboxLimited: body.sesSandboxLimited,
+  };
 }
 
 async function deliverOtpViaClient(

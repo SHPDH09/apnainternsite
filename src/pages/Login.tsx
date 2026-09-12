@@ -246,8 +246,8 @@ const Login = () => {
       setAdminOtpSent(true);
       toast.success(
         sent.sesSandboxLimited
-          ? `Code sent to ${sent.email} (SMTP). Agar na aaye: AWS SES → Request production access — ek baar, sab users ke liye.`
-          : `Verification code sent to ${sent.email}. Check Inbox and Spam — sender: info@apnaintern.in`
+          ? `Code sent to ${sent.email} via SMTP relay. Check Spam/Promotions and search for info@apnaintern.in. If still missing, ask support to enable AWS SES Production Access.`
+          : `Verification code sent to ${sent.email} from info@apnaintern.in. Check Inbox, Spam, and Promotions folders.`
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to send verification code";
@@ -304,7 +304,9 @@ const Login = () => {
         if (devOtp) toast.info(`Dev login code: ${devOtp}`);
       }
       setStudentOtpSent(true);
-      toast.success(`Login code sent to ${sent.email}`);
+      toast.success(
+        `Login code sent to ${sent.email} from info@apnaintern.in. Check Inbox, Spam, and Promotions.`
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to send login code";
       toast.error(msg);
