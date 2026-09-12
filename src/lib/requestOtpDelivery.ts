@@ -20,11 +20,11 @@ type OtpApiJson = {
   sesSandboxLimited?: boolean;
 };
 
-/** Production OTP — always use apnaintern.in mail API (ezyintern.in send-mail crashes). */
+/** Production OTP — dedicated Vercel route (send-mail is heavier and can crash on import). */
 function getOtpDeliverApiUrl(): string {
-  if (typeof window === "undefined") return "/api/send-mail";
+  if (typeof window === "undefined") return "/api/otp-deliver";
   if (isLocalDevEnvironment()) return "/api/send-mail";
-  return getCanonicalMailApiUrl("/api/send-mail");
+  return getCanonicalMailApiUrl("/api/otp-deliver");
 }
 
 function isPasswordResetsSchemaMessage(message: string): boolean {
@@ -55,7 +55,11 @@ async function deliverOtpViaServer(
   const res = await fetch(getOtpDeliverApiUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "otp_deliver", email, purpose }),
+    body: JSON.stringify(
+      getOtpDeliverApiUrl().includes("otp-deliver")
+        ? { email, purpose }
+        : { action: "otp_deliver", email, purpose }
+    ),
   });
 
   const text = await res.text().catch(() => "");

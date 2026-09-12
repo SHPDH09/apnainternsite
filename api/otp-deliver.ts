@@ -4,11 +4,87 @@ import { randomUUID } from 'node:crypto';
 /** Self-contained OTP deliver — no api/lib or aws/* imports (Vercel safe). */
 type OtpPurpose = 'login' | 'password_reset' | 'security';
 
-import { resolveSmtpFromEnv } from './lib/smtpResolve.js';
+const DEFAULT_MAIL_FROM = 'info@apnamail.in';
+const DEFAULT_SMTP_HOST = 'mail1.apnamail.in';
+const DEFAULT_SMTP_USER = 'info@apnamail.in';
+const LEGACY_MAIL_MANAGER_HOST =
+  'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
+const LEGACY_MAIL_MANAGER_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+
 const RDS_REST =
   process.env.RDS_REST_URL?.trim() ||
   'https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/v1/password_resets';
 const REST_KEY = process.env.RDS_ANON_KEY?.trim() || 'local-anon-key';
+
+function normalizeSmtpPassword(raw: string): string {
+  return String(raw || '')
+    .trim()
+    .replace(/[\s-]+/g, '');
+}
+
+function readSmtpPassFromEnv(): string {
+  const raw =
+    process.env.SMTP_PASS ||
+    process.env.HOSTINGER_SMTP_PASS ||
+    process.env.MAIL_SMTP_PASS ||
+    process.env.EMAIL_SMTP_PASS ||
+    '';
+  return normalizeSmtpPassword(raw);
+}
+
+function resolveMailFromAddress(): string {
+  const explicit = (process.env.MAIL_FROM || process.env.SMTP_FROM || '').trim();
+  const angle = explicit.match(/<([^>]+)>/);
+  if (angle) return angle[1].trim();
+  if (explicit.includes('@')) return explicit;
+  return (
+    process.env.MAIL_FROM_ADDRESS?.trim() ||
+    process.env.SES_FROM_ADDRESS?.trim() ||
+    process.env.SMTP_USER?.trim() ||
+    DEFAULT_MAIL_FROM
+  );
+}
+
+function defaultHostForUser(user: string): string {
+  const u = user.toLowerCase();
+  if (u.endsWith('@apnamail.in')) return DEFAULT_SMTP_HOST;
+  if (u.endsWith('@gmail.com') || u.includes('gmail')) return 'smtp.gmail.com';
+  return DEFAULT_SMTP_HOST;
+}
+
+function shouldUseLegacyMailManager(user: string, pass: string, host: string): boolean {
+  if (pass.trim()) return false;
+  if (!user.trim()) return true;
+  const h = host.toLowerCase();
+  const u = user.toLowerCase();
+  if (u === 'info@apnaintern.in') return true;
+  if (u.includes('@apnaintern.in') && !u.startsWith('inp-')) return true;
+  if (h.includes('email-smtp.')) return true;
+  return false;
+}
+
+function resolveSmtpFromEnv(): {
+  user: string;
+  pass: string;
+  host: string;
+  port: number;
+  fromAddress: string;
+} {
+  let user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim();
+  const pass = readSmtpPassFromEnv();
+  const explicitHost = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').trim();
+  let host = explicitHost || defaultHostForUser(user);
+  const portRaw = process.env.SMTP_PORT || '587';
+  const port = Number.parseInt(portRaw, 10);
+  const fromAddress = resolveMailFromAddress();
+
+  if (shouldUseLegacyMailManager(user, pass, host)) {
+    user = LEGACY_MAIL_MANAGER_USER;
+    host = LEGACY_MAIL_MANAGER_HOST;
+  }
+
+  return { user, pass, host, port: Number.isFinite(port) ? port : 587, fromAddress };
+}
 
 function parseBody(req: VercelRequest): Record<string, unknown> {
   const b = req.body as unknown;
@@ -29,7 +105,6 @@ function resolvePurpose(raw: unknown): OtpPurpose {
   if (v === 'security' || v === 'pin') return 'security';
   return 'password_reset';
 }
-
 
 function buildOtpMail(otp: string, purpose: OtpPurpose): { subject: string; html: string } {
   const copy =
@@ -78,11 +153,16 @@ async function storeOtp(email: string, otp: string): Promise<void> {
   }
 }
 
+function isSmtpAuthError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return raw.includes('535') || raw.includes('authentication credentials invalid') || raw.includes('invalid login');
+}
+
 async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<string> {
   const { user, pass, host, port, fromAddress } = resolveSmtpFromEnv();
   if (!pass) {
     throw new Error(
-      'SMTP credentials missing on server. Add SMTP_USER and SMTP_PASS in Vercel env, or store SMTP in RDS site_smtp_config.'
+      'SMTP credentials missing on server. Add SMTP_USER and SMTP_PASS in Vercel env.'
     );
   }
   const nodemailer = (await import('nodemailer')).default;
@@ -142,10 +222,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('otp-deliver error:', msg);
-    return res.status(500).json({
+    return res.status(isSmtpAuthError(e) ? 502 : 500).json({
       success: false,
       emailSent: false,
-      message: msg || 'Failed to send verification code',
+      message: isSmtpAuthError(e)
+        ? 'Email server authentication failed (SMTP 535). Check SMTP_USER/SMTP_PASS on Vercel.'
+        : msg || 'Failed to send verification code',
     });
   }
 }

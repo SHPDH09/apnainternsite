@@ -1,7 +1,75 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomUUID } from 'node:crypto';
 
-/** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). Inlined below. */
+/** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
+const DEFAULT_MAIL_FROM = 'info@apnamail.in';
+const DEFAULT_SMTP_HOST = 'mail1.apnamail.in';
+const DEFAULT_SMTP_USER = 'info@apnamail.in';
+const LEGACY_MAIL_MANAGER_HOST =
+  'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
+const LEGACY_MAIL_MANAGER_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+
+function normalizeSmtpPassword(raw: string): string {
+  return String(raw || '')
+    .trim()
+    .replace(/[\s-]+/g, '');
+}
+
+function readSmtpPassFromEnv(): string {
+  const raw =
+    process.env.SMTP_PASS ||
+    process.env.HOSTINGER_SMTP_PASS ||
+    process.env.MAIL_SMTP_PASS ||
+    process.env.EMAIL_SMTP_PASS ||
+    '';
+  return normalizeSmtpPassword(raw);
+}
+
+function defaultHostForUser(user: string): string {
+  const u = user.toLowerCase();
+  if (u.endsWith('@apnamail.in')) return DEFAULT_SMTP_HOST;
+  if (u.endsWith('@gmail.com') || u.includes('gmail')) return 'smtp.gmail.com';
+  return DEFAULT_SMTP_HOST;
+}
+
+function shouldUseLegacyMailManager(user: string, pass: string, host: string): boolean {
+  if (pass.trim()) return false;
+  if (!user.trim()) return true;
+  const h = host.toLowerCase();
+  const u = user.toLowerCase();
+  if (u === 'info@apnaintern.in') return true;
+  if (u.includes('@apnaintern.in') && !u.startsWith('inp-')) return true;
+  if (h.includes('email-smtp.')) return true;
+  return false;
+}
+
+function resolveSmtpHostFromEnv(user = ''): string {
+  const explicit = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').trim();
+  const resolvedUser = (process.env.SMTP_USER || user || DEFAULT_SMTP_USER).trim();
+  if (explicit) return explicit;
+  return defaultHostForUser(resolvedUser);
+}
+
+function resolveSmtpFromEnv(): {
+  user: string;
+  pass: string;
+  host: string;
+  port: number;
+  fromAddress: string;
+} {
+  let user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim();
+  const pass = readSmtpPassFromEnv();
+  let host = resolveSmtpHostFromEnv(user);
+  const port = resolveSmtpPort();
+  const fromAddress = resolveMailFromAddress();
+
+  if (shouldUseLegacyMailManager(user, pass, host)) {
+    user = LEGACY_MAIL_MANAGER_USER;
+    host = LEGACY_MAIL_MANAGER_HOST;
+  }
+
+  return { user, pass, host, port, fromAddress };
+}
 type MailFrom = { name: string; address: string };
 type OtpMailPurpose = 'login' | 'password_reset' | 'security';
 
@@ -128,10 +196,6 @@ function canUseSesApi(): boolean {
   return Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.USE_SES_API === 'true' || process.env.AWS_EXECUTION_ENV);
 }
 
-import {
-  resolveMailFromAddress as resolveMailFromAddressShared,
-  resolveSmtpFromEnv,
-} from './lib/smtpResolve.js';
 const RDS_REST =
   process.env.RDS_REST_URL?.trim() ||
   'https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/v1/password_resets';
@@ -166,7 +230,16 @@ function resolveSmtpPort(): number {
 }
 
 function resolveMailFromAddress(): string {
-  return resolveMailFromAddressShared();
+  const explicit = (process.env.MAIL_FROM || process.env.SMTP_FROM || '').trim();
+  const angle = explicit.match(/<([^>]+)>/);
+  if (angle) return angle[1].trim();
+  if (explicit.includes('@')) return explicit;
+  return (
+    process.env.MAIL_FROM_ADDRESS?.trim() ||
+    process.env.SES_FROM_ADDRESS?.trim() ||
+    process.env.SMTP_USER?.trim() ||
+    DEFAULT_MAIL_FROM
+  );
 }
 
 function resolveMailFrom(label = 'Apna Intern'): MailFrom {
