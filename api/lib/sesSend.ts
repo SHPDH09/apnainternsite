@@ -8,7 +8,7 @@ function resolveFromAddress(): string {
   return (
     process.env.MAIL_FROM_ADDRESS?.trim() ||
     process.env.SES_FROM_ADDRESS?.trim() ||
-    'info@apnamail.in'
+    'info@apnaintern.in'
   );
 }
 
