@@ -73,12 +73,22 @@ async function buildApp(): Promise<Express> {
   app.use(express.json({ limit: "2mb" }));
 
   const stagePrefix = process.env.AWS_STAGE ? `/${process.env.AWS_STAGE}` : "";
-  if (stagePrefix) {
+  const stagePrefixes = [
+    stagePrefix,
+    "/staging",
+    "/production",
+  ].filter((p, i, arr) => p && arr.indexOf(p) === i);
+  if (stagePrefixes.length > 0) {
     app.use((req, _res, next) => {
-      if (req.url === stagePrefix) {
-        req.url = "/";
-      } else if (req.url.startsWith(`${stagePrefix}/`)) {
-        req.url = req.url.slice(stagePrefix.length) || "/";
+      for (const prefix of stagePrefixes) {
+        if (req.url === prefix) {
+          req.url = "/";
+          break;
+        }
+        if (req.url.startsWith(`${prefix}/`)) {
+          req.url = req.url.slice(prefix.length) || "/";
+          break;
+        }
       }
       next();
     });
