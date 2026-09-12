@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  defaultEngineeringOptions,
   fetchCollegesForUniversity,
   parseMultilineList,
   type EngineeringConfigInput,
@@ -83,12 +84,21 @@ export function EngineeringConfigFormDialog({
       return;
     }
 
+    const defaults = defaultEngineeringOptions();
     setLoading(false);
     setUniversityName("");
     setCollegesText("");
-    setCoursesText("B.Tech\nM.Tech\nDiploma");
-    setDomainsText("");
-    setBranchRows([]);
+    setCoursesText(listWithoutOther(defaults.courses));
+    setDomainsText(defaults.domains.join("\n"));
+    setBranchRows(
+      listWithoutOther(defaults.courses)
+        .split("\n")
+        .filter(Boolean)
+        .map((course) => ({
+          course,
+          branchesText: listWithoutOther(defaults.branches_by_course[course] || []),
+        }))
+    );
   }, [open, initialConfig]);
 
   useEffect(() => {

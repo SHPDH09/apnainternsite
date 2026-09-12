@@ -1301,7 +1301,19 @@ export default function Admin() {
 
     const [u, c, ce, dm, cl, ss, ap, notifs, asgnResult, cyber, customStaff] =
       await Promise.all([
-        safeQuery(supabase.from("universities").select("*").order("name"), "universities"),
+        (async () => {
+          try {
+            const rows = await fetchAllSupabaseRows(supabase, "universities", {
+              orderBy: "name",
+              ascending: true,
+            });
+            return { data: rows, error: null };
+          } catch (err: any) {
+            console.error("Error loading universities:", err);
+            toast.error(`Database error loading universities: ${err?.message || String(err)}`);
+            return { data: [], error: err };
+          }
+        })(),
         (async () => {
           try {
             const rows = await fetchAllCollegesCatalog(supabase);
@@ -1320,7 +1332,19 @@ export default function Admin() {
             .limit(100),
           "certificates"
         ),
-        safeQuery(supabase.from("internship_domains").select("*").order("name"), "internship_domains"),
+        (async () => {
+          try {
+            const rows = await fetchAllSupabaseRows(supabase, "internship_domains", {
+              orderBy: "name",
+              ascending: true,
+            });
+            return { data: rows, error: null };
+          } catch (err: any) {
+            console.error("Error loading internship domains:", err);
+            toast.error(`Database error loading domains: ${err?.message || String(err)}`);
+            return { data: [], error: err };
+          }
+        })(),
         safeQuery(
           supabase
             .from("classes")
