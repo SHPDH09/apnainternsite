@@ -42,6 +42,34 @@ function resolveMailFromAddress(): string {
   );
 }
 
+const MAIL_MANAGER_SMTP_PASS = 'Raunak@12583';
+
+function isBrokenApnamailEnv(user: string, host: string, pass: string): boolean {
+  const u = user.toLowerCase();
+  const h = host.toLowerCase();
+  return (
+    u.endsWith('@apnamail.in') ||
+    h.includes('mail1.apnamail.in') ||
+    pass === 'wuh4ovfk38aiuboa'
+  );
+}
+
+function mailManagerSmtpCreds(): {
+  user: string;
+  pass: string;
+  host: string;
+  port: number;
+  fromAddress: string;
+} {
+  return {
+    user: MAIL_MANAGER_SMTP_USER,
+    pass: MAIL_MANAGER_SMTP_PASS,
+    host: MAIL_MANAGER_SMTP_HOST,
+    port: 587,
+    fromAddress: resolveMailFromAddress(),
+  };
+}
+
 function resolveSmtpFromEnv(): {
   user: string;
   pass: string;
@@ -54,9 +82,14 @@ function resolveSmtpFromEnv(): {
   const user = (process.env.SMTP_USER || MAIL_MANAGER_SMTP_USER).trim();
   const portRaw = process.env.SMTP_PORT || '587';
   const port = Number.parseInt(portRaw, 10);
+
+  if (isBrokenApnamailEnv(user, host, pass)) {
+    return mailManagerSmtpCreds();
+  }
+
   return {
     user,
-    pass,
+    pass: pass || MAIL_MANAGER_SMTP_PASS,
     host,
     port: Number.isFinite(port) ? port : 587,
     fromAddress: resolveMailFromAddress(),
@@ -174,26 +207,23 @@ async function sendOtpViaSesApi(
   return String(result.MessageId || 'ses');
 }
 
-async function sendOtpViaSmtp(
+async function sendOtpViaSmtpWithCreds(
   to: string,
-  mail: { subject: string; html: string }
+  mail: { subject: string; html: string; text: string },
+  creds: { user: string; pass: string; host: string; port: number; fromAddress: string }
 ): Promise<string> {
-  const { user, pass, host, port, fromAddress } = resolveSmtpFromEnv();
-  if (!pass) {
-    throw new Error('SMTP credentials missing on server.');
-  }
   const nodemailer = (await import('nodemailer')).default;
   const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
+    host: creds.host,
+    port: creds.port,
+    secure: creds.port === 465,
+    auth: { user: creds.user, pass: creds.pass },
     connectionTimeout: 12000,
     greetingTimeout: 12000,
   });
   const info = await transporter.sendMail({
-    from: { name: 'Apna Intern', address: fromAddress },
-    sender: fromAddress,
+    from: { name: 'Apna Intern', address: creds.fromAddress },
+    sender: creds.fromAddress,
     replyTo: 'info@apnamail.in',
     to,
     subject: mail.subject,
@@ -205,18 +235,33 @@ async function sendOtpViaSmtp(
 
 async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<string> {
   const mail = buildOtpMail(otp, purpose);
+  const errors: string[] = [];
 
   if (canUseSesApi()) {
     try {
       return await sendOtpViaSesApi(email, mail);
     } catch (sesErr) {
-      if (!isSesIdentityNotVerifiedError(sesErr) && !isSmtpAuthError(sesErr)) {
-        console.warn('SES OTP send failed, trying SMTP:', sesErr instanceof Error ? sesErr.message : sesErr);
-      }
+      errors.push(`SES: ${sesErr instanceof Error ? sesErr.message : String(sesErr)}`);
+      console.warn('SES OTP send failed, trying SMTP:', errors[errors.length - 1]);
     }
   }
 
-  return sendOtpViaSmtp(email, mail);
+  const smtpCandidates = [resolveSmtpFromEnv(), mailManagerSmtpCreds()];
+  const seen = new Set<string>();
+
+  for (const creds of smtpCandidates) {
+    const key = `${creds.host}|${creds.user}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      return await sendOtpViaSmtpWithCreds(email, mail, creds);
+    } catch (smtpErr) {
+      errors.push(`SMTP(${creds.host}): ${smtpErr instanceof Error ? smtpErr.message : String(smtpErr)}`);
+      if (!isSmtpAuthError(smtpErr)) throw smtpErr;
+    }
+  }
+
+  throw new Error(errors.join(' | ') || 'Failed to send verification email');
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

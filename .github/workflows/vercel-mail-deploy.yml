@@ -38,10 +38,10 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST || 'mail1.apnamail.in' }}
-          SMTP_USER: ${{ secrets.SMTP_USER || 'info@apnamail.in' }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || 'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com' }}
+          SMTP_USER: ${{ secrets.SMTP_USER || 'inp-3u5sedrqj7kqwjazxwmph2th' }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
-          MAIL_FROM_ADDRESS: ${{ secrets.MAIL_FROM_ADDRESS || 'info@apnamail.in' }}
+          MAIL_FROM_ADDRESS: ${{ secrets.MAIL_FROM_ADDRESS || 'info@apnaintern.in' }}
         run: |
           if [ -z "${VERCEL_TOKEN:-}" ] || [ -z "${VERCEL_PROJECT_ID:-}" ] || [ -z "${SMTP_PASS:-}" ]; then
             echo "::warning::Set VERCEL_TOKEN, VERCEL_PROJECT_ID, and SMTP_PASS in GitHub secrets to sync Vercel mail env"
