@@ -36,6 +36,8 @@ const TECH_UNIS = [
   "Bihar Agricultural University, Sabour",
   "Bihar Animal Sciences University, Patna",
   "Bihar Engineering University, Patna",
+  "Bihar Engineering University",
+  "State Board of Technical Education, Bihar",
 ];
 
 const NON_TECH_COURSES = ["B.A.", "B.Sc", "B.Com", "M.A.", "M.Sc", "M.Com", "Other"];
@@ -225,8 +227,8 @@ async function main() {
     if (await ensureDomain(name)) domainsAdded += 1;
   }
 
-  // Merge technical domains into engineering configs (BEU + Bihar tech)
-  for (const name of [...TECH_UNIS, "BEU"]) {
+  // Merge technical domains into engineering configs (BEU + Bihar tech + SBTE)
+  for (const name of [...new Set([...TECH_UNIS, "BEU"])]) {
     const uni = await findUniversityByName(name);
     if (!uni?.id) continue;
     const { json: rows } = await rest("GET", "engineering_university_configs", {
