@@ -42,7 +42,9 @@ import { resolveStorageUrl } from "@/lib/storageUrl";
 import {
   fetchProjectReportDomainTemplate,
   fetchProjectReportDomainTemplates,
+  formatProjectReportUploadError,
   saveProjectReportDomainTemplate,
+  validateProjectReportPdfFile,
   type ProjectReportDomainTemplate,
 } from "@/lib/projectReportSettings";
 import {
@@ -178,12 +180,9 @@ export function AutoGenerateProjectReportPanel({
       toast.error("Select a domain before uploading the project template.");
       return;
     }
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      toast.error("Please upload a PDF file.");
-      return;
-    }
     setUploadingTemplate(true);
     try {
+      await validateProjectReportPdfFile(file);
       const saved = await saveProjectReportDomainTemplate(supabase, {
         domain: uploadDomain,
         file,
@@ -193,10 +192,9 @@ export function AutoGenerateProjectReportPanel({
         const next = prev.filter((r) => r.domain_key !== saved.domain_key);
         return [...next, saved].sort((a, b) => a.domain_name.localeCompare(b.domain_name));
       });
-      toast.success(`Project template saved for ${saved.domain_name}.`);
+      toast.success("Project report template uploaded successfully.");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Template upload failed.";
-      toast.error(msg);
+      toast.error(formatProjectReportUploadError(err));
     } finally {
       setUploadingTemplate(false);
       if (templateInputRef.current) templateInputRef.current.value = "";

@@ -15,6 +15,10 @@ import {
 } from "./partner-applications-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
+import {
+  ensureProjectReportSchema,
+  isProjectReportTable,
+} from "./project-report-bootstrap";
 import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
 
 function jwtFromRequest(req: Request) {
@@ -45,6 +49,10 @@ async function withCmsRetry<T>(table: string, run: () => Promise<T>): Promise<T>
       }
       if (isPartnerApplicationsTable(table)) {
         await ensurePartnerApplicationsTables();
+        return await run();
+      }
+      if (isProjectReportTable(table)) {
+        await ensureProjectReportSchema();
         return await run();
       }
     }
