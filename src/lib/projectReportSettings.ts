@@ -113,13 +113,28 @@ async function tryBootstrapProjectReportTemplates(client: SupabaseClient): Promi
     const token = sessionData.session?.access_token?.trim();
     if (!token) return;
     const origin = window.location.origin.replace(/\/$/, "");
-    await fetch(`${origin}/api/ensure-project-report-templates`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+    for (const [url, body] of [
+      [`${origin}/api/ensure-project-report-templates`, undefined],
+      [
+        `${origin}/api/send-mail`,
+        JSON.stringify({ action: "ensure_project_report_templates" }),
+      ],
+    ] as const) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers,
+          ...(body ? { body } : {}),
+        });
+        if (res.ok) return;
+      } catch {
+        /* try next bootstrap path */
+      }
+    }
   } catch {
     /* optional bootstrap */
   }

@@ -14,9 +14,13 @@ api/**
 !api/admin-partner-register.ts
 !api/partner-application-submit.ts
 !api/ensure-partner-applications.ts
+!api/ensure-project-report-templates.ts
+!api/rds-apply-all.ts
 !api/lib/**
 
 aws/**
 !aws/server/db.ts
 !aws/server/local-jwt.ts
 !aws/server/partner-applications-bootstrap.ts
+!aws/server/project-report-bootstrap.ts
+!aws/server/rds-apply-all.ts
