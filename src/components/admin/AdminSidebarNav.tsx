@@ -235,6 +235,12 @@ export function buildAdminNavGroups(
       { kind: "tab", value: "classes", label: "Live Classes", icon: BookOpen }
     );
   }
+  academicItems.push({
+    kind: "tab",
+    value: "project-report-generate",
+    label: "Auto Generate Report",
+    icon: FileText,
+  });
   academicItems.push(
     { kind: "tab", value: "course-management", label: "Course Management", icon: GraduationCap }
   );

@@ -51,6 +51,7 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   bulk: "Certificates",
   "id-cards": "ID Cards",
   uploads: "Uploads",
+  "project-report-generate": "Auto Generate Project Report",
   classes: "Live Classes",
   payments: "Payments",
   "check-payment": "Check Payment",
