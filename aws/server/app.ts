@@ -28,6 +28,7 @@ import { loadRootEnv } from "./load-env";
 import { ensureAllCmsTables } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
+import { ensureProjectReportSchema } from "./project-report-bootstrap";
 import {
   authLogout,
   authSettings,
@@ -153,6 +154,14 @@ async function buildApp(): Promise<Express> {
       }
     } catch (err) {
       console.warn("[student-upload-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const projectReport = await ensureProjectReportSchema();
+      if (projectReport.applied) {
+        console.log("[project-report-bootstrap] applied project report templates schema");
+      }
+    } catch (err) {
+      console.warn("[project-report-bootstrap] startup ensure failed:", err);
     }
     if (process.env.AWS_LAMBDA_FUNCTION_NAME && process.env.RDS_APPLY_ON_START !== "false") {
       try {

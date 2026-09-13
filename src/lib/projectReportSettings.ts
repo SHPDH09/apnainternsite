@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { pickWorkingStorageUrl, resolveStorageUrl } from "@/lib/storageUrl";
+import {
+  pickWorkingStorageUrl,
+  publicStorageObjectUrl,
+  resolveStorageUrl,
+} from "@/lib/storageUrl";
 
 const BUCKET = "consent-forms";
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
 
 export type ProjectReportFieldLayout = {
   logo?: { page: number; x: number; y: number; width: number; height: number };
@@ -63,6 +68,44 @@ export function normalizeProjectReportDomainKey(domain: string): string {
     .replace(/\s+/g, " ");
 }
 
+export function formatProjectReportUploadError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err || "Upload failed.");
+  if (/does not exist|42P01|project_report_domain_templates/i.test(msg)) {
+    return "Project report storage is still initializing. Wait a moment and try again.";
+  }
+  if (/bucket not found/i.test(msg)) {
+    return 'Storage bucket "consent-forms" is missing. Contact support to provision storage.';
+  }
+  if (/permission denied|row-level security|42501/i.test(msg)) {
+    return "You do not have permission to upload templates. Sign in as an admin and try again.";
+  }
+  if (/invalid input syntax for type uuid/i.test(msg)) {
+    return "Could not save template metadata. Please refresh the page and try again.";
+  }
+  return msg || "Project report template upload failed.";
+}
+
+/** Validate PDF before upload (type, size, header). */
+export async function validateProjectReportPdfFile(file: File): Promise<void> {
+  if (!file || file.size <= 0) {
+    throw new Error("Please choose a PDF file to upload.");
+  }
+  const name = file.name.toLowerCase();
+  const isPdfType = file.type === "application/pdf" || file.type === "application/x-pdf";
+  if (!isPdfType && !name.endsWith(".pdf")) {
+    throw new Error("Project report template must be a PDF file.");
+  }
+  if (file.size > MAX_PDF_BYTES) {
+    throw new Error("PDF must be 20 MB or smaller.");
+  }
+
+  const header = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+  const magic = String.fromCharCode(...header);
+  if (!magic.startsWith("%PDF")) {
+    throw new Error("The selected file is not a valid PDF document.");
+  }
+}
+
 export async function fetchProjectReportDomainTemplates(
   client: SupabaseClient
 ): Promise<ProjectReportDomainTemplate[]> {
@@ -119,29 +162,45 @@ export async function saveProjectReportDomainTemplate(
   const domainKey = normalizeProjectReportDomainKey(domainName);
   if (!domainKey) throw new Error("Select a domain before uploading.");
 
+  await validateProjectReportPdfFile(params.file);
+
+  const existing = await fetchProjectReportDomainTemplate(client, domainName);
+  if (existing?.template_pdf_path) {
+    await client.storage.from(BUCKET).remove([existing.template_pdf_path]).catch(() => undefined);
+  }
+
   const safeName = params.file.name.replace(/[^\w.-]+/g, "_").slice(0, 120);
   const path = `project-report-templates/${domainKey.replace(/\s+/g, "-")}/${Date.now()}-${safeName}`;
 
   const { error: uploadErr } = await client.storage.from(BUCKET).upload(path, params.file, {
     upsert: true,
-    contentType: params.file.type || "application/pdf",
+    contentType: "application/pdf",
   });
-  if (uploadErr) throw new Error(uploadErr.message || "Failed to upload template PDF.");
+  if (uploadErr) {
+    if (/bucket not found/i.test(uploadErr.message)) {
+      throw new Error('Storage bucket "consent-forms" is missing. Contact support to provision storage.');
+    }
+    throw new Error(uploadErr.message || "Failed to upload template PDF.");
+  }
 
   const { data: pub } = client.storage.from(BUCKET).getPublicUrl(path);
-  const publicUrl =
-    (await pickWorkingStorageUrl([pub.publicUrl, resolveStorageUrl(BUCKET, path)].filter(Boolean))) ||
+  const cleanUrl =
+    publicStorageObjectUrl(BUCKET, path) ||
+    resolveStorageUrl(pub.publicUrl) ||
     pub.publicUrl;
+  const publicUrl = `${String(cleanUrl).split("?")[0]}?v=${Date.now()}`;
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     domain_name: domainName,
     domain_key: domainKey,
     template_pdf_path: path,
     template_pdf_url: publicUrl,
     template_file_name: params.file.name,
-    updated_by: params.uploadedBy || null,
     updated_at: new Date().toISOString(),
   };
+  if (params.uploadedBy) {
+    payload.updated_by = params.uploadedBy;
+  }
 
   const { data, error } = await client
     .from("project_report_domain_templates")
@@ -150,7 +209,14 @@ export async function saveProjectReportDomainTemplate(
     .single();
   if (error) throw error;
 
-  return rowToTemplate(data as Record<string, unknown>);
+  const saved = rowToTemplate(data as Record<string, unknown>);
+
+  const verifyBytes = await resolveTemplatePdfBytes(saved).catch(() => null);
+  if (!verifyBytes || verifyBytes.byteLength < 100) {
+    throw new Error("Uploaded PDF could not be verified. Please try uploading again.");
+  }
+
+  return saved;
 }
 
 export async function resolveTemplatePdfBytes(
