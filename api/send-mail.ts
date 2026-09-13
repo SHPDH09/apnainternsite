@@ -514,18 +514,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    if (normalizedAction === 'ensure_project_report_templates') {
+    if (
+      normalizedAction === 'ensure_project_report_templates' ||
+      normalizedAction === 'save_project_report_template'
+    ) {
       const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
       const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
       if (!tokenMatch) {
         return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
       }
+      let adminUserId = '';
       try {
         const { verifyToken } = await import('../aws/server/local-jwt.js');
         const payload = verifyToken(tokenMatch[1]);
         if (!payload?.sub) {
           return res.status(401).json({ success: false, message: 'Invalid or expired session' });
         }
+        adminUserId = String(payload.sub);
       } catch {
         return res.status(401).json({ success: false, message: 'Invalid or expired session' });
       }
@@ -536,17 +541,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       try {
-        const { ensureProjectReportSchema } = await import('../aws/server/project-report-bootstrap.js');
-        const result = await ensureProjectReportSchema();
+        const {
+          assertAdminUserId,
+          saveProjectReportTemplateRow,
+        } = await import('../aws/server/project-report-template-save.js');
+
+        await assertAdminUserId(adminUserId);
+
+        if (normalizedAction === 'ensure_project_report_templates') {
+          const { ensureProjectReportSchema } = await import('../aws/server/project-report-bootstrap.js');
+          const result = await ensureProjectReportSchema();
+          return res.status(200).json({
+            success: true,
+            ok: true,
+            table: 'project_report_domain_templates',
+            applied: result.applied,
+          });
+        }
+
+        const payload =
+          body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)
+            ? (body.payload as Record<string, unknown>)
+            : body;
+        const domainName = String(payload.domain_name || payload.domain || '').trim();
+        const domainKey = String(payload.domain_key || domainName.toLowerCase().replace(/\s+/g, ' ')).trim();
+        const templatePdfPath = String(payload.template_pdf_path || '').trim();
+        const templatePdfUrl = String(payload.template_pdf_url || '').trim();
+        const templateFileName = String(payload.template_file_name || '').trim();
+
+        if (!domainName || !domainKey) {
+          return res.status(400).json({ success: false, message: 'domain_name is required.' });
+        }
+        if (!templatePdfPath || !templatePdfUrl) {
+          return res.status(400).json({ success: false, message: 'template_pdf_path and template_pdf_url are required.' });
+        }
+
+        const row = await saveProjectReportTemplateRow({
+          domain_name: domainName,
+          domain_key: domainKey,
+          template_pdf_path: templatePdfPath,
+          template_pdf_url: templatePdfUrl,
+          template_file_name: templateFileName || 'Project_Report_Template.pdf',
+          updated_by: adminUserId,
+        });
+
         return res.status(200).json({
           success: true,
           ok: true,
-          table: 'project_report_domain_templates',
-          applied: result.applied,
+          row,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error('[send-mail ensure_project_report_templates]', message);
+        console.error(`[send-mail ${normalizedAction}]`, message);
         return res.status(500).json({ success: false, message });
       }
     }

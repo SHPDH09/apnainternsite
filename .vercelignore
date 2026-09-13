@@ -23,3 +23,4 @@ aws/**
 !aws/server/local-jwt.ts
 !aws/server/partner-applications-bootstrap.ts
 !aws/server/project-report-bootstrap.ts
+!aws/server/project-report-template-save.ts
