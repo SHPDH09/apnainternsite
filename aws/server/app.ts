@@ -20,6 +20,7 @@ import dataSelect from "../../api/data-select";
 import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
 import ensureBlogCms from "../../api/ensure-blog-cms";
 import ensureDashboardServiceKeys from "../../api/ensure-dashboard-service-keys";
+import ensureProjectReportTemplates from "../../api/ensure-project-report-templates";
 import ensurePartnerApplications from "../../api/ensure-partner-applications";
 import partnerApplicationSubmit from "../../api/partner-application-submit";
 import adminPartnerRegister from "../../api/admin-partner-register";
@@ -222,6 +223,7 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/bootstrap-grant-admin", handler: bootstrapGrantAdmin },
     { method: "post", path: "/api/ensure-blog-cms", handler: ensureBlogCms },
     { method: "post", path: "/api/ensure-dashboard-service-keys", handler: ensureDashboardServiceKeys },
+    { method: "post", path: "/api/ensure-project-report-templates", handler: ensureProjectReportTemplates },
     { method: "post", path: "/api/ensure-partner-applications", handler: ensurePartnerApplications },
     { method: "post", path: "/api/partner-application-submit", handler: partnerApplicationSubmit },
     { method: "post", path: "/api/admin-partner-register", handler: adminPartnerRegister },

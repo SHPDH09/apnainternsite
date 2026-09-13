@@ -106,9 +106,43 @@ export async function validateProjectReportPdfFile(file: File): Promise<void> {
   }
 }
 
+async function tryBootstrapProjectReportTemplates(client: SupabaseClient): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    const { data: sessionData } = await client.auth.getSession();
+    const token = sessionData.session?.access_token?.trim();
+    if (!token) return;
+    const origin = window.location.origin.replace(/\/$/, "");
+    await fetch(`${origin}/api/ensure-project-report-templates`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+  } catch {
+    /* optional bootstrap */
+  }
+}
+
+/** Create project_report_domain_templates on RDS when missing. Never throws. */
+export async function ensureProjectReportTemplatesTable(client: SupabaseClient): Promise<boolean> {
+  try {
+    await tryBootstrapProjectReportTemplates(client);
+    const { error } = await client
+      .from("project_report_domain_templates")
+      .select("id")
+      .limit(1);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchProjectReportDomainTemplates(
   client: SupabaseClient
 ): Promise<ProjectReportDomainTemplate[]> {
+  await ensureProjectReportTemplatesTable(client);
   const { data, error } = await client
     .from("project_report_domain_templates")
     .select("*")
@@ -163,6 +197,11 @@ export async function saveProjectReportDomainTemplate(
   if (!domainKey) throw new Error("Select a domain before uploading.");
 
   await validateProjectReportPdfFile(params.file);
+
+  const ready = await ensureProjectReportTemplatesTable(client);
+  if (!ready) {
+    throw new Error("Project report template storage is still initializing. Wait a moment and try again.");
+  }
 
   const existing = await fetchProjectReportDomainTemplate(client, domainName);
   if (existing?.template_pdf_path) {
