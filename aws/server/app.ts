@@ -165,16 +165,18 @@ async function buildApp(): Promise<Express> {
       console.warn("[project-report-bootstrap] startup ensure failed:", err);
     }
     if (process.env.AWS_LAMBDA_FUNCTION_NAME && process.env.RDS_APPLY_ON_START !== "false") {
-      try {
-        const { applyAllRdsSql } = await import("./rds-apply-all.js");
-        const applied = await applyAllRdsSql();
-        console.log("[rds-apply-all] Lambda cold-start apply:", {
-          applied: applied.applied,
-          warnings: applied.warnings,
-        });
-      } catch (err) {
-        console.warn("[rds-apply-all] Lambda cold-start apply failed:", err);
-      }
+      void (async () => {
+        try {
+          const { applyAllRdsSql } = await import("./rds-apply-all.js");
+          const applied = await applyAllRdsSql();
+          console.log("[rds-apply-all] Lambda cold-start apply:", {
+            applied: applied.applied,
+            warnings: applied.warnings,
+          });
+        } catch (err) {
+          console.warn("[rds-apply-all] Lambda cold-start apply failed:", err);
+        }
+      })();
     }
   }
 

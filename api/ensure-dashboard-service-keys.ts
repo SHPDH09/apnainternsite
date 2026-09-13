@@ -2,7 +2,7 @@
  * POST /api/ensure-dashboard-service-keys — create dashboard_service_keys on RDS.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { verifyToken } from "../aws/server/local-jwt.js";
+import { verifyBearerSession } from "./lib/verifyBearerSession.js";
 import { ensureDashboardServiceKeysTable } from "../aws/server/dashboard-service-keys-bootstrap.js";
 
 function bearer(req: VercelRequest): string | null {
@@ -28,8 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!token) {
     return res.status(401).json({ ok: false, message: "Authorization Bearer token required" });
   }
-  const payload = verifyToken(token);
-  if (!payload?.sub) {
+  const session = await verifyBearerSession(token);
+  if (!session?.sub) {
     return res.status(401).json({ ok: false, message: "Invalid or expired session" });
   }
 

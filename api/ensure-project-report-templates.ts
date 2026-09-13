@@ -2,7 +2,7 @@
  * POST /api/ensure-project-report-templates — create project_report_domain_templates on RDS.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { verifyToken } from "../aws/server/local-jwt.js";
+import { verifyBearerSession } from "./lib/verifyBearerSession.js";
 
 function bearer(req: VercelRequest): string | null {
   const h = req.headers.authorization || req.headers.Authorization;
@@ -27,8 +27,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!token) {
     return res.status(401).json({ ok: false, message: "Authorization Bearer token required" });
   }
-  const payload = verifyToken(token);
-  if (!payload?.sub) {
+  const session = await verifyBearerSession(token);
+  if (!session?.sub) {
     return res.status(401).json({ ok: false, message: "Invalid or expired session" });
   }
 
