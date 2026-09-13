@@ -1,9 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  pickWorkingStorageUrl,
-  publicStorageObjectUrl,
-  resolveStorageUrl,
-} from "@/lib/storageUrl";
+import { ensureAdminAuthSession } from "@/lib/adminAuthSession";
+import { publicStorageObjectUrl, resolveStorageUrl } from "@/lib/storageUrl";
 
 const BUCKET = "consent-forms";
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
@@ -70,6 +67,9 @@ export function normalizeProjectReportDomainKey(domain: string): string {
 
 export function formatProjectReportUploadError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err || "Upload failed.");
+  if (/invalid or expired session|jwt required|401|403/i.test(msg)) {
+    return "Your admin session expired. Refresh the page, sign in again, then retry the upload.";
+  }
   if (/does not exist|42P01|project_report_domain_templates/i.test(msg)) {
     return "Project report storage is still initializing. Wait a moment and try again.";
   }
@@ -106,60 +106,19 @@ export async function validateProjectReportPdfFile(file: File): Promise<void> {
   }
 }
 
-async function adminAuthHeaders(client: SupabaseClient): Promise<Record<string, string> | null> {
-  const { data: sessionData } = await client.auth.getSession();
-  const token = sessionData.session?.access_token?.trim();
-  if (!token) return null;
-  return {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  };
-}
-
-async function callSendMailAction(
-  client: SupabaseClient,
-  action: string,
-  payload?: Record<string, unknown>
-): Promise<{ ok: boolean; message?: string; row?: Record<string, unknown> }> {
-  if (typeof window === "undefined") return { ok: false, message: "Server unavailable." };
-  const headers = await adminAuthHeaders(client);
-  if (!headers) return { ok: false, message: "Sign in as admin and try again." };
-
-  const origin = window.location.origin.replace(/\/$/, "");
-  const res = await fetch(`${origin}/api/send-mail`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      action,
-      ...(payload ? { payload } : {}),
-    }),
-  });
-
-  const json = (await res.json().catch(() => ({}))) as {
-    success?: boolean;
-    ok?: boolean;
-    message?: string;
-    row?: Record<string, unknown>;
-  };
-
-  if (!res.ok || json.success === false) {
-    return {
-      ok: false,
-      message: json.message || `Request failed (${res.status}).`,
-    };
-  }
-
-  return { ok: true, row: json.row, message: json.message };
-}
-
 async function tryBootstrapProjectReportTemplates(client: SupabaseClient): Promise<boolean> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const result = await callSendMailAction(client, "ensure_project_report_templates");
-    if (result.ok) return true;
-    if (attempt === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 600));
+  await ensureAdminAuthSession(client, { extendWindow: true, attempts: 3 });
+
+  try {
+    const { error } = await client.rpc("admin_ensure_project_report_templates");
+    if (!error) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return true;
     }
+  } catch {
+    /* RPC may be unavailable until Lambda is redeployed */
   }
+
   return false;
 }
 
@@ -237,6 +196,13 @@ export async function saveProjectReportDomainTemplate(
 
   await validateProjectReportPdfFile(params.file);
 
+  const sessionOk = await ensureAdminAuthSession(client, { extendWindow: true, attempts: 4 });
+  if (!sessionOk) {
+    throw new Error("Your admin session expired. Refresh the page, sign in again, then retry the upload.");
+  }
+
+  await ensureProjectReportTemplatesTable(client);
+
   const existing = await fetchProjectReportDomainTemplate(client, domainName);
   if (existing?.template_pdf_path) {
     await client.storage.from(BUCKET).remove([existing.template_pdf_path]).catch(() => undefined);
@@ -263,44 +229,59 @@ export async function saveProjectReportDomainTemplate(
     pub.publicUrl;
   const publicUrl = `${String(cleanUrl).split("?")[0]}?v=${Date.now()}`;
 
-  const saveResult = await callSendMailAction(client, "save_project_report_template", {
-    domain_name: domainName,
-    domain_key: domainKey,
-    template_pdf_path: path,
-    template_pdf_url: publicUrl,
-    template_file_name: params.file.name,
-    updated_by: params.uploadedBy || null,
-  });
+  const { data, error } = await client
+    .from("project_report_domain_templates")
+    .upsert(
+      {
+        domain_name: domainName,
+        domain_key: domainKey,
+        template_pdf_path: path,
+        template_pdf_url: publicUrl,
+        template_file_name: params.file.name,
+        updated_by: params.uploadedBy || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "domain_key" }
+    )
+    .select("*")
+    .single();
 
-  let saved: ProjectReportDomainTemplate;
-  if (saveResult.ok && saveResult.row) {
-    saved = rowToTemplate(saveResult.row);
-  } else {
-    const { data, error } = await client
-      .from("project_report_domain_templates")
-      .upsert(
-        {
-          domain_name: domainName,
-          domain_key: domainKey,
-          template_pdf_path: path,
-          template_pdf_url: publicUrl,
-          template_file_name: params.file.name,
-          updated_by: params.uploadedBy || null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "domain_key" }
-      )
-      .select("*")
-      .single();
-    if (error) {
-      throw new Error(
-        saveResult.message ||
-          error.message ||
-          "Project report template storage is still initializing. Wait a moment and try again."
-      );
+  if (error) {
+    if (/does not exist|42P01/i.test(error.message)) {
+      await tryBootstrapProjectReportTemplates(client);
+      const retry = await client
+        .from("project_report_domain_templates")
+        .upsert(
+          {
+            domain_name: domainName,
+            domain_key: domainKey,
+            template_pdf_path: path,
+            template_pdf_url: publicUrl,
+            template_file_name: params.file.name,
+            updated_by: params.uploadedBy || null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "domain_key" }
+        )
+        .select("*")
+        .single();
+      if (retry.error) {
+        throw new Error(
+          retry.error.message ||
+            "Project report template storage is still initializing. Wait a moment and try again."
+        );
+      }
+      const saved = rowToTemplate(retry.data as Record<string, unknown>);
+      const verifyBytes = await resolveTemplatePdfBytes(saved).catch(() => null);
+      if (!verifyBytes || verifyBytes.byteLength < 100) {
+        throw new Error("Uploaded PDF could not be verified. Please try uploading again.");
+      }
+      return saved;
     }
-    saved = rowToTemplate(data as Record<string, unknown>);
+    throw new Error(error.message || "Project report template upload failed.");
   }
+
+  const saved = rowToTemplate(data as Record<string, unknown>);
 
   const verifyBytes = await resolveTemplatePdfBytes(saved).catch(() => null);
   if (!verifyBytes || verifyBytes.byteLength < 100) {
