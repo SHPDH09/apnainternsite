@@ -118,11 +118,11 @@ async function tryBootstrapProjectReportTemplates(client: SupabaseClient): Promi
       "Content-Type": "application/json",
     };
     for (const [url, body] of [
-      [`${origin}/api/ensure-project-report-templates`, undefined],
       [
         `${origin}/api/send-mail`,
         JSON.stringify({ action: "ensure_project_report_templates" }),
       ],
+      [`${origin}/api/ensure-project-report-templates`, undefined],
     ] as const) {
       try {
         const res = await fetch(url, {
