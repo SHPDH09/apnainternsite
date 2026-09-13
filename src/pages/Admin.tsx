@@ -135,6 +135,7 @@ import { ClassLinkManagementPanel } from "@/components/admin/ClassLinkManagement
 import { NotificationManagementPanel } from "@/components/admin/NotificationManagementPanel";
 import { AssignmentManagementPanel } from "@/components/admin/AssignmentManagementPanel";
 import { LearningMaterialsPanel } from "@/components/admin/LearningMaterialsPanel";
+import { AutoGenerateProjectReportPanel } from "@/components/admin/AutoGenerateProjectReportPanel";
 import { CertificateManagementPanel } from "@/components/admin/CertificateManagementPanel";
 import { EngineeringDirectoryPanel } from "@/components/admin/EngineeringDirectoryPanel";
 import { StaffManagementPanel } from "@/components/admin/StaffManagementPanel";
@@ -3534,6 +3535,15 @@ Apna Intern Team`;
                 currentUserId={currentUserId}
                 isActive={activeTab === "uploads"}
                 studentsForTargeting={allStudentsComms}
+              />
+            </TabsContent>
+
+            <TabsContent value="project-report-generate">
+              <AutoGenerateProjectReportPanel
+                unis={unis}
+                domains={domains}
+                currentUserId={currentUserId}
+                isActive={activeTab === "project-report-generate"}
               />
             </TabsContent>
 
