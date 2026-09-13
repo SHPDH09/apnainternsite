@@ -3,7 +3,6 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { verifyToken } from "../aws/server/local-jwt.js";
-import { ensureProjectReportSchema } from "../aws/server/project-report-bootstrap.js";
 
 function bearer(req: VercelRequest): string | null {
   const h = req.headers.authorization || req.headers.Authorization;
@@ -41,6 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const { ensureProjectReportSchema } = await import("../aws/server/project-report-bootstrap.js");
     const result = await ensureProjectReportSchema();
     return res.status(200).json({
       ok: true,
