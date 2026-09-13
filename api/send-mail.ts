@@ -489,13 +489,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!tokenMatch) {
         return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
       }
-      try {
-        const { verifyToken } = await import('../aws/server/local-jwt.js');
-        const payload = verifyToken(tokenMatch[1]);
-        if (!payload?.sub) {
-          return res.status(401).json({ success: false, message: 'Invalid or expired session' });
-        }
-      } catch {
+      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
+      const session = await verifyBearerSession(tokenMatch[1]);
+      if (!session?.sub) {
         return res.status(401).json({ success: false, message: 'Invalid or expired session' });
       }
       try {
@@ -523,17 +519,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!tokenMatch) {
         return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
       }
-      let adminUserId = '';
-      try {
-        const { verifyToken } = await import('../aws/server/local-jwt.js');
-        const payload = verifyToken(tokenMatch[1]);
-        if (!payload?.sub) {
-          return res.status(401).json({ success: false, message: 'Invalid or expired session' });
-        }
-        adminUserId = String(payload.sub);
-      } catch {
+      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
+      const session = await verifyBearerSession(tokenMatch[1]);
+      if (!session?.sub) {
         return res.status(401).json({ success: false, message: 'Invalid or expired session' });
       }
+      const adminUserId = session.sub;
       if (!process.env.DATABASE_URL?.trim()) {
         return res.status(503).json({
           success: false,

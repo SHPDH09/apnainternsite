@@ -109,14 +109,39 @@ export async function validateProjectReportPdfFile(file: File): Promise<void> {
 async function tryBootstrapProjectReportTemplates(client: SupabaseClient): Promise<boolean> {
   await ensureAdminAuthSession(client, { extendWindow: true, attempts: 3 });
 
+  const recheckTable = async (): Promise<boolean> => {
+    const { error } = await client.from("project_report_domain_templates").select("id").limit(1);
+    return !error;
+  };
+
   try {
     const { error } = await client.rpc("admin_ensure_project_report_templates");
     if (!error) {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      return true;
+      if (await recheckTable()) return true;
     }
   } catch {
     /* RPC may be unavailable until Lambda is redeployed */
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const { data: sessionData } = await client.auth.getSession();
+      const token = sessionData.session?.access_token?.trim();
+      if (token) {
+        const origin = window.location.origin.replace(/\/$/, "");
+        const res = await fetch(`${origin}/api/ensure-project-report-templates`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        });
+        if (res.ok) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          if (await recheckTable()) return true;
+        }
+      }
+    } catch {
+      /* optional Vercel bootstrap */
+    }
   }
 
   return false;
