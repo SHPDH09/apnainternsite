@@ -31,7 +31,7 @@ const ALLOWED_TABLES = new Set([
   "attendance",
   "classes",
   "learning_materials",
-  "project_report_settings",
+  "project_report_domain_templates",
   "admin_staff",
   "admin_permissions",
   "notifications",

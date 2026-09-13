@@ -1,8 +1,8 @@
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
 import {
   DEFAULT_PROJECT_REPORT_FIELD_LAYOUT,
+  type ProjectReportDomainTemplate,
   type ProjectReportFieldLayout,
-  type ProjectReportSettings,
   resolveTemplatePdfBytes,
   resolveUniversityLogoBytes,
 } from "@/lib/projectReportSettings";
@@ -11,7 +11,6 @@ import {
   type ProjectReportDomainSection,
   type ProjectReportMode,
 } from "@/lib/projectReportDomainContent";
-import { downloadHtmlDocumentPdf } from "@/lib/studentDocumentPdf";
 
 export type ProjectReportGenerateInput = {
   universityName: string;
@@ -68,7 +67,12 @@ function drawLines(
   return y;
 }
 
-function buildDomainContentLines(section: ProjectReportDomainSection, font: PDFFont, layoutWidth: number, size: number): string[] {
+function buildDomainContentLines(
+  section: ProjectReportDomainSection,
+  font: PDFFont,
+  layoutWidth: number,
+  size: number
+): string[] {
   const maxWidth = layoutWidth;
   const out: string[] = [];
   const pushBlock = (heading: string, body: string) => {
@@ -80,14 +84,8 @@ function buildDomainContentLines(section: ProjectReportDomainSection, font: PDFF
   pushBlock("2. Objectives", section.objectives.map((o, i) => `${i + 1}. ${o}`).join(" "));
   pushBlock("3. Scope", section.scope);
   pushBlock("4. Methodology", section.methodology);
-  pushBlock(
-    "5. Tools & Technologies",
-    section.toolsTechnologies.join(", ")
-  );
-  pushBlock(
-    "6. Expected Outcomes",
-    section.expectedOutcomes.map((o, i) => `${i + 1}. ${o}`).join(" ")
-  );
+  pushBlock("5. Tools & Technologies", section.toolsTechnologies.join(", "));
+  pushBlock("6. Expected Outcomes", section.expectedOutcomes.map((o, i) => `${i + 1}. ${o}`).join(" "));
   pushBlock("7. Conclusion", section.conclusion);
   return out.filter((l, i, arr) => !(l === "" && arr[i + 1] === ""));
 }
@@ -96,7 +94,8 @@ async function overlayDynamicFields(
   pdfDoc: PDFDocument,
   input: ProjectReportGenerateInput,
   layout: ProjectReportFieldLayout,
-  logoBytes: Uint8Array | null
+  logoBytes: Uint8Array | null,
+  options: { fromDomainTemplate: boolean }
 ) {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -127,6 +126,22 @@ async function overlayDynamicFields(
     drawLines(namePage, fontBold, nameLines, nameLayout.x, nameLayout.y, nameLayout.size, nameLayout.size + 4);
   }
 
+  const modeLayout = layout.mode || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.mode!;
+  const modePage = pages[modeLayout.page] || pages[0];
+  if (modePage) {
+    modePage.drawText(`Mode: ${input.mode}`, {
+      x: modeLayout.x,
+      y: modeLayout.y,
+      size: modeLayout.size,
+      font: fontBold,
+      color: rgb(0.12, 0.25, 0.55),
+    });
+  }
+
+  if (options.fromDomainTemplate) {
+    return;
+  }
+
   const domainLayout = layout.domain || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.domain!;
   const domainPage = pages[domainLayout.page] || pages[0];
   if (domainPage) {
@@ -142,18 +157,6 @@ async function overlayDynamicFields(
       y: domainLayout.y - 16,
       size: domainLayout.size,
       font,
-    });
-  }
-
-  const modeLayout = layout.mode || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.mode!;
-  const modePage = pages[modeLayout.page] || pages[0];
-  if (modePage) {
-    modePage.drawText(`Mode: ${input.mode}`, {
-      x: modeLayout.x,
-      y: modeLayout.y,
-      size: modeLayout.size,
-      font: fontBold,
-      color: rgb(0.12, 0.25, 0.55),
     });
   }
 
@@ -173,19 +176,21 @@ async function overlayDynamicFields(
   }
 }
 
-/** Generate PDF from uploaded template + dynamic overlays. Falls back to HTML render when no template. */
+/** Generate PDF from domain template + university/mode overlays. Falls back to HTML when no template. */
 export async function generateProjectReportPdfBlob(
-  settings: ProjectReportSettings | null,
+  domainTemplate: ProjectReportDomainTemplate | null,
   input: ProjectReportGenerateInput,
   htmlFallbackElement?: HTMLElement | null
 ): Promise<Blob> {
-  const templateBytes = settings ? await resolveTemplatePdfBytes(settings).catch(() => null) : null;
+  const templateBytes = domainTemplate
+    ? await resolveTemplatePdfBytes(domainTemplate).catch(() => null)
+    : null;
   const logoBytes = await resolveUniversityLogoBytes(input.universityLogoUrl);
-  const layout = settings?.field_layout || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT;
+  const layout = domainTemplate?.field_layout || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT;
 
   if (templateBytes) {
     const pdfDoc = await PDFDocument.load(templateBytes);
-    await overlayDynamicFields(pdfDoc, input, layout, logoBytes);
+    await overlayDynamicFields(pdfDoc, input, layout, logoBytes, { fromDomainTemplate: true });
     const bytes = await pdfDoc.save();
     return new Blob([bytes], { type: "application/pdf" });
   }
@@ -234,15 +239,15 @@ export async function generateProjectReportPdfBlob(
     }
   }
 
-  throw new Error("Upload a project report template PDF or use preview to generate.");
+  throw new Error(`Upload a project report template for "${input.domain}" first.`);
 }
 
 export async function downloadProjectReportPdf(
-  settings: ProjectReportSettings | null,
+  domainTemplate: ProjectReportDomainTemplate | null,
   input: ProjectReportGenerateInput,
   htmlFallbackElement?: HTMLElement | null
 ): Promise<void> {
-  const blob = await generateProjectReportPdfBlob(settings, input, htmlFallbackElement);
+  const blob = await generateProjectReportPdfBlob(domainTemplate, input, htmlFallbackElement);
   const safeUni = input.universityName.replace(/[^\w.-]+/g, "_").slice(0, 40);
   const safeDomain = input.domain.replace(/[^\w.-]+/g, "_").slice(0, 30);
   const filename = `Project_Report_${safeUni}_${safeDomain}.pdf`;
@@ -255,12 +260,10 @@ export async function downloadProjectReportPdf(
 }
 
 export async function previewProjectReportPdfUrl(
-  settings: ProjectReportSettings | null,
+  domainTemplate: ProjectReportDomainTemplate | null,
   input: ProjectReportGenerateInput,
   htmlFallbackElement?: HTMLElement | null
 ): Promise<string> {
-  const blob = await generateProjectReportPdfBlob(settings, input, htmlFallbackElement);
+  const blob = await generateProjectReportPdfBlob(domainTemplate, input, htmlFallbackElement);
   return URL.createObjectURL(blob);
 }
-
-export { downloadHtmlDocumentPdf };

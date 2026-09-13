@@ -22,6 +22,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Download,
   ExternalLink,
   Eye,
@@ -32,9 +40,10 @@ import {
 } from "lucide-react";
 import { resolveStorageUrl } from "@/lib/storageUrl";
 import {
-  fetchProjectReportSettings,
-  saveProjectReportTemplate,
-  type ProjectReportSettings,
+  fetchProjectReportDomainTemplate,
+  fetchProjectReportDomainTemplates,
+  saveProjectReportDomainTemplate,
+  type ProjectReportDomainTemplate,
 } from "@/lib/projectReportSettings";
 import {
   PROJECT_REPORT_MODES,
@@ -75,22 +84,18 @@ export function AutoGenerateProjectReportPanel({
   const templateInputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
 
-  const [settings, setSettings] = useState<ProjectReportSettings | null>(null);
-  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [domainTemplates, setDomainTemplates] = useState<ProjectReportDomainTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [uploadDomain, setUploadDomain] = useState("");
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
-  const [generating, setGenerating] = useState(false);
 
   const [universityId, setUniversityId] = useState("");
-  const [domain, setDomain] = useState("");
+  const [generateDomain, setGenerateDomain] = useState("");
   const [mode, setMode] = useState<ProjectReportMode>("Online");
+  const [generating, setGenerating] = useState(false);
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  const selectedUniversity = useMemo(
-    () => unis.find((u) => u.id === universityId) || null,
-    [unis, universityId]
-  );
 
   const domainOptions = useMemo(() => {
     const names = new Set<string>();
@@ -101,34 +106,54 @@ export function AutoGenerateProjectReportPanel({
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [domains]);
 
+  const templateByDomain = useMemo(() => {
+    const map = new Map<string, ProjectReportDomainTemplate>();
+    for (const row of domainTemplates) {
+      map.set(row.domain_name.toLowerCase(), row);
+      map.set(row.domain_key, row);
+    }
+    return map;
+  }, [domainTemplates]);
+
+  const selectedUniversity = useMemo(
+    () => unis.find((u) => u.id === universityId) || null,
+    [unis, universityId]
+  );
+
+  const selectedDomainTemplate = useMemo(() => {
+    const key = generateDomain.trim().toLowerCase();
+    if (!key) return null;
+    return templateByDomain.get(key) || null;
+  }, [generateDomain, templateByDomain]);
+
   const generateInput = useMemo<ProjectReportGenerateInput | null>(() => {
-    if (!selectedUniversity || !domain.trim()) return null;
+    if (!selectedUniversity || !generateDomain.trim()) return null;
     return {
       universityName: selectedUniversity.name,
       universityLogoUrl: selectedUniversity.logo_url,
-      domain: domain.trim(),
+      domain: generateDomain.trim(),
       mode,
     };
-  }, [selectedUniversity, domain, mode]);
+  }, [selectedUniversity, generateDomain, mode]);
 
-  const canGenerate = !!generateInput && (!!settings?.template_pdf_url || true);
+  const canGenerate = !!generateInput && !!selectedDomainTemplate?.template_pdf_url;
 
-  const loadSettings = useCallback(async () => {
-    setLoadingSettings(true);
+  const loadTemplates = useCallback(async () => {
+    setLoadingTemplates(true);
     try {
-      const row = await fetchProjectReportSettings(supabase);
-      setSettings(row);
+      const rows = await fetchProjectReportDomainTemplates(supabase);
+      setDomainTemplates(rows);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load template settings.";
+      const msg = err instanceof Error ? err.message : "Failed to load domain templates.";
       toast.error(msg);
     } finally {
-      setLoadingSettings(false);
+      setLoadingTemplates(false);
     }
   }, []);
 
   useEffect(() => {
-    if (isActive) void loadSettings();
-  }, [isActive, loadSettings]);
+    if (isActive) void loadTemplates();
+  }, [isActive, loadTemplates]);
 
   useEffect(() => {
     return () => {
@@ -149,18 +174,26 @@ export function AutoGenerateProjectReportPanel({
 
   const handleTemplateUpload = async (file: File | null) => {
     if (!file) return;
+    if (!uploadDomain.trim()) {
+      toast.error("Select a domain before uploading the project template.");
+      return;
+    }
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
       toast.error("Please upload a PDF file.");
       return;
     }
     setUploadingTemplate(true);
     try {
-      const saved = await saveProjectReportTemplate(supabase, {
+      const saved = await saveProjectReportDomainTemplate(supabase, {
+        domain: uploadDomain,
         file,
         uploadedBy: currentUserId,
       });
-      setSettings(saved);
-      toast.success("Project report template uploaded.");
+      setDomainTemplates((prev) => {
+        const next = prev.filter((r) => r.domain_key !== saved.domain_key);
+        return [...next, saved].sort((a, b) => a.domain_name.localeCompare(b.domain_name));
+      });
+      toast.success(`Project template saved for ${saved.domain_name}.`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Template upload failed.";
       toast.error(msg);
@@ -168,6 +201,12 @@ export function AutoGenerateProjectReportPanel({
       setUploadingTemplate(false);
       if (templateInputRef.current) templateInputRef.current.value = "";
     }
+  };
+
+  const resolveTemplateForGenerate = async (): Promise<ProjectReportDomainTemplate | null> => {
+    if (selectedDomainTemplate) return selectedDomainTemplate;
+    if (!generateDomain.trim()) return null;
+    return fetchProjectReportDomainTemplate(supabase, generateDomain);
   };
 
   const runGenerate = async (action: "preview" | "download") => {
@@ -178,16 +217,22 @@ export function AutoGenerateProjectReportPanel({
 
     setGenerating(true);
     try {
+      const template = await resolveTemplateForGenerate();
+      if (!template?.template_pdf_url) {
+        toast.error(`Upload a project report template for "${generateDomain}" first.`);
+        return;
+      }
+
       const htmlEl = previewRef.current;
       if (action === "preview") {
         revokePreviewUrl();
-        const url = await previewProjectReportPdfUrl(settings, generateInput, htmlEl);
+        const url = await previewProjectReportPdfUrl(template, generateInput, htmlEl);
         previewUrlRef.current = url;
         setPreviewUrl(url);
         setPreviewOpen(true);
-        toast.success("Report generated. Preview ready.");
+        toast.success("Report generated with selected university and domain template.");
       } else {
-        await downloadProjectReportPdf(settings, generateInput, htmlEl);
+        await downloadProjectReportPdf(template, generateInput, htmlEl);
         toast.success("Report downloaded.");
       }
     } catch (err) {
@@ -210,92 +255,138 @@ export function AutoGenerateProjectReportPanel({
           Auto Generate Project Report
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Upload a standard project report PDF template, then generate university-specific reports
-          with dynamic name, logo, domain, and mode fields.
+          Step 1: upload a project report PDF <strong>domain-wise</strong>. Step 2: select a
+          university and generate — the chosen domain&apos;s project template is used with that
+          university&apos;s name, logo, and selected mode.
         </p>
       </div>
 
       <Card className="p-6 border-none shadow-elegant space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold">Report Template</h3>
+            <Badge variant="outline" className="mb-2">
+              Step 1
+            </Badge>
+            <h3 className="text-lg font-bold">Domain-wise Project Template Upload</h3>
             <p className="text-sm text-muted-foreground">
-              Upload or replace the master PDF template. Format and static content stay unchanged;
-              only dynamic fields are overlaid at generation time.
+              Each domain gets its own project report PDF (Web Development, Data Science, etc.).
+              Upload once per domain; replace anytime.
             </p>
           </div>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => void loadSettings()}
-            disabled={loadingSettings}
+            onClick={() => void loadTemplates()}
+            disabled={loadingTemplates}
           >
-            <RefreshCw className={`size-4 mr-1.5 ${loadingSettings ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-4 mr-1.5 ${loadingTemplates ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
 
-        {loadingSettings ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Loading template settings…
+        <div className="grid md:grid-cols-2 gap-4 items-end">
+          <div className="space-y-1.5">
+            <Label>Select Domain for Upload</Label>
+            <Select value={uploadDomain} onValueChange={setUploadDomain}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose domain" />
+              </SelectTrigger>
+              <SelectContent>
+                {domainOptions.map((name) => (
+                  <SelectItem key={`upload-${name}`} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        ) : settings?.template_pdf_url ? (
-          <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/20 p-4">
-            <Badge variant="secondary" className="font-semibold">
-              Template active
-            </Badge>
-            <span className="text-sm font-medium">{settings.template_file_name || "Project_Report_Template.pdf"}</span>
-            {settings.updated_at ? (
-              <span className="text-xs text-muted-foreground">
-                Updated {new Date(settings.updated_at).toLocaleString("en-IN")}
-              </span>
-            ) : null}
-            <Button type="button" variant="ghost" size="sm" asChild className="ml-auto">
-              <a href={settings.template_pdf_url} target="_blank" rel="noreferrer">
-                <ExternalLink className="size-4 mr-1" />
-                View template
-              </a>
-            </Button>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-amber-300/80 bg-amber-50/50 p-4 text-sm text-amber-900">
-            No template uploaded yet. Reports will use the built-in HTML layout until you upload a
-            PDF template.
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5 min-w-[240px] flex-1">
-            <Label htmlFor="project-report-template">Upload Project Report Template (PDF)</Label>
+          <div className="flex flex-wrap gap-2">
             <Input
-              id="project-report-template"
               ref={templateInputRef}
               type="file"
               accept="application/pdf,.pdf"
-              disabled={uploadingTemplate}
+              disabled={uploadingTemplate || !uploadDomain}
               className="hidden"
               onChange={(e) => void handleTemplateUpload(e.target.files?.[0] || null)}
             />
+            <Button
+              type="button"
+              disabled={uploadingTemplate || !uploadDomain}
+              onClick={() => templateInputRef.current?.click()}
+            >
+              {uploadingTemplate ? (
+                <Loader2 className="size-4 mr-2 animate-spin" />
+              ) : (
+                <UploadCloud className="size-4 mr-2" />
+              )}
+              {uploadDomain && templateByDomain.has(uploadDomain.toLowerCase())
+                ? "Replace Domain Template"
+                : "Upload Domain Template"}
+            </Button>
           </div>
-          <Button
-            type="button"
-            disabled={uploadingTemplate}
-            onClick={() => templateInputRef.current?.click()}
-          >
-            {uploadingTemplate ? (
-              <Loader2 className="size-4 mr-2 animate-spin" />
-            ) : (
-              <UploadCloud className="size-4 mr-2" />
-            )}
-            {settings?.template_pdf_url ? "Replace Template" : "Upload Template"}
-          </Button>
         </div>
+
+        {loadingTemplates ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading domain templates…
+          </div>
+        ) : domainTemplates.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-amber-300/80 bg-amber-50/50 p-4 text-sm text-amber-900">
+            No domain templates uploaded yet. Select a domain above and upload its project report
+            PDF.
+          </div>
+        ) : (
+          <div className="rounded-xl border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Domain</TableHead>
+                  <TableHead>Template File</TableHead>
+                  <TableHead>Updated</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {domainTemplates.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="font-medium">{row.domain_name}</TableCell>
+                    <TableCell>{row.template_file_name || "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {row.updated_at
+                        ? new Date(row.updated_at).toLocaleString("en-IN")
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {row.template_pdf_url ? (
+                        <Button type="button" variant="ghost" size="sm" asChild>
+                          <a href={row.template_pdf_url} target="_blank" rel="noreferrer">
+                            <ExternalLink className="size-4 mr-1" />
+                            View
+                          </a>
+                        </Button>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </Card>
 
       <Card className="p-6 border-none shadow-elegant space-y-5">
-        <h3 className="text-lg font-bold">Generate Report</h3>
+        <div>
+          <Badge variant="outline" className="mb-2">
+            Step 2
+          </Badge>
+          <h3 className="text-lg font-bold">University-wise Report Generate</h3>
+          <p className="text-sm text-muted-foreground">
+            Pick university + domain + mode. The report uses the uploaded template for that domain,
+            with the selected university name, logo, and mode applied automatically.
+          </p>
+        </div>
 
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
           <div className="space-y-1.5">
@@ -316,16 +407,20 @@ export function AutoGenerateProjectReportPanel({
 
           <div className="space-y-1.5">
             <Label>Select Domain</Label>
-            <Select value={domain} onValueChange={setDomain}>
+            <Select value={generateDomain} onValueChange={setGenerateDomain}>
               <SelectTrigger>
                 <SelectValue placeholder="Choose domain" />
               </SelectTrigger>
               <SelectContent>
-                {domainOptions.map((name) => (
-                  <SelectItem key={name} value={name}>
-                    {name}
-                  </SelectItem>
-                ))}
+                {domainOptions.map((name) => {
+                  const hasTemplate = templateByDomain.has(name.toLowerCase());
+                  return (
+                    <SelectItem key={`gen-${name}`} value={name}>
+                      {name}
+                      {hasTemplate ? "" : " (no template)"}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
@@ -356,17 +451,24 @@ export function AutoGenerateProjectReportPanel({
                 <span className="text-[10px] text-muted-foreground text-center px-1">No logo</span>
               )}
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold uppercase text-muted-foreground">University</p>
               <p className="text-base font-bold">{selectedUniversity.name}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Logo {logoSrc ? "loaded automatically" : "not available for this university"}
+                Logo {logoSrc ? "loaded automatically" : "not available"}
               </p>
             </div>
-            {domain ? (
-              <Badge variant="outline" className="ml-auto">
-                {domain} · {mode}
-              </Badge>
+            {generateDomain ? (
+              <div className="text-right">
+                <Badge variant={selectedDomainTemplate ? "secondary" : "destructive"}>
+                  {generateDomain} · {mode}
+                </Badge>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {selectedDomainTemplate
+                    ? "Domain template ready"
+                    : "Upload template for this domain in Step 1"}
+                </p>
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -405,7 +507,6 @@ export function AutoGenerateProjectReportPanel({
         </div>
       </Card>
 
-      {/* Hidden HTML document for fallback PDF generation */}
       <div className="sr-only" aria-hidden="true">
         {generateInput ? (
           <ProjectReportPreviewDocument ref={previewRef} {...generateInput} />
@@ -430,7 +531,7 @@ export function AutoGenerateProjectReportPanel({
           <DialogHeader>
             <DialogTitle>Project Report Preview</DialogTitle>
             <DialogDescription>
-              {selectedUniversity?.name || "University"} · {domain || "Domain"} · {mode}
+              {selectedUniversity?.name || "University"} · {generateDomain || "Domain"} · {mode}
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 min-h-0 rounded-lg border bg-muted/20 overflow-hidden">
