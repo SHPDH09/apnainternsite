@@ -514,6 +514,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    if (normalizedAction === 'ensure_project_report_templates') {
+      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
+      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) {
+        return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
+      }
+      try {
+        const { verifyToken } = await import('../aws/server/local-jwt.js');
+        const payload = verifyToken(tokenMatch[1]);
+        if (!payload?.sub) {
+          return res.status(401).json({ success: false, message: 'Invalid or expired session' });
+        }
+      } catch {
+        return res.status(401).json({ success: false, message: 'Invalid or expired session' });
+      }
+      if (!process.env.DATABASE_URL?.trim()) {
+        return res.status(503).json({
+          success: false,
+          message: 'DATABASE_URL is not configured on this deployment',
+        });
+      }
+      try {
+        const { ensureProjectReportSchema } = await import('../aws/server/project-report-bootstrap.js');
+        const result = await ensureProjectReportSchema();
+        return res.status(200).json({
+          success: true,
+          ok: true,
+          table: 'project_report_domain_templates',
+          applied: result.applied,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail ensure_project_report_templates]', message);
+        return res.status(500).json({ success: false, message });
+      }
+    }
+
     if (normalizedAction === 'otp_deliver' || normalizedAction === 'request_otp') {
       const recipient = String(to || email || '').trim().toLowerCase();
       if (!recipient.includes('@')) {
