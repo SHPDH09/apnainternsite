@@ -77,8 +77,12 @@ export async function sendOtpViaHostinger(
   purpose: OtpPurpose
 ): Promise<void> {
   const pass = normalizeWorkerSmtpPassword(env.SMTP_PASS || "");
-  const user = String(env.SMTP_USER || "info@apnaintern.in").trim();
-  const host = String(env.SMTP_HOST || "smtp.hostinger.com").trim();
+  const user = String(
+    env.SMTP_USER || "inp-3u5sedrqj7kqwjazxwmph2th",
+  ).trim();
+  const host = String(
+    env.SMTP_HOST || "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com",
+  ).trim();
   const port = Number(env.SMTP_PORT || 587);
   const fromAddress = String(env.MAIL_FROM_ADDRESS || "info@apnaintern.in").trim();
 
