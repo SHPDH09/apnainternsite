@@ -247,6 +247,11 @@ function isSmtpAuthError(e: unknown): boolean {
   return raw.includes('535') || raw.includes('authentication credentials invalid') || raw.includes('invalid login');
 }
 
+function isHostingerOutboundDisabled(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return raw.includes('554') && raw.includes('outbound sending is disabled');
+}
+
 function isSesSandboxError(e: unknown): boolean {
   const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
   return (
@@ -364,19 +369,41 @@ async function collectSmtpCandidatesForOtp(): Promise<SmtpCreds[]> {
   return smtpCandidates;
 }
 
-async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<OtpSendResult> {
-  const mail = buildOtpMail(otp, purpose);
-  const errors: string[] = [];
-
-  // Hostinger mailbox only — Mail Manager accepts mail but often never reaches the inbox.
-  for (const creds of await collectSmtpCandidatesForOtp()) {
+async function trySmtpCandidates(
+  credsList: SmtpCreds[],
+  email: string,
+  mail: { subject: string; html: string; text: string },
+  errors: string[]
+): Promise<OtpSendResult | null> {
+  for (const creds of credsList) {
     try {
       const messageId = await sendOtpViaSmtpWithCreds(email, mail, creds);
       return { messageId, channel: 'smtp' };
     } catch (smtpErr) {
       errors.push(`SMTP(${creds.host}): ${smtpErr instanceof Error ? smtpErr.message : String(smtpErr)}`);
-      if (!isSmtpAuthError(smtpErr)) continue;
+      if (isSmtpAuthError(smtpErr)) break;
     }
+  }
+  return null;
+}
+
+async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<OtpSendResult> {
+  const mail = buildOtpMail(otp, purpose);
+  const errors: string[] = [];
+
+  // Prefer Hostinger mailbox; fall back to Mail Manager when Hostinger outbound is disabled.
+  const hostingerResult = await trySmtpCandidates(
+    await collectSmtpCandidatesForOtp(),
+    email,
+    mail,
+    errors
+  );
+  if (hostingerResult) return hostingerResult;
+
+  const hostingerBlocked = errors.some(isHostingerOutboundDisabled);
+  if (hostingerBlocked || errors.length > 0) {
+    const relayResult = await trySmtpCandidates([mailManagerSmtpCreds()], email, mail, errors);
+    if (relayResult) return relayResult;
   }
 
   if (canUseSesApi()) {
@@ -396,7 +423,7 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
 
   throw new Error(
     errors.join(' | ') ||
-      'Failed to send verification email via Hostinger (info@apnaintern.in). Check SMTP_PASS on Vercel.'
+      'Failed to send verification email. Enable Hostinger outbound SMTP or check Mail Manager relay on Vercel.'
   );
 }
 
@@ -438,7 +465,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       emailSent: true,
       email,
       channel: delivery.channel,
-      smtpProvider: 'hostinger',
+      smtpProvider: delivery.channel === 'smtp' ? 'smtp' : delivery.channel,
       sesSandboxLimited: delivery.sesSandboxLimited ?? false,
       message: `Verification code sent to ${email} from info@apnaintern.in. Check Inbox and Spam/Promotions.${sandboxNote}`,
       messageId: delivery.messageId,
