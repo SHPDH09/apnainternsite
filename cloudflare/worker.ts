@@ -1,6 +1,6 @@
 /**
  * Cloudflare Worker — proxy /auth, /rest, /storage, /functions, /api to AWS Lambda.
- * OTP mail is relayed to Vercel (/api/otp-deliver) for Hostinger SMTP + real messageId.
+ * OTP mail is relayed to Vercel (/api/otp-deliver) for Amazon SES SMTP delivery.
  */
 
 import { tryHandleOtpDeliver } from "./otpDeliver";

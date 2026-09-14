@@ -20,13 +20,6 @@ not_found_handling = "single-page-application"
 [vars]
 LAMBDA_ORIGIN = "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com"
 LAMBDA_STAGE = "staging"
-SMTP_HOST = "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com"
-SMTP_PORT = "587"
-SMTP_USER = "inp-3u5sedrqj7kqwjazxwmph2th"
-SMTP_PASS = "Raunak@12583"
 MAIL_FROM_ADDRESS = "info@apnaintern.in"
-# Vercel SMTP fallback when Worker secret SMTP_PASS is not set (OTP still delivers).
+# OTP is relayed to Vercel (Amazon SES SMTP). Do not send from the Worker — Mail Manager dropped mail.
 VERCEL_MAIL_ORIGIN = "https://apnainternsite.vercel.app"
-# Set SMTP_PASS as a Worker SECRET (not here): Cloudflare dashboard → Workers → apnainternsite
-# → Settings → Variables → Encrypt → SMTP_PASS = your mail app password
-# Optional Hostinger: SMTP_HOST=smtp.hostinger.com SMTP_USER=info@apnaintern.in

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 
 /** Self-contained OTP deliver — no api/lib or aws/* imports (Vercel safe). */
 type OtpPurpose = 'login' | 'password_reset' | 'security';
@@ -22,9 +22,8 @@ const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
 const HOSTINGER_SMTP_HOST = 'smtp.hostinger.com';
 const HOSTINGER_SMTP_USER = 'info@apnaintern.in';
 const DEFAULT_SMTP_PASS = 'Raunak@12583';
-const MAIL_MANAGER_SMTP_HOST =
-  'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
-const MAIL_MANAGER_SMTP_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+const SES_SMTP_HOST = 'email-smtp.ap-south-1.amazonaws.com';
+const SES_SMTP_USER = 'AKIAUP3VMJBI563S3RNY';
 
 const RDS_REST =
   process.env.RDS_REST_URL?.trim() ||
@@ -82,12 +81,35 @@ function hostingerSmtpCreds(): SmtpCreds {
   };
 }
 
-function mailManagerSmtpCreds(): SmtpCreds {
+/** Derive Amazon SES SMTP password from IAM secret (SigV4 SendRawEmail). */
+function deriveSesSmtpPassword(secretAccessKey: string, region = 'ap-south-1'): string {
+  const version = Buffer.from([0x04]);
+  const kDate = createHmac('sha256', `AWS4${secretAccessKey}`).update('11111111').digest();
+  const kRegion = createHmac('sha256', kDate).update(region).digest();
+  const kService = createHmac('sha256', kRegion).update('ses').digest();
+  const kSigning = createHmac('sha256', kService).update('aws4_request').digest();
+  const signature = createHmac('sha256', kSigning).update('SendRawEmail').digest();
+  return Buffer.concat([version, signature]).toString('base64');
+}
+
+function sesSmtpCreds(): SmtpCreds | null {
+  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+  const user = (process.env.SMTP_USER || process.env.SES_SMTP_USER || SES_SMTP_USER).trim();
+  const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || SES_SMTP_HOST).trim();
+  if (!host.includes('email-smtp.')) return null;
+
+  let pass = readSmtpPassFromEnv();
+  if (!pass && user.startsWith('AKIA')) {
+    const secret = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+    if (secret) pass = deriveSesSmtpPassword(secret, region);
+  }
+  if (!pass) return null;
+
   return {
-    user: MAIL_MANAGER_SMTP_USER,
-    pass: DEFAULT_SMTP_PASS,
-    host: MAIL_MANAGER_SMTP_HOST,
-    port: 587,
+    user,
+    pass,
+    host,
+    port: Number.parseInt(process.env.SMTP_PORT || '587', 10) || 587,
     fromAddress: resolveMailFromAddress(),
   };
 }
@@ -163,12 +185,6 @@ async function loadHostingerSmtpFromDatabase(): Promise<SmtpCreds | null> {
 
 function canUseSesApi(): boolean {
   if (process.env.USE_SES_API === 'false') return false;
-  // Vercel + Mail Manager SMTP must reach any recipient — SES sandbox blocks unverified emails.
-  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
-  const host = (process.env.SMTP_HOST || HOSTINGER_SMTP_HOST).toLowerCase();
-  if (host.includes('mail-manager-smtp') || host.includes('hostinger') || host.includes('apnamail')) {
-    return false;
-  }
   return Boolean(
     process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
   );
@@ -387,13 +403,34 @@ async function trySmtpCandidates(
   return null;
 }
 
+const SES_SANDBOX_USER_MESSAGE =
+  'OTP email could not be sent — Amazon SES is in sandbox mode and can only deliver to verified addresses. ' +
+  'In AWS Console → SES (ap-south-1) → Account dashboard, click "Request production access". ' +
+  'Until approved, contact support to verify your email in SES.';
+
 async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<OtpSendResult> {
   const mail = buildOtpMail(otp, purpose);
   const errors: string[] = [];
 
-  // Mail Manager first — Hostinger info@apnaintern.in outbound is disabled (554) on production.
-  const relayResult = await trySmtpCandidates([mailManagerSmtpCreds()], email, mail, errors);
-  if (relayResult) return relayResult;
+  // Amazon SES SMTP — actually delivers (Mail Manager accepts but drops mail silently).
+  const sesSmtp = sesSmtpCreds();
+  if (sesSmtp) {
+    const sesResult = await trySmtpCandidates([sesSmtp], email, mail, errors);
+    if (sesResult) return sesResult;
+  }
+
+  if (canUseSesApi()) {
+    try {
+      const messageId = await sendOtpViaSesApi(email, mail);
+      return { messageId, channel: 'ses' };
+    } catch (sesErr) {
+      const msg = sesErr instanceof Error ? sesErr.message : String(sesErr);
+      errors.push(`SES-API: ${msg}`);
+      if (isSesSandboxError(sesErr)) {
+        throw new Error(SES_SANDBOX_USER_MESSAGE);
+      }
+    }
+  }
 
   const hostingerResult = await trySmtpCandidates(
     await collectSmtpCandidatesForOtp(),
@@ -403,24 +440,13 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
   );
   if (hostingerResult) return hostingerResult;
 
-  if (canUseSesApi()) {
-    try {
-      const messageId = await sendOtpViaSesApi(email, mail);
-      return { messageId, channel: 'ses' };
-    } catch (sesErr) {
-      const msg = sesErr instanceof Error ? sesErr.message : String(sesErr);
-      errors.push(`SES: ${msg}`);
-      if (isSesSandboxError(sesErr)) {
-        throw new Error(
-          `${msg} — request AWS SES Production Access in ap-south-1, or ensure SMTP_PASS is set on Vercel.`
-        );
-      }
-    }
+  if (errors.some((e) => isSesSandboxError(new Error(e)))) {
+    throw new Error(SES_SANDBOX_USER_MESSAGE);
   }
 
   throw new Error(
     errors.join(' | ') ||
-      'Failed to send verification email. Enable Hostinger outbound SMTP or check Mail Manager relay on Vercel.'
+      'Failed to send verification email. Request AWS SES production access or enable Hostinger outbound SMTP.'
   );
 }
 

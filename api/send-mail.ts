@@ -1,13 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 
 /** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
-const DEFAULT_SMTP_HOST = 'smtp.hostinger.com';
-const DEFAULT_SMTP_USER = 'info@apnaintern.in';
-const LEGACY_MAIL_MANAGER_HOST =
-  'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
-const LEGACY_MAIL_MANAGER_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+const DEFAULT_SMTP_HOST = 'email-smtp.ap-south-1.amazonaws.com';
+const DEFAULT_SMTP_USER = 'AKIAUP3VMJBI563S3RNY';
+const HOSTINGER_SMTP_HOST = 'smtp.hostinger.com';
+const HOSTINGER_SMTP_USER = 'info@apnaintern.in';
 
 function normalizeSmtpPassword(raw: string): string {
   return String(raw || '')
@@ -27,20 +26,27 @@ function readSmtpPassFromEnv(): string {
 
 function defaultHostForUser(user: string): string {
   const u = user.toLowerCase();
-  if (u.endsWith('@apnaintern.in')) return 'smtp.hostinger.com';
-  if (u.endsWith('@apnamail.in')) return LEGACY_MAIL_MANAGER_HOST;
-  if (u.endsWith('@gmail.com') || u.includes('gmail')) return 'smtp.gmail.com';
+  if (u.startsWith('akia')) return DEFAULT_SMTP_HOST;
+  if (u.endsWith('@apnaintern.in')) return HOSTINGER_SMTP_HOST;
   return DEFAULT_SMTP_HOST;
 }
 
-function shouldUseLegacyMailManager(user: string, pass: string, host: string): boolean {
-  if (pass.trim()) return false;
-  if (!user.trim()) return true;
-  const h = host.toLowerCase();
-  const u = user.toLowerCase();
-  if (u.includes('@apnaintern.in') && !u.startsWith('inp-')) return false;
-  if (h.includes('email-smtp.')) return true;
-  return false;
+function deriveSesSmtpPassword(secretAccessKey: string, region = 'ap-south-1'): string {
+  const version = Buffer.from([0x04]);
+  const kDate = createHmac('sha256', `AWS4${secretAccessKey}`).update('11111111').digest();
+  const kRegion = createHmac('sha256', kDate).update(region).digest();
+  const kService = createHmac('sha256', kRegion).update('ses').digest();
+  const kSigning = createHmac('sha256', kService).update('aws4_request').digest();
+  const signature = createHmac('sha256', kSigning).update('SendRawEmail').digest();
+  return Buffer.concat([version, signature]).toString('base64');
+}
+
+function resolveSesSmtpPassword(user: string): string {
+  if (!user.startsWith('AKIA')) return '';
+  const secret = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (!secret) return '';
+  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+  return deriveSesSmtpPassword(secret, region);
 }
 
 function resolveSmtpHostFromEnv(user = ''): string {
@@ -49,8 +55,6 @@ function resolveSmtpHostFromEnv(user = ''): string {
   if (explicit) return explicit;
   return defaultHostForUser(resolvedUser);
 }
-
-const MAIL_MANAGER_SMTP_PASS = 'Raunak@12583';
 
 function resolveSmtpFromEnv(): {
   user: string;
@@ -70,13 +74,15 @@ function resolveSmtpFromEnv(): {
     host.toLowerCase().includes('mail1.apnamail.in') ||
     pass === 'wuh4ovfk38aiuboa';
 
-  if (apnamailBroken || shouldUseLegacyMailManager(user, pass, host)) {
-    user = LEGACY_MAIL_MANAGER_USER;
-    host = LEGACY_MAIL_MANAGER_HOST;
-    pass = MAIL_MANAGER_SMTP_PASS;
+  if (apnamailBroken) {
+    user = DEFAULT_SMTP_USER;
+    host = DEFAULT_SMTP_HOST;
+    pass = resolveSesSmtpPassword(user);
   }
 
-  if (!pass) pass = MAIL_MANAGER_SMTP_PASS;
+  if (!pass && user.startsWith('AKIA')) {
+    pass = resolveSesSmtpPassword(user);
+  }
 
   return { user, pass, host, port, fromAddress };
 }
@@ -143,11 +149,6 @@ function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_re
 
 function canUseSesApiForOtp(): boolean {
   if (process.env.USE_SES_API === 'false') return false;
-  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
-  const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').toLowerCase();
-  if (host.includes('mail-manager-smtp') || host.includes('hostinger') || host.includes('apnamail')) {
-    return false;
-  }
   return Boolean(
     process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
   );
