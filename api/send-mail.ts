@@ -142,6 +142,12 @@ function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_re
 }
 
 function canUseSesApiForOtp(): boolean {
+  if (process.env.USE_SES_API === 'false') return false;
+  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
+  const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').toLowerCase();
+  if (host.includes('mail-manager-smtp') || host.includes('hostinger') || host.includes('apnamail')) {
+    return false;
+  }
   return Boolean(
     process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
   );
@@ -600,28 +606,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         let messageId = '';
         let channel = 'smtp';
+        let sesSandboxLimited = false;
 
-        if (canUseSesApiForOtp()) {
+        try {
+          messageId = await sendOtpViaSmtp(recipient, mailContent);
+          channel = 'smtp';
+        } catch (smtpErr) {
+          console.warn('SMTP OTP send failed, trying SES if enabled:', smtpErr instanceof Error ? smtpErr.message : smtpErr);
+        }
+
+        if (!messageId && canUseSesApiForOtp()) {
           try {
             messageId = await sendOtpViaSesApi(recipient, mailContent);
             channel = 'ses';
           } catch (sesErr) {
             if (isSesIdentityNotVerifiedError(sesErr)) {
-              console.warn('SES sandbox blocked recipient, trying SMTP:', recipient);
+              sesSandboxLimited = true;
+              console.warn('SES sandbox blocked recipient:', recipient);
             } else {
-              console.warn('SES OTP send failed, trying SMTP:', sesErr instanceof Error ? sesErr.message : sesErr);
+              console.warn('SES OTP send failed:', sesErr instanceof Error ? sesErr.message : sesErr);
             }
           }
-        }
-
-        let sesSandboxLimited = false;
-        if (!messageId && canUseSesApiForOtp()) {
-          sesSandboxLimited = true;
-        }
-
-        if (!messageId) {
-          messageId = await sendOtpViaSmtp(recipient, mailContent);
-          channel = 'smtp';
         }
 
         if (!String(messageId || '').trim()) {

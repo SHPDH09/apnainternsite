@@ -151,6 +151,12 @@ async function loadSmtpFromDatabase(): Promise<SmtpCreds | null> {
 
 function canUseSesApi(): boolean {
   if (process.env.USE_SES_API === 'false') return false;
+  // Vercel + Mail Manager SMTP must reach any recipient — SES sandbox blocks unverified emails.
+  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
+  const host = (process.env.SMTP_HOST || MAIL_MANAGER_SMTP_HOST).toLowerCase();
+  if (host.includes('mail-manager-smtp') || host.includes('hostinger') || host.includes('apnamail')) {
+    return false;
+  }
   return Boolean(
     process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
   );
@@ -317,10 +323,37 @@ async function sendOtpViaSmtpWithCreds(
   return messageId;
 }
 
+async function collectSmtpCandidatesForOtp(): Promise<SmtpCreds[]> {
+  const smtpCandidates: SmtpCreds[] = [];
+  const seen = new Set<string>();
+  const push = (creds: SmtpCreds | null | undefined) => {
+    if (!creds?.pass?.trim()) return;
+    const key = `${creds.host}|${creds.user}|${creds.fromAddress}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    smtpCandidates.push(creds);
+  };
+
+  push(await loadSmtpFromDatabase());
+  push(mailManagerSmtpCreds());
+  push(resolveSmtpFromEnv());
+  return smtpCandidates;
+}
+
 async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<OtpSendResult> {
   const mail = buildOtpMail(otp, purpose);
   const errors: string[] = [];
-  let sesSandboxLimited = false;
+
+  // SMTP first — Mail Manager delivers to any inbox. SES sandbox only allows verified recipients.
+  for (const creds of await collectSmtpCandidatesForOtp()) {
+    try {
+      const messageId = await sendOtpViaSmtpWithCreds(email, mail, creds);
+      return { messageId, channel: 'smtp' };
+    } catch (smtpErr) {
+      errors.push(`SMTP(${creds.host}): ${smtpErr instanceof Error ? smtpErr.message : String(smtpErr)}`);
+      if (!isSmtpAuthError(smtpErr)) continue;
+    }
+  }
 
   if (canUseSesApi()) {
     try {
@@ -329,31 +362,10 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
     } catch (sesErr) {
       const msg = sesErr instanceof Error ? sesErr.message : String(sesErr);
       errors.push(`SES: ${msg}`);
-      if (isSesSandboxError(sesErr)) sesSandboxLimited = true;
-    }
-  }
-
-  const smtpCandidates: SmtpCreds[] = [];
-  const seen = new Set<string>();
-
-  const dbCreds = await loadSmtpFromDatabase();
-  if (dbCreds?.pass?.trim()) smtpCandidates.push(dbCreds);
-
-  smtpCandidates.push(mailManagerSmtpCreds(), resolveSmtpFromEnv());
-
-  for (const creds of smtpCandidates) {
-    const key = `${creds.host}|${creds.user}|${creds.fromAddress}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    try {
-      const messageId = await sendOtpViaSmtpWithCreds(email, mail, creds);
-      return { messageId, channel: 'smtp', sesSandboxLimited };
-    } catch (smtpErr) {
-      errors.push(`SMTP(${creds.host}): ${smtpErr instanceof Error ? smtpErr.message : String(smtpErr)}`);
-      if (!isSmtpAuthError(smtpErr)) {
-        // Non-auth SMTP failure — try next candidate before giving up.
-        continue;
+      if (isSesSandboxError(sesErr)) {
+        throw new Error(
+          `${msg} — request AWS SES Production Access in ap-south-1, or ensure SMTP_PASS is set on Vercel.`
+        );
       }
     }
   }
