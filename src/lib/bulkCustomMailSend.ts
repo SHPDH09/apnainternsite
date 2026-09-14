@@ -8,10 +8,10 @@ export type BulkCustomMailResult = {
   lastError?: string;
 };
 
-/** Matches server BULK_BATCH_MAX — each request sends this many in parallel on the server. */
-export const BULK_MAIL_BATCH_SIZE = 15;
-/** How many batch API calls run at once from the browser. */
-const PARALLEL_BATCH_REQUESTS = 4;
+/** Matches server BULK_BATCH_MAX — sequential sends on server to avoid mailbox suspension. */
+export const BULK_MAIL_BATCH_SIZE = 5;
+/** One batch at a time — parallel waves suspend Hostinger info@apnaintern.in. */
+const PARALLEL_BATCH_REQUESTS = 1;
 const RATE_LIMIT_PAUSE_MS = 45_000;
 
 function sleep(ms: number) {
@@ -80,20 +80,22 @@ async function sendBatchOneByOne(
   rateLimited: boolean;
   error?: string;
 }> {
-  const outcomes = await Promise.all(
-    recipients.map((to) => sendOneBulkMail(to, subject, message))
-  );
   let sent = 0;
   let failed = 0;
   let rateLimited = false;
   let lastError: string | undefined;
-  for (const outcome of outcomes) {
+  for (const to of recipients) {
+    const outcome = await sendOneBulkMail(to, subject, message);
     if (outcome.ok) sent++;
     else {
       failed++;
       lastError = outcome.error;
-      if (outcome.rateLimited) rateLimited = true;
+      if (outcome.rateLimited) {
+        rateLimited = true;
+        break;
+      }
     }
+    await sleep(3500);
   }
   return { sent, failed, rateLimited, error: lastError };
 }

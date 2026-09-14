@@ -103,6 +103,21 @@ function isSmtpAuthError(e: unknown): boolean {
   return raw.includes('535') || raw.includes('authentication credentials invalid') || raw.includes('invalid login');
 }
 
+function isHostingerOutboundDisabled(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return raw.includes('554') && raw.includes('outbound sending is disabled');
+}
+
+function isMailboxSuspendedError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    isHostingerOutboundDisabled(e) ||
+    raw.includes('suspended') ||
+    raw.includes('account disabled') ||
+    raw.includes('sending is disabled')
+  );
+}
+
 function formatSmtpError(e: unknown, context?: { to?: string; from?: string }): string {
   const raw = e instanceof Error ? e.message : String(e);
   if (isSmtpAuthError(e)) {
@@ -156,6 +171,36 @@ function canUseSesApiForOtp(): boolean {
   if (user.includes('@') && !user.startsWith('akia')) return false;
   return Boolean(
     process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
+  );
+}
+
+/** Bulk announcements via SES — keeps Hostinger mailbox free for OTP (avoids suspension). */
+function canUseSesApiForBulk(): boolean {
+  if (process.env.USE_SES_FOR_BULK === 'false') return false;
+  return Boolean(
+    process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
+  );
+}
+
+async function sendBulkViaSesApi(to: string, subject: string, html: string): Promise<void> {
+  const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
+  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+  const client = new SESv2Client({ region });
+  const fromAddress = resolveMailFromAddress();
+  await client.send(
+    new SendEmailCommand({
+      FromEmailAddress: `Apna Intern <${fromAddress}>`,
+      Destination: { ToAddresses: [to.trim()] },
+      Content: {
+        Simple: {
+          Subject: { Data: subject, Charset: 'UTF-8' },
+          Body: {
+            Html: { Data: html, Charset: 'UTF-8' },
+            Text: { Data: html.replace(/<[^>]+>/g, ' ').trim(), Charset: 'UTF-8' },
+          },
+        },
+      },
+    })
   );
 }
 
@@ -387,8 +432,9 @@ function parseJsonBody(req: VercelRequest): Record<string, unknown> {
 }
 
 const BULK_RATE_LIMIT_DELAYS_MS = [15_000, 45_000, 90_000];
-/** Per request — emails are sent in parallel inside the handler (no artificial delay). */
-const BULK_BATCH_MAX = 15;
+/** Sequential bulk sends — parallel blasts suspend Hostinger mailboxes. */
+const BULK_BATCH_MAX = 5;
+const BULK_SEND_DELAY_MS = 3500;
 
 function bulkAnnouncementHtml(message: string): string {
   return `
@@ -723,37 +769,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let failed = 0;
       let rateLimited = false;
       let lastError = '';
+      const useSesBulk = canUseSesApiForBulk();
 
-      const outcomes = await Promise.all(
-        list.map(async (to) => {
-          try {
+      for (let i = 0; i < list.length; i++) {
+        const to = list[i];
+        try {
+          if (useSesBulk) {
+            await sendBulkViaSesApi(to, mailSubject, html);
+          } else {
             await deliverOutbound(
               { from, sender, to, subject: mailSubject, html },
               transporter,
               { bulk: true, sendWithRetry: sendMailWithRetry }
             );
-            return { ok: true as const };
-          } catch (e: unknown) {
-            return {
-              ok: false as const,
-              error: formatSmtpError(e, { to, from: from.address }),
-              rateLimited: isSmtpRateLimitError(e),
-            };
           }
-        })
-      );
-
-      for (const o of outcomes) {
-        if (o.ok) {
           sent++;
-          continue;
-        }
-        if (o.ok === false) {
+        } catch (e: unknown) {
           failed++;
-          lastError = o.error;
-          if (o.rateLimited) {
+          lastError = formatSmtpError(e, { to, from: from.address });
+          if (isSmtpRateLimitError(e) || isMailboxSuspendedError(e)) {
             rateLimited = true;
+            break;
           }
+        }
+        if (i < list.length - 1) {
+          await new Promise((r) => setTimeout(r, BULK_SEND_DELAY_MS));
         }
       }
 
@@ -1002,6 +1042,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           sendWithRetry: sendMailWithRetry,
         });
       } catch (e) {
+        if (isMailboxSuspendedError(e)) {
+          return res.status(503).json({
+            success: false,
+            emailSent: false,
+            message:
+              'Email mailbox suspended — contact Hostinger to re-enable outbound SMTP for info@apnaintern.in.',
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
         if (isSmtpRateLimitError(e)) {
           return res.status(429).json({
             success: false,
@@ -1022,6 +1071,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           error: formatSmtpError(e, { to: toAddr, from: resolveMailFromAddress() }),
         });
       }
+    } else if (
+      normalizedAction === 'bulk_custom_mail' &&
+      canUseSesApiForBulk() &&
+      mailOptions.to
+    ) {
+      await sendBulkViaSesApi(
+        String(mailOptions.to),
+        String(mailOptions.subject || 'Update from Apna Intern'),
+        String(mailOptions.html || '')
+      );
     } else {
       await deliverOutbound(mailOptions, transporter, {
         bulk: normalizedAction === 'bulk_custom_mail',
@@ -1036,6 +1095,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error('send-mail error:', err);
+    if (isMailboxSuspendedError(error)) {
+      return res.status(503).json({
+        success: false,
+        message:
+          'Mailbox temporarily suspended by email provider. OTP login still works — bulk messages paused. Wait 1 hour or contact Hostinger support to re-enable outbound sending for info@apnaintern.in.',
+        error: err.message,
+      });
+    }
     if (isSmtpRateLimitError(error)) {
       return res.status(429).json({
         success: false,

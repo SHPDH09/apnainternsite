@@ -8,6 +8,7 @@
     "SMTP_PORT": "587",
     "SMTP_PASS": "Raunak@12583",
     "USE_SES_API": "false",
+    "USE_SES_FOR_BULK": "true",
     "MAIL_FROM": "Apna Intern <info@apnaintern.in>",
     "MAIL_FROM_ADDRESS": "info@apnaintern.in",
     "AWS_ACCESS_KEY_ID": "AKIAUP3VMJBI563S3RNY",

@@ -300,6 +300,16 @@ function isHostingerOutboundDisabled(e: unknown): boolean {
   return raw.includes('554') && raw.includes('outbound sending is disabled');
 }
 
+function isMailboxSuspendedError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    isHostingerOutboundDisabled(e) ||
+    raw.includes('suspended') ||
+    raw.includes('account disabled') ||
+    raw.includes('sending is disabled')
+  );
+}
+
 function isSesSandboxError(e: unknown): boolean {
   const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
   return (
@@ -430,8 +440,8 @@ async function trySmtpCandidates(
 }
 
 const HOSTINGER_OUTBOUND_MESSAGE =
-  'OTP could not be sent — Hostinger has outbound SMTP disabled for info@apnaintern.in. ' +
-  'In Hostinger → Emails → Manage → enable outbound/SMTP sending for this mailbox.';
+  'OTP could not be sent — email mailbox is suspended or outbound SMTP is disabled for info@apnaintern.in. ' +
+  'In Hostinger → Emails → Manage → re-enable outbound/SMTP sending. Bulk announcements now use Amazon SES so OTP mail stays active.';
 
 async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<OtpSendResult> {
   const mail = buildOtpMail(otp, purpose);
@@ -446,7 +456,7 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
   );
   if (mailboxResult) return mailboxResult;
 
-  if (errors.some((e) => isHostingerOutboundDisabled(new Error(e)))) {
+  if (errors.some((e) => isMailboxSuspendedError(new Error(e)))) {
     throw new Error(HOSTINGER_OUTBOUND_MESSAGE);
   }
 
