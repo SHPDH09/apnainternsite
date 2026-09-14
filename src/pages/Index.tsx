@@ -96,6 +96,11 @@ const Index = () => {
     [domainsStream]
   );
 
+  const universitiesWithLogos = useMemo(
+    () => unis.filter((u) => String(u.logo_url || "").trim()),
+    [unis]
+  );
+
   useEffect(() => {
     fetchPublicUniversities(supabase).then(setUnis).catch(() => setUnis([]));
     setGalleryLoading(true);
@@ -470,7 +475,7 @@ const Index = () => {
       <HomeTestimonialsSection testimonials={testimonials} />
 
       <HomeUniversitiesSection
-        universities={unis}
+        universities={universitiesWithLogos}
         scrollRef={scrollRef}
         paused={isPaused}
         onPauseChange={setIsPaused}
