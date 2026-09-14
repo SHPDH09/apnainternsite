@@ -51,6 +51,7 @@ import {
   getStudentDirectoryPassword,
 } from "@/lib/studentCredentials";
 import { adminUpsertStudentProfile } from "@/lib/adminProfileUpsert";
+import { saveStudentDirectoryUpdate } from "@/lib/saveStudentDirectoryRow";
 import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
 import { siteApiUrl } from "@/lib/siteApi";
 import {
@@ -553,7 +554,7 @@ const SuperAdmin = () => {
         return;
       }
 
-      const { data: updatedStudent, error } = await supabase.from("students").update({
+      const updatedStudent = await saveStudentDirectoryUpdate(supabase, editData.id, {
         full_name: editData.full_name,
         email: emailNorm,
         contact_number: editData.contact_number,
@@ -576,9 +577,8 @@ const SuperAdmin = () => {
         emergency_relation: editData.emergency_relation,
         emergency_contact: editData.emergency_contact,
         metadata: mergedMeta,
-      }).eq("id", editData.id).select("id").maybeSingle();
+      });
 
-      if (error) throw error;
       if (!updatedStudent?.id) {
         throw new Error(
           "Student row was not updated (0 rows). Check RLS policies allow super_admin to UPDATE students."

@@ -2,6 +2,16 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { siteApiUrl } from "@/lib/siteApi";
+import {
+  normalizeEmail,
+  normalizePhone,
+  normalizeRegistrationNumber,
+  normalizeRollNumber,
+  normalizeUniversityKey,
+  universityRollCompositeKey,
+} from "@/lib/studentFieldNormalize";
+import { formatStudentUniquenessError } from "@/lib/studentUniqueness";
+import { saveStudentDirectoryUpdate } from "@/lib/saveStudentDirectoryRow";
 
 export type StudentDataUploadMode = "paid" | "unpaid";
 
@@ -419,7 +429,7 @@ function validateRowWithContext(
   return null;
 }
 
-/** Mandatory-field validation only. Contact/email duplicates are allowed. */
+/** Mandatory fields + duplicate detection within the uploaded file. */
 export function validateStudentDataUploadRows(
   rows: StudentDataUploadRow[],
   context?: StudentDataUploadContext
@@ -438,11 +448,72 @@ export function validateStudentDataUploadRows(
     return errors;
   }
 
+  const seenEmails = new Map<string, number>();
+  const seenPhones = new Map<string, number>();
+  const seenRegs = new Map<string, number>();
+  const seenRolls = new Map<string, number>();
+  const uniKey = normalizeUniversityKey(context?.university || rows[0]?.university || "");
+
   for (const row of rows) {
     const message = context
       ? validateRowWithContext(row, context)
       : validateSingleRow(row);
-    if (message) errors.push({ rowNumber: row.rowNumber, message });
+    if (message) {
+      errors.push({ rowNumber: row.rowNumber, message });
+      continue;
+    }
+
+    const emailKey = normalizeEmail(row.email);
+    if (emailKey) {
+      const first = seenEmails.get(emailKey);
+      if (first != null) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          message: `Duplicate email in file (also on row ${first}).`,
+        });
+      } else {
+        seenEmails.set(emailKey, row.rowNumber);
+      }
+    }
+
+    const phoneKey = normalizePhone(row.contactNumber);
+    if (phoneKey.length === 10) {
+      const first = seenPhones.get(phoneKey);
+      if (first != null) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          message: `Duplicate phone number in file (also on row ${first}).`,
+        });
+      } else {
+        seenPhones.set(phoneKey, row.rowNumber);
+      }
+    }
+
+    const regKey = normalizeRegistrationNumber(row.registrationNumber);
+    if (regKey) {
+      const first = seenRegs.get(regKey);
+      if (first != null) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          message: `Duplicate university registration number in file (also on row ${first}).`,
+        });
+      } else {
+        seenRegs.set(regKey, row.rowNumber);
+      }
+    }
+
+    const rollKey = universityRollCompositeKey(uniKey || row.university, row.rollNumber);
+    if (rollKey) {
+      const first = seenRolls.get(rollKey);
+      if (first != null) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          message: `Duplicate university roll number in file (also on row ${first}).`,
+        });
+      } else {
+        seenRolls.set(rollKey, row.rowNumber);
+      }
+    }
   }
   return errors;
 }
@@ -483,6 +554,100 @@ export async function fetchExistingRegistrationNumbers(
     }
   }
 
+  return found;
+}
+
+async function fetchExistingEmails(
+  client: SupabaseClient,
+  emails: string[]
+): Promise<Set<string>> {
+  const normalized = [...new Set(emails.map((e) => normalizeEmail(e)).filter(Boolean))];
+  const found = new Set<string>();
+  const chunkSize = 100;
+
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize);
+    const { data, error } = await client.from("students").select("email").in("email", chunk);
+    if (error) {
+      for (const email of chunk) {
+        const { data: rows } = await client
+          .from("students")
+          .select("email")
+          .ilike("email", email)
+          .limit(1);
+        if (rows?.[0]?.email) found.add(normalizeEmail(rows[0].email));
+      }
+      continue;
+    }
+    for (const row of data || []) {
+      if (row.email) found.add(normalizeEmail(row.email));
+    }
+  }
+  return found;
+}
+
+async function fetchExistingPhones(
+  client: SupabaseClient,
+  phones: string[]
+): Promise<Set<string>> {
+  const normalized = [
+    ...new Set(phones.map((p) => normalizePhone(p)).filter((p) => p.length === 10)),
+  ];
+  const found = new Set<string>();
+  const chunkSize = 100;
+
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize);
+    const { data, error } = await client
+      .from("students")
+      .select("contact_number")
+      .in("contact_number", chunk);
+    if (error) {
+      for (const phone of chunk) {
+        const { data: rows } = await client
+          .from("students")
+          .select("contact_number")
+          .eq("contact_number", phone)
+          .limit(1);
+        if (rows?.[0]?.contact_number) found.add(normalizePhone(rows[0].contact_number));
+      }
+      continue;
+    }
+    for (const row of data || []) {
+      if (row.contact_number) found.add(normalizePhone(row.contact_number));
+    }
+  }
+  return found;
+}
+
+async function fetchExistingUniversityRolls(
+  client: SupabaseClient,
+  universityName: string,
+  rollNumbers: string[]
+): Promise<Set<string>> {
+  const uni = normalizeUniversityKey(universityName);
+  const normalized = [
+    ...new Set(rollNumbers.map((r) => normalizeRollNumber(r)).filter(Boolean)),
+  ];
+  const found = new Set<string>();
+  if (!uni || normalized.length === 0) return found;
+
+  const chunkSize = 100;
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize);
+    const { data, error } = await client
+      .from("students")
+      .select("roll_number, university_name")
+      .eq("university_name", universityName)
+      .in("roll_number", chunk);
+    if (error) {
+      continue;
+    }
+    for (const row of data || []) {
+      const key = universityRollCompositeKey(row.university_name, row.roll_number);
+      if (key) found.add(key);
+    }
+  }
   return found;
 }
 
@@ -604,9 +769,23 @@ export async function processStudentDataUploadRows(
 ): Promise<StudentDataUploadProcessResult[]> {
   const results: StudentDataUploadProcessResult[] = [];
   const seenRegs = new Map<string, number>();
+  const seenEmails = new Map<string, number>();
+  const seenPhones = new Map<string, number>();
+  const seenRolls = new Map<string, number>();
+  const batchUniversity = normalizeUniversityKey(rows[0]?.university || "");
   const existingRegs = await fetchExistingRegistrationNumbers(
     client,
     rows.map((r) => r.registrationNumber)
+  );
+  const existingEmails = await fetchExistingEmails(client, rows.map((r) => r.email));
+  const existingPhones = await fetchExistingPhones(
+    client,
+    rows.map((r) => r.contactNumber)
+  );
+  const existingRolls = await fetchExistingUniversityRolls(
+    client,
+    rows[0]?.university || "",
+    rows.map((r) => r.rollNumber)
   );
 
   const {
@@ -616,35 +795,66 @@ export async function processStudentDataUploadRows(
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const email = row.email.trim().toLowerCase();
+    const email = normalizeEmail(row.email);
+    const phone = normalizePhone(row.contactNumber);
     const reg = row.registrationNumber.trim();
-    const regKey = reg.toLowerCase();
+    const regKey = normalizeRegistrationNumber(reg);
+    const rollKey = universityRollCompositeKey(batchUniversity || row.university, row.rollNumber);
 
-    const firstRow = seenRegs.get(regKey);
-    if (firstRow != null) {
+    const rejectRow = (message: string) => {
       results.push({
         rowNumber: row.rowNumber,
         email,
         registrationNumber: reg,
         success: false,
         skipped: true,
-        message: `Duplicate Registration Number in file (also on row ${firstRow}).`,
+        message,
       });
       onProgress?.(i + 1, rows.length);
+    };
+
+    const firstRegRow = seenRegs.get(regKey);
+    if (regKey && firstRegRow != null) {
+      rejectRow(`Duplicate university registration number in file (also on row ${firstRegRow}).`);
       continue;
     }
-    seenRegs.set(regKey, row.rowNumber);
+    if (regKey) seenRegs.set(regKey, row.rowNumber);
 
-    if (existingRegs.has(regKey)) {
-      results.push({
-        rowNumber: row.rowNumber,
-        email,
-        registrationNumber: reg,
-        success: false,
-        skipped: true,
-        message: "Duplicate Registration Number — skipped.",
-      });
-      onProgress?.(i + 1, rows.length);
+    const firstEmailRow = seenEmails.get(email);
+    if (email && firstEmailRow != null) {
+      rejectRow(`Duplicate email in file (also on row ${firstEmailRow}).`);
+      continue;
+    }
+    if (email) seenEmails.set(email, row.rowNumber);
+
+    const firstPhoneRow = seenPhones.get(phone);
+    if (phone.length === 10 && firstPhoneRow != null) {
+      rejectRow(`Duplicate phone number in file (also on row ${firstPhoneRow}).`);
+      continue;
+    }
+    if (phone.length === 10) seenPhones.set(phone, row.rowNumber);
+
+    const firstRollRow = seenRolls.get(rollKey);
+    if (rollKey && firstRollRow != null) {
+      rejectRow(`Duplicate university roll number in file (also on row ${firstRollRow}).`);
+      continue;
+    }
+    if (rollKey) seenRolls.set(rollKey, row.rowNumber);
+
+    if (regKey && existingRegs.has(regKey)) {
+      rejectRow("This university registration number is already registered.");
+      continue;
+    }
+    if (email && existingEmails.has(email)) {
+      rejectRow("This email address is already registered.");
+      continue;
+    }
+    if (phone.length === 10 && existingPhones.has(phone)) {
+      rejectRow("This phone number is already registered.");
+      continue;
+    }
+    if (rollKey && existingRolls.has(rollKey)) {
+      rejectRow("This university roll number is already registered.");
       continue;
     }
 
@@ -688,7 +898,7 @@ export async function processStudentDataUploadRows(
       });
       existingRegs.add(regKey);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to import student.";
+      const message = formatStudentUniquenessError(err);
       const code = String((err as { code?: string })?.code || "");
 
       if (adminId && isUploadRpcSchemaError(`${code} ${message}`)) {
@@ -1210,8 +1420,7 @@ export async function updateImportedStudentRecord(
     status: string;
   }>
 ): Promise<void> {
-  const { error } = await client.from("students").update(patch).eq("id", id);
-  if (error) throw error;
+  await saveStudentDirectoryUpdate(client, id, patch);
 }
 
 export async function deleteImportedStudentRecord(

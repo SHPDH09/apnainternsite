@@ -101,6 +101,7 @@ import { downloadOfferLetterPdf } from "@/lib/offerLetterPdf";
 import { normalizeOfferLetterProfile } from "@/lib/offerLetterProfile";
 import { EDIT_GENDER_SENTINEL, generateTempPassword } from "@/lib/studentCredentials";
 import { adminUpsertStudentProfile } from "@/lib/adminProfileUpsert";
+import { saveStudentDirectoryUpdate } from "@/lib/saveStudentDirectoryRow";
 import { StudentEditFormFields } from "@/components/StudentEditFormFields";
 import type { StudentEditFormVariant } from "@/components/StudentEditFormFields";
 import {
@@ -800,36 +801,30 @@ const StaffDashboard = () => {
         typeof mergedMeta.password === "string" && mergedMeta.password.trim()
           ? mergedMeta.password.trim()
           : "";
-      const { data: updatedStudent, error } = await supabase
-        .from("students")
-        .update({
-          full_name: editData.full_name,
-          email: emailNorm,
-          contact_number: editData.contact_number,
-          gender: editData.gender,
-          parent_name: editData.parent_name,
-          university_name: editData.university_name,
-          college_name: editData.college_name,
-          degree: editData.degree,
-          department: editData.department,
-          academic_session: editData.academic_session,
-          class_semester: editData.class_semester,
-          roll_number: editData.roll_number,
-          internship_domain: editData.internship_domain,
-          course: courseVal,
-          registration_id: editData.registration_id,
-          joining_date: editData.joining_date,
-          completion_date: editData.completion_date,
-          internship_duration: editData.internship_duration,
-          emergency_name: editData.emergency_name,
-          emergency_relation: editData.emergency_relation,
-          emergency_contact: editData.emergency_contact,
-          metadata: mergedMeta,
-        })
-        .eq("id", editData.id)
-        .select("id")
-        .maybeSingle();
-      if (error) throw error;
+      const updatedStudent = await saveStudentDirectoryUpdate(supabase, editData.id, {
+        full_name: editData.full_name,
+        email: emailNorm,
+        contact_number: editData.contact_number,
+        gender: editData.gender,
+        parent_name: editData.parent_name,
+        university_name: editData.university_name,
+        college_name: editData.college_name,
+        degree: editData.degree,
+        department: editData.department,
+        academic_session: editData.academic_session,
+        class_semester: editData.class_semester,
+        roll_number: editData.roll_number,
+        internship_domain: editData.internship_domain,
+        course: courseVal,
+        registration_id: editData.registration_id,
+        joining_date: editData.joining_date,
+        completion_date: editData.completion_date,
+        internship_duration: editData.internship_duration,
+        emergency_name: editData.emergency_name,
+        emergency_relation: editData.emergency_relation,
+        emergency_contact: editData.emergency_contact,
+        metadata: mergedMeta,
+      });
       if (!updatedStudent?.id) {
         throw new Error(
           "Student row was not updated (0 rows). Check RLS allows staff to UPDATE students (fix_staff_rls.sql)."

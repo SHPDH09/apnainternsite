@@ -92,6 +92,7 @@ import { CollegeAdminCollegePicker } from "@/components/admin/CollegeAdminColleg
 import { displayCollegeName } from "@/lib/collegeDisplay";
 import { collegesForUniversity, fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
 import { adminUpsertStudentProfile } from "@/lib/adminProfileUpsert";
+import { saveStudentDirectoryUpdate } from "@/lib/saveStudentDirectoryRow";
 import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
 import { DatabaseBackup, ArrowUpRight, UploadCloud, AlertTriangle, Check } from "lucide-react";
 import {
@@ -1148,7 +1149,7 @@ export default function Admin() {
         return;
       }
 
-      const { data: updatedStudent, error } = await supabase.from("students").update({
+      const updatedStudent = await saveStudentDirectoryUpdate(supabase, editData.id, {
         full_name: editData.full_name,
         email: emailNorm,
         contact_number: editData.contact_number,
@@ -1171,9 +1172,8 @@ export default function Admin() {
         emergency_relation: editData.emergency_relation,
         emergency_contact: editData.emergency_contact,
         metadata: mergedMeta,
-      }).eq("id", editData.id).select("id").maybeSingle();
+      });
 
-      if (error) throw error;
       if (!updatedStudent?.id) {
         throw new Error(
           "Student row was not updated (0 rows). Your role may lack UPDATE on students, or RLS is blocking — apply fix_staff_rls.sql / admin policies."
