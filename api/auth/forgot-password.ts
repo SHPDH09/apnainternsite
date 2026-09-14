@@ -28,32 +28,59 @@ async function sendOtpEmail(
   purpose: OtpMailPurpose
 ): Promise<void> {
   const mailContent = buildOtpMailContent(generatedOtp, purpose);
-
-  const { canUseSesApi, sendEmailViaSesApi } = await import('../lib/sesSend.js');
-  if (canUseSesApi()) {
-    await sendEmailViaSesApi({
-      to: normalizedEmail,
-      subject: mailContent.subject,
-      html: mailContent.html,
-    });
-    return;
-  }
+  const errors: string[] = [];
 
   const { createSmtpTransporter, resolveSmtpCredentials, sesMailHeaders } = await import('../lib/smtpTransport.js');
   const smtpCreds = await resolveSmtpCredentials();
-  if (!smtpCreds.user || !smtpCreds.pass) {
-    throw new Error(
+  if (smtpCreds.user && smtpCreds.pass) {
+    try {
+      const transporter = await createSmtpTransporter(smtpCreds);
+      const info = await transporter.sendMail({
+        ...sesMailHeaders('Apna Intern Security'),
+        to: normalizedEmail,
+        subject: mailContent.subject,
+        html: mailContent.html,
+      });
+      const accepted = Array.isArray(info.accepted) ? info.accepted : [];
+      if (
+        accepted.length > 0 &&
+        accepted.some((addr) => String(addr).toLowerCase() === normalizedEmail.toLowerCase())
+      ) {
+        return;
+      }
+      errors.push('SMTP did not accept recipient');
+    } catch (smtpErr) {
+      errors.push(smtpErr instanceof Error ? smtpErr.message : String(smtpErr));
+      if (isSmtpAuthError(smtpErr)) {
+        throw smtpErr;
+      }
+    }
+  } else {
+    errors.push(
       'SMTP credentials missing on server. Add SMTP_PASS in Vercel project env, or store Mail Manager SMTP in RDS site_smtp_config.'
     );
   }
 
-  const transporter = await createSmtpTransporter(smtpCreds);
-  await transporter.sendMail({
-    ...sesMailHeaders('Apna Intern Security'),
-    to: normalizedEmail,
-    subject: mailContent.subject,
-    html: mailContent.html,
-  });
+  const { canUseSesApi, sendEmailViaSesApi } = await import('../lib/sesSend.js');
+  if (canUseSesApi()) {
+    try {
+      await sendEmailViaSesApi({
+        to: normalizedEmail,
+        subject: mailContent.subject,
+        html: mailContent.html,
+      });
+      return;
+    } catch (sesErr) {
+      errors.push(sesErr instanceof Error ? sesErr.message : String(sesErr));
+      if (isSesIdentityNotVerifiedError(sesErr)) {
+        throw new Error(
+          `${errors.join(' | ')} — Amazon SES sandbox blocks unverified recipients; use Mail Manager SMTP instead.`
+        );
+      }
+    }
+  }
+
+  throw new Error(errors.join(' | ') || 'Failed to send verification email');
 }
 
 async function handleWithRds(

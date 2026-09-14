@@ -6,6 +6,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import adminRegister from "../../api/admin-register";
 import adminTasks from "../../api/admin-tasks";
 import forgotPassword from "../../api/auth/forgot-password";
+import otpDeliver from "../../api/otp-deliver";
 import debugEnv from "../../api/debug-env";
 import geminiGenerate from "../../api/gemini-generate";
 import createOrder from "../../api/payment/create-order";
@@ -221,6 +222,8 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/gemini-generate", handler: geminiGenerate },
     { method: "post", path: "/api/gemini/generate", handler: geminiGenerate },
     { method: "post", path: "/api/auth/forgot-password", handler: forgotPassword },
+    { method: "post", path: "/api/otp-deliver", handler: otpDeliver },
+    { method: "post", path: "/api/request-otp", handler: otpDeliver },
     { method: "post", path: "/api/admin-register", handler: adminRegister },
     { method: "post", path: "/api/bootstrap-grant-admin", handler: bootstrapGrantAdmin },
     { method: "post", path: "/api/ensure-blog-cms", handler: ensureBlogCms },

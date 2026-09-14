@@ -4,6 +4,7 @@
  * so login works even when Lambda still has broken SES/SMTP env.
  */
 
+import { tryHandleOtpDeliver } from "./otpDeliver";
 import { buildOtpMailHtml, resolveOtpPurpose, sendOtpViaHostinger } from "./otpMail";
 
 export interface Env {
@@ -120,8 +121,17 @@ async function tryHandleOtpSendMail(request: Request, env: Env): Promise<Respons
   const action = String(body.action || body.type || "")
     .trim()
     .toLowerCase();
-  if (action !== "login_otp" && action !== "send_otp") {
+  if (
+    action !== "login_otp" &&
+    action !== "send_otp" &&
+    action !== "otp_deliver" &&
+    action !== "request_otp"
+  ) {
     return null;
+  }
+
+  if (action === "otp_deliver" || action === "request_otp") {
+    return tryHandleOtpDeliver(request, env);
   }
 
   const recipient = String(body.to || body.email || "")
@@ -208,6 +218,8 @@ export default {
     }
 
     if (shouldProxy(url.pathname)) {
+      const otpDeliverResponse = await tryHandleOtpDeliver(request, env);
+      if (otpDeliverResponse) return otpDeliverResponse;
       const otpResponse = await tryHandleOtpSendMail(request, env);
       if (otpResponse) return otpResponse;
       return proxyToLambda(request, env);

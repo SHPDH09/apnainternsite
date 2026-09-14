@@ -24,7 +24,13 @@ export function canUseSesApi(): boolean {
   if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
   const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').toLowerCase();
   // Mail Manager / mailbox SMTP — nodemailer only (not SES API).
-  if (host.includes('mail-manager-smtp') || host.includes('hostinger')) return false;
+  if (
+    host.includes('mail-manager-smtp') ||
+    host.includes('hostinger') ||
+    host.includes('apnamail')
+  ) {
+    return false;
+  }
   if (host && !host.includes('amazonaws.com')) return false;
   return Boolean(
     process.env.AWS_LAMBDA_FUNCTION_NAME ||
