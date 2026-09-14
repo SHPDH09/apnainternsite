@@ -6,6 +6,7 @@
 
 import { tryHandleOtpDeliver } from "./otpDeliver";
 import { buildOtpMailHtml, resolveOtpPurpose, sendOtpViaHostinger } from "./otpMail";
+import { proxyOtpDeliverToVercel } from "./otpVercelFallback";
 
 export interface Env {
   ASSETS: Fetcher;
@@ -16,6 +17,7 @@ export interface Env {
   SMTP_USER?: string;
   SMTP_PASS?: string;
   MAIL_FROM_ADDRESS?: string;
+  VERCEL_MAIL_ORIGIN?: string;
 }
 
 const API_PREFIXES = ["/auth", "/rest", "/storage", "/functions", "/api"];
@@ -152,12 +154,15 @@ async function tryHandleOtpSendMail(request: Request, env: Env): Promise<Respons
   if (!String(env.SMTP_PASS || "").trim()) {
     const mc = await tryMailchannelsOtp(recipient, otp, purpose, request);
     if (mc) return mc;
+    if (action === "otp_deliver" || action === "request_otp") {
+      return proxyOtpDeliverToVercel(request, env);
+    }
     return Response.json(
       {
         success: false,
         emailSent: false,
         message:
-          "Verification email could not be sent — configure SMTP_PASS on the Cloudflare Worker (SES Mail Manager ingress password).",
+          "Verification email could not be sent — add SMTP_PASS as a Cloudflare Worker secret, or rely on Vercel mail fallback.",
       },
       { status: 503, headers: { "X-Otp-Delivery": "edge-unconfigured" } },
     );
@@ -180,6 +185,13 @@ async function tryHandleOtpSendMail(request: Request, env: Env): Promise<Respons
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("edge OTP mail failed:", msg);
+    if (action === "otp_deliver" || action === "request_otp") {
+      try {
+        return await proxyOtpDeliverToVercel(request, env);
+      } catch {
+        /* fall through */
+      }
+    }
     return Response.json(
       {
         success: false,

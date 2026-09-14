@@ -1,4 +1,5 @@
 import { resolveOtpPurpose, sendOtpViaHostinger, type OtpSmtpEnv } from "./otpMail";
+import { proxyOtpDeliverToVercel } from "./otpVercelFallback";
 
 const DEFAULT_RDS_REST =
   "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/v1/password_resets";
@@ -7,6 +8,7 @@ const DEFAULT_REST_KEY = "local-anon-key";
 export type OtpDeliverEnv = OtpSmtpEnv & {
   RDS_REST_URL?: string;
   RDS_ANON_KEY?: string;
+  VERCEL_MAIL_ORIGIN?: string;
 };
 
 type OtpDeliverBody = {
@@ -81,15 +83,7 @@ export async function tryHandleOtpDeliver(
   }
 
   if (!String(env.SMTP_PASS || "").trim()) {
-    return Response.json(
-      {
-        success: false,
-        emailSent: false,
-        message:
-          "Verification email could not be sent — configure SMTP_PASS on the Cloudflare Worker (SES Mail Manager ingress password).",
-      },
-      { status: 503, headers: { "X-Otp-Delivery": "edge-unconfigured" } },
-    );
+    return proxyOtpDeliverToVercel(request, env);
   }
 
   const purpose = resolveOtpPurpose(body.purpose || "login");
@@ -114,14 +108,19 @@ export async function tryHandleOtpDeliver(
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("edge otp-deliver failed:", msg);
-    return Response.json(
-      {
-        success: false,
-        emailSent: false,
-        message: msg || "Failed to send verification code",
-      },
-      { status: 502, headers: { "X-Otp-Delivery": "edge-otp-deliver-error" } },
-    );
+    console.error("edge otp-deliver failed, trying Vercel SMTP fallback:", msg);
+    try {
+      return await proxyOtpDeliverToVercel(request, env);
+    } catch (fallbackErr) {
+      const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+      return Response.json(
+        {
+          success: false,
+          emailSent: false,
+          message: msg || fbMsg || "Failed to send verification code",
+        },
+        { status: 502, headers: { "X-Otp-Delivery": "edge-otp-deliver-error" } },
+      );
+    }
   }
 }

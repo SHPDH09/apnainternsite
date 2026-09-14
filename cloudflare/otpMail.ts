@@ -55,21 +55,30 @@ export interface OtpSmtpEnv {
   MAIL_FROM_ADDRESS?: string;
 }
 
+function normalizeWorkerSmtpPassword(raw: string): string {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return "";
+  // Gmail/Hostinger app password pasted as "abcd efgh ijkl mnop"
+  if (/^[a-z0-9]{4}(\s[a-z0-9]{4}){3}$/i.test(trimmed)) {
+    return trimmed.replace(/\s+/g, "");
+  }
+  // Keep @ and special chars (e.g. Raunak@12583, Hostinger app passwords)
+  return trimmed;
+}
+
 export async function sendOtpViaHostinger(
   env: OtpSmtpEnv,
   to: string,
   otp: string,
   purpose: OtpPurpose
 ): Promise<void> {
-  const pass = String(env.SMTP_PASS || "")
-    .trim()
-    .replace(/[\s-]+/g, "");
+  const pass = normalizeWorkerSmtpPassword(env.SMTP_PASS || "");
   const user = String(env.SMTP_USER || "inp-3u5sedrqj7kqwjazxwmph2th").trim();
   const host = String(
     env.SMTP_HOST || "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com"
   ).trim();
   const port = Number(env.SMTP_PORT || 587);
-  const fromAddress = String(env.MAIL_FROM_ADDRESS || user).trim();
+  const fromAddress = String(env.MAIL_FROM_ADDRESS || "info@apnaintern.in").trim();
 
   if (!pass) {
     throw new Error("SMTP_PASS is not configured on the Cloudflare Worker");
