@@ -1,4 +1,5 @@
 -- Global student field normalization, validation, duplicate prevention, and safe unique indexes.
+-- Production apply: pushed to main with [rds-apply] (2026-09-14).
 -- Applies to every insert/update on public.students (trigger) plus RPC helpers for pre-checks.
 
 -- ---------------------------------------------------------------------------
