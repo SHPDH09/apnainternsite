@@ -170,11 +170,15 @@ async function tryHandleOtpSendMail(request: Request, env: Env): Promise<Respons
 
   try {
     await sendOtpViaHostinger(env, recipient, otp, purpose);
+    const messageId = `edge-smtp-${crypto.randomUUID()}`;
     return Response.json(
       {
         success: true,
         emailSent: true,
-        message: "Email sent successfully!",
+        email: recipient,
+        channel: "smtp",
+        message: `Verification code sent to ${recipient} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
+        messageId,
         via: "cloudflare-edge-smtp",
       },
       {

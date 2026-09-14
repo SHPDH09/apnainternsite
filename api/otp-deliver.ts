@@ -19,10 +19,12 @@ type OtpSendResult = {
 };
 
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
+const HOSTINGER_SMTP_HOST = 'smtp.hostinger.com';
+const HOSTINGER_SMTP_USER = 'info@apnaintern.in';
+const DEFAULT_SMTP_PASS = 'Raunak@12583';
 const MAIL_MANAGER_SMTP_HOST =
   'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
 const MAIL_MANAGER_SMTP_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
-const MAIL_MANAGER_SMTP_PASS = 'Raunak@12583';
 
 const RDS_REST =
   process.env.RDS_REST_URL?.trim() ||
@@ -69,10 +71,21 @@ function isBrokenApnamailEnv(user: string, host: string, pass: string): boolean 
   );
 }
 
+function hostingerSmtpCreds(): SmtpCreds {
+  const pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
+  return {
+    user: HOSTINGER_SMTP_USER,
+    pass,
+    host: HOSTINGER_SMTP_HOST,
+    port: 587,
+    fromAddress: resolveMailFromAddress(),
+  };
+}
+
 function mailManagerSmtpCreds(): SmtpCreds {
   return {
     user: MAIL_MANAGER_SMTP_USER,
-    pass: MAIL_MANAGER_SMTP_PASS,
+    pass: DEFAULT_SMTP_PASS,
     host: MAIL_MANAGER_SMTP_HOST,
     port: 587,
     fromAddress: resolveMailFromAddress(),
@@ -80,19 +93,19 @@ function mailManagerSmtpCreds(): SmtpCreds {
 }
 
 function resolveSmtpFromEnv(): SmtpCreds {
-  const pass = readSmtpPassFromEnv();
-  const host = (process.env.SMTP_HOST || MAIL_MANAGER_SMTP_HOST).trim();
-  const user = (process.env.SMTP_USER || MAIL_MANAGER_SMTP_USER).trim();
+  const pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
+  const host = (process.env.SMTP_HOST || HOSTINGER_SMTP_HOST).trim();
+  const user = (process.env.SMTP_USER || HOSTINGER_SMTP_USER).trim();
   const portRaw = process.env.SMTP_PORT || '587';
   const port = Number.parseInt(portRaw, 10);
 
   if (isBrokenApnamailEnv(user, host, pass)) {
-    return mailManagerSmtpCreds();
+    return hostingerSmtpCreds();
   }
 
   return {
     user,
-    pass: pass || MAIL_MANAGER_SMTP_PASS,
+    pass,
     host,
     port: Number.isFinite(port) ? port : 587,
     fromAddress: resolveMailFromAddress(),
@@ -153,7 +166,7 @@ function canUseSesApi(): boolean {
   if (process.env.USE_SES_API === 'false') return false;
   // Vercel + Mail Manager SMTP must reach any recipient — SES sandbox blocks unverified emails.
   if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
-  const host = (process.env.SMTP_HOST || MAIL_MANAGER_SMTP_HOST).toLowerCase();
+  const host = (process.env.SMTP_HOST || HOSTINGER_SMTP_HOST).toLowerCase();
   if (host.includes('mail-manager-smtp') || host.includes('hostinger') || host.includes('apnamail')) {
     return false;
   }
@@ -309,7 +322,8 @@ async function sendOtpViaSmtpWithCreds(
     text: mail.text,
     headers: {
       'X-Mailer': 'ApnaIntern-OTP',
-      Precedence: 'bulk',
+      'Auto-Submitted': 'auto-generated',
+      'X-Priority': '1',
     },
   });
 
@@ -335,8 +349,9 @@ async function collectSmtpCandidatesForOtp(): Promise<SmtpCreds[]> {
   };
 
   push(await loadSmtpFromDatabase());
-  push(mailManagerSmtpCreds());
   push(resolveSmtpFromEnv());
+  push(hostingerSmtpCreds());
+  push(mailManagerSmtpCreds());
   return smtpCandidates;
 }
 
