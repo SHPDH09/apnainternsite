@@ -391,7 +391,10 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
   const mail = buildOtpMail(otp, purpose);
   const errors: string[] = [];
 
-  // Prefer Hostinger mailbox; fall back to Mail Manager when Hostinger outbound is disabled.
+  // Mail Manager first — Hostinger info@apnaintern.in outbound is disabled (554) on production.
+  const relayResult = await trySmtpCandidates([mailManagerSmtpCreds()], email, mail, errors);
+  if (relayResult) return relayResult;
+
   const hostingerResult = await trySmtpCandidates(
     await collectSmtpCandidatesForOtp(),
     email,
@@ -399,12 +402,6 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
     errors
   );
   if (hostingerResult) return hostingerResult;
-
-  const hostingerBlocked = errors.some(isHostingerOutboundDisabled);
-  if (hostingerBlocked || errors.length > 0) {
-    const relayResult = await trySmtpCandidates([mailManagerSmtpCreds()], email, mail, errors);
-    if (relayResult) return relayResult;
-  }
 
   if (canUseSesApi()) {
     try {
