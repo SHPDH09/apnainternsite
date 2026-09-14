@@ -71,12 +71,20 @@ function parseDomainNamesFromSql(relPath) {
   return [...new Set(names)];
 }
 
-function parseTechDomainsFromTs() {
-  const fp = path.join(root, "src/lib/technicalInternshipDomains.ts");
+function parseDomainsFromTs(relPath) {
+  const fp = path.join(root, relPath);
   const src = fs.readFileSync(fp, "utf8");
   return src
     .match(/^\s*"([^"]+)"/gm)
     ?.map((line) => line.replace(/^\s*"/, "").replace(/"$/, "")) || [];
+}
+
+function parseTechDomainsFromTs() {
+  return parseDomainsFromTs("src/lib/technicalInternshipDomains.ts");
+}
+
+function parseNonTechDomainsFromTs() {
+  return parseDomainsFromTs("src/lib/nonTechnicalInternshipDomains.ts");
 }
 
 async function rest(method, table, { query = "", body, prefer = "return=representation" } = {}) {
@@ -227,7 +235,7 @@ async function main() {
   }
 
   const techDomains = parseTechDomainsFromTs();
-  const nonTechDomains = parseDomainNamesFromSql("aws/scripts/66-rds-non-technical-internship-domains.sql");
+  const nonTechDomains = parseNonTechDomainsFromTs();
   const allDomains = [...new Set([...techDomains, ...nonTechDomains])];
 
   let domainsAdded = 0;
@@ -247,6 +255,22 @@ async function main() {
     await rest("PATCH", "engineering_university_configs", {
       query: `?id=eq.${row.id}`,
       body: { domains: [...techDomains].sort() },
+      prefer: "return=minimal",
+    });
+  }
+
+  // Merge non-technical domains into non-engineering configs (Bihar non-tech universities)
+  for (const name of NON_TECH_UNIS) {
+    const uni = await findUniversityByName(name);
+    if (!uni?.id) continue;
+    const { json: rows } = await rest("GET", "non_engineering_university_configs", {
+      query: `?university_id=eq.${uni.id}&select=id,domains&limit=1`,
+    });
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (!row?.id) continue;
+    await rest("PATCH", "non_engineering_university_configs", {
+      query: `?id=eq.${row.id}`,
+      body: { domains: [...nonTechDomains].sort() },
       prefer: "return=minimal",
     });
   }
