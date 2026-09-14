@@ -1,39 +1,24 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensureAdminAuthSession } from "@/lib/adminAuthSession";
+import {
+  fetchProjectReportFallbackTemplates,
+  isProjectReportTableMissingError,
+  projectReportFallbackWritable,
+  upsertProjectReportFallbackTemplate,
+} from "@/lib/projectReportFallbackStorage";
 import { publicStorageObjectUrl, resolveStorageUrl } from "@/lib/storageUrl";
+import {
+  DEFAULT_PROJECT_REPORT_FIELD_LAYOUT,
+  type ProjectReportDomainTemplate,
+  type ProjectReportFieldLayout,
+  type ProjectReportSettings,
+} from "@/lib/projectReportTypes";
+
+export type { ProjectReportDomainTemplate, ProjectReportFieldLayout, ProjectReportSettings };
+export { DEFAULT_PROJECT_REPORT_FIELD_LAYOUT };
 
 const BUCKET = "consent-forms";
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
-
-export type ProjectReportFieldLayout = {
-  logo?: { page: number; x: number; y: number; width: number; height: number };
-  universityName?: { page: number; x: number; y: number; size: number; maxWidth?: number };
-  domain?: { page: number; x: number; y: number; size: number };
-  mode?: { page: number; x: number; xLabel?: number; y: number; size: number };
-  domainContent?: { page: number; x: number; y: number; width: number; size: number; lineHeight: number };
-};
-
-export const DEFAULT_PROJECT_REPORT_FIELD_LAYOUT: ProjectReportFieldLayout = {
-  logo: { page: 0, x: 72, y: 720, width: 72, height: 72 },
-  universityName: { page: 0, x: 160, y: 760, size: 16, maxWidth: 360 },
-  domain: { page: 0, x: 72, y: 640, size: 12 },
-  mode: { page: 0, x: 72, y: 620, size: 12 },
-  domainContent: { page: 1, x: 72, y: 720, width: 460, size: 10, lineHeight: 14 },
-};
-
-export type ProjectReportDomainTemplate = {
-  id: string;
-  domain_name: string;
-  domain_key: string;
-  template_pdf_path: string | null;
-  template_pdf_url: string | null;
-  template_file_name: string | null;
-  field_layout: ProjectReportFieldLayout;
-  updated_at?: string;
-};
-
-/** @deprecated Use ProjectReportDomainTemplate */
-export type ProjectReportSettings = ProjectReportDomainTemplate;
 
 function parseLayout(raw: unknown): ProjectReportFieldLayout {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -58,6 +43,16 @@ function rowToTemplate(data: Record<string, unknown>): ProjectReportDomainTempla
   };
 }
 
+function mergeTemplates(
+  rdsRows: ProjectReportDomainTemplate[],
+  fallbackRows: ProjectReportDomainTemplate[]
+): ProjectReportDomainTemplate[] {
+  const byKey = new Map<string, ProjectReportDomainTemplate>();
+  for (const row of fallbackRows) byKey.set(row.domain_key, row);
+  for (const row of rdsRows) byKey.set(row.domain_key, row);
+  return Array.from(byKey.values()).sort((a, b) => a.domain_name.localeCompare(b.domain_name));
+}
+
 export function normalizeProjectReportDomainKey(domain: string): string {
   return String(domain || "")
     .trim()
@@ -70,8 +65,8 @@ export function formatProjectReportUploadError(err: unknown): string {
   if (/invalid or expired session|jwt required|401|403/i.test(msg)) {
     return "Your admin session expired. Refresh the page, sign in again, then retry the upload.";
   }
-  if (/does not exist|42P01|project_report_domain_templates/i.test(msg)) {
-    return "Project report storage is still initializing. Wait a moment and try again.";
+  if (/does not exist|42P01|project_report_domain_templates|initializing/i.test(msg)) {
+    return "Could not save template metadata. Please retry — cloud storage fallback is enabled.";
   }
   if (/bucket not found/i.test(msg)) {
     return 'Storage bucket "consent-forms" is missing. Contact support to provision storage.';
@@ -106,41 +101,97 @@ export async function validateProjectReportPdfFile(file: File): Promise<void> {
   }
 }
 
+async function adminAuthHeaders(client: SupabaseClient): Promise<Record<string, string> | null> {
+  await ensureAdminAuthSession(client, { extendWindow: true, attempts: 3 });
+  const { data: sessionData } = await client.auth.getSession();
+  const token = sessionData.session?.access_token?.trim();
+  if (!token) return null;
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+}
+
+async function callSendMailAction(
+  client: SupabaseClient,
+  action: string,
+  payload?: Record<string, unknown>
+): Promise<{ ok: boolean; message?: string; row?: Record<string, unknown> }> {
+  if (typeof window === "undefined") return { ok: false, message: "Server unavailable." };
+  const headers = await adminAuthHeaders(client);
+  if (!headers) return { ok: false, message: "Sign in as admin and try again." };
+
+  const origin = window.location.origin.replace(/\/$/, "");
+  const res = await fetch(`${origin}/api/send-mail`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action,
+      ...(payload ? { payload } : {}),
+    }),
+  });
+
+  const json = (await res.json().catch(() => ({}))) as {
+    success?: boolean;
+    ok?: boolean;
+    message?: string;
+    row?: Record<string, unknown>;
+  };
+
+  if (!res.ok || json.success === false) {
+    return { ok: false, message: json.message || `Request failed (${res.status}).` };
+  }
+  return { ok: true, row: json.row, message: json.message };
+}
+
+async function isRdsTableAvailable(client: SupabaseClient): Promise<boolean> {
+  try {
+    const { error } = await client.from("project_report_domain_templates").select("id").limit(1);
+    if (!error) return true;
+    if (isProjectReportTableMissingError(error)) return false;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 async function tryBootstrapProjectReportTemplates(client: SupabaseClient): Promise<boolean> {
   await ensureAdminAuthSession(client, { extendWindow: true, attempts: 3 });
 
-  const recheckTable = async (): Promise<boolean> => {
-    const { error } = await client.from("project_report_domain_templates").select("id").limit(1);
-    return !error;
-  };
+  const recheck = () => isRdsTableAvailable(client);
 
   try {
     const { error } = await client.rpc("admin_ensure_project_report_templates");
     if (!error) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      if (await recheckTable()) return true;
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      if (await recheck()) return true;
     }
   } catch {
-    /* RPC may be unavailable until Lambda is redeployed */
+    /* RPC optional */
+  }
+
+  const bootstrap = await callSendMailAction(client, "ensure_project_report_templates");
+  if (bootstrap.ok) {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    if (await recheck()) return true;
   }
 
   if (typeof window !== "undefined") {
     try {
-      const { data: sessionData } = await client.auth.getSession();
-      const token = sessionData.session?.access_token?.trim();
-      if (token) {
+      const headers = await adminAuthHeaders(client);
+      if (headers) {
         const origin = window.location.origin.replace(/\/$/, "");
         const res = await fetch(`${origin}/api/ensure-project-report-templates`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          headers,
         });
         if (res.ok) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          if (await recheckTable()) return true;
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          if (await recheck()) return true;
         }
       }
     } catch {
-      /* optional Vercel bootstrap */
+      /* optional */
     }
   }
 
@@ -149,32 +200,34 @@ async function tryBootstrapProjectReportTemplates(client: SupabaseClient): Promi
 
 /** Create project_report_domain_templates on RDS when missing. Never throws. */
 export async function ensureProjectReportTemplatesTable(client: SupabaseClient): Promise<boolean> {
-  try {
-    const { error } = await client
-      .from("project_report_domain_templates")
-      .select("id")
-      .limit(1);
-    if (!error) return true;
-    if (!/does not exist|42P01/i.test(error.message)) return false;
-    return tryBootstrapProjectReportTemplates(client);
-  } catch {
-    return false;
-  }
+  if (await isRdsTableAvailable(client)) return true;
+  if (await tryBootstrapProjectReportTemplates(client)) return true;
+  return projectReportFallbackWritable(client);
 }
 
 export async function fetchProjectReportDomainTemplates(
   client: SupabaseClient
 ): Promise<ProjectReportDomainTemplate[]> {
-  await ensureProjectReportTemplatesTable(client);
-  const { data, error } = await client
-    .from("project_report_domain_templates")
-    .select("*")
-    .order("domain_name", { ascending: true });
-  if (error) {
-    if (/does not exist|42P01/i.test(error.message)) return [];
-    throw error;
+  const fallbackRows = await fetchProjectReportFallbackTemplates(client);
+
+  try {
+    await ensureProjectReportTemplatesTable(client);
+    const { data, error } = await client
+      .from("project_report_domain_templates")
+      .select("*")
+      .order("domain_name", { ascending: true });
+    if (error) {
+      if (isProjectReportTableMissingError(error)) return fallbackRows;
+      throw error;
+    }
+    return mergeTemplates(
+      (data || []).map((row) => rowToTemplate(row as Record<string, unknown>)),
+      fallbackRows
+    );
+  } catch (err) {
+    if (isProjectReportTableMissingError(err)) return fallbackRows;
+    throw err;
   }
-  return (data || []).map((row) => rowToTemplate(row as Record<string, unknown>));
 }
 
 export async function fetchProjectReportDomainTemplate(
@@ -184,27 +237,52 @@ export async function fetchProjectReportDomainTemplate(
   const domainKey = normalizeProjectReportDomainKey(domain);
   if (!domainKey) return null;
 
+  const all = await fetchProjectReportDomainTemplates(client);
+  const exact = all.find((row) => row.domain_key === domainKey);
+  if (exact) return exact;
+
+  const fuzzy = all.find((row) => row.domain_name.toLowerCase() === domain.trim().toLowerCase());
+  return fuzzy || null;
+}
+
+async function saveToRds(
+  client: SupabaseClient,
+  payload: {
+    domain_name: string;
+    domain_key: string;
+    template_pdf_path: string;
+    template_pdf_url: string;
+    template_file_name: string;
+    updated_by?: string | null;
+  }
+): Promise<ProjectReportDomainTemplate | null> {
+  const saveViaApi = await callSendMailAction(client, "save_project_report_template", payload);
+  if (saveViaApi.ok && saveViaApi.row) {
+    return rowToTemplate(saveViaApi.row);
+  }
+
   const { data, error } = await client
     .from("project_report_domain_templates")
+    .upsert(
+      {
+        domain_name: payload.domain_name,
+        domain_key: payload.domain_key,
+        template_pdf_path: payload.template_pdf_path,
+        template_pdf_url: payload.template_pdf_url,
+        template_file_name: payload.template_file_name,
+        updated_by: payload.updated_by || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "domain_key" }
+    )
     .select("*")
-    .eq("domain_key", domainKey)
-    .maybeSingle();
-  if (error) {
-    if (/does not exist|42P01/i.test(error.message)) return null;
-    throw error;
-  }
-  if (data) return rowToTemplate(data as Record<string, unknown>);
+    .single();
 
-  const { data: fuzzyRows, error: fuzzyErr } = await client
-    .from("project_report_domain_templates")
-    .select("*")
-    .ilike("domain_name", domain.trim());
-  if (fuzzyErr) {
-    if (/does not exist|42P01/i.test(fuzzyErr.message)) return null;
-    throw fuzzyErr;
+  if (error) {
+    if (isProjectReportTableMissingError(error)) return null;
+    throw new Error(error.message || "Could not save template to database.");
   }
-  const fuzzy = (fuzzyRows || [])[0];
-  return fuzzy ? rowToTemplate(fuzzy as Record<string, unknown>) : null;
+  return rowToTemplate(data as Record<string, unknown>);
 }
 
 export async function saveProjectReportDomainTemplate(
@@ -254,59 +332,34 @@ export async function saveProjectReportDomainTemplate(
     pub.publicUrl;
   const publicUrl = `${String(cleanUrl).split("?")[0]}?v=${Date.now()}`;
 
-  const { data, error } = await client
-    .from("project_report_domain_templates")
-    .upsert(
-      {
-        domain_name: domainName,
-        domain_key: domainKey,
-        template_pdf_path: path,
-        template_pdf_url: publicUrl,
-        template_file_name: params.file.name,
-        updated_by: params.uploadedBy || null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "domain_key" }
-    )
-    .select("*")
-    .single();
+  const metadata = {
+    domain_name: domainName,
+    domain_key: domainKey,
+    template_pdf_path: path,
+    template_pdf_url: publicUrl,
+    template_file_name: params.file.name,
+    updated_by: params.uploadedBy || null,
+  };
 
-  if (error) {
-    if (/does not exist|42P01/i.test(error.message)) {
-      await tryBootstrapProjectReportTemplates(client);
-      const retry = await client
-        .from("project_report_domain_templates")
-        .upsert(
-          {
-            domain_name: domainName,
-            domain_key: domainKey,
-            template_pdf_path: path,
-            template_pdf_url: publicUrl,
-            template_file_name: params.file.name,
-            updated_by: params.uploadedBy || null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "domain_key" }
-        )
-        .select("*")
-        .single();
-      if (retry.error) {
-        throw new Error(
-          retry.error.message ||
-            "Project report template storage is still initializing. Wait a moment and try again."
-        );
-      }
-      const saved = rowToTemplate(retry.data as Record<string, unknown>);
-      const verifyBytes = await resolveTemplatePdfBytes(saved).catch(() => null);
-      if (!verifyBytes || verifyBytes.byteLength < 100) {
-        throw new Error("Uploaded PDF could not be verified. Please try uploading again.");
-      }
-      return saved;
+  let saved: ProjectReportDomainTemplate | null = null;
+
+  if (await isRdsTableAvailable(client)) {
+    saved = await saveToRds(client, metadata).catch(() => null);
+  } else {
+    await tryBootstrapProjectReportTemplates(client);
+    if (await isRdsTableAvailable(client)) {
+      saved = await saveToRds(client, metadata).catch(() => null);
     }
-    throw new Error(error.message || "Project report template upload failed.");
   }
 
-  const saved = rowToTemplate(data as Record<string, unknown>);
+  if (!saved) {
+    saved = await upsertProjectReportFallbackTemplate(client, {
+      ...metadata,
+      template_pdf_path: path,
+      template_pdf_url: publicUrl,
+      template_file_name: params.file.name,
+    });
+  }
 
   const verifyBytes = await resolveTemplatePdfBytes(saved).catch(() => null);
   if (!verifyBytes || verifyBytes.byteLength < 100) {

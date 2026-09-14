@@ -24,3 +24,4 @@ aws/**
 !aws/server/partner-applications-bootstrap.ts
 !aws/server/project-report-bootstrap.ts
 !aws/server/project-report-template-save.ts
+!aws/server/rds-apply-all.ts
