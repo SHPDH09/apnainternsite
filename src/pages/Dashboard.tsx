@@ -399,6 +399,7 @@ const Dashboard = () => {
     profile,
     attendanceRecords: attendanceList,
     projectReports,
+    universities: unis.map((u) => ({ name: u.name, logo_url: u.logo_url })),
     hasCertificate: !!cert,
     onOpenAcceptanceLetter: () => setIsOfferLetterOpen(true),
     onOpenCertificate: () => {
@@ -1125,6 +1126,7 @@ const Dashboard = () => {
                 documents={documentActions.documents}
                 downloadingDoc={documentActions.downloading}
                 uploadingConsent={documentActions.uploadingConsent}
+                uploadingProject={documentActions.uploadingProject}
                 onViewDocument={documentActions.viewDocument}
                 onDownloadDocument={documentActions.downloadDocument}
                 onUploadDocument={documentActions.uploadDocument}
