@@ -34,11 +34,14 @@ function isTrustedOtpMessageId(messageId: string, body: OtpApiJson): boolean {
   return id.startsWith("<") && id.includes("@");
 }
 
-/** Production OTP — dedicated Vercel route (send-mail is heavier and can crash on import). */
+/** Vercel origin — bypasses Cloudflare edge Mail Manager (accepts mail but never delivers). */
+const OTP_VERCEL_ORIGIN = "https://apnainternsite.vercel.app";
+
+/** Production OTP — Vercel Hostinger SMTP (not CF edge Mail Manager). */
 function getOtpDeliverApiUrl(): string {
   if (typeof window === "undefined") return "/api/otp-deliver";
   if (isLocalDevEnvironment()) return "/api/send-mail";
-  return getCanonicalMailApiUrl("/api/otp-deliver");
+  return `${OTP_VERCEL_ORIGIN}/api/otp-deliver`;
 }
 
 function isPasswordResetsSchemaMessage(message: string): boolean {
@@ -59,38 +62,43 @@ function formatOtpDeliveryError(message: string, insertError?: string): string {
   return primary || "Failed to send verification code. Try again in a minute or contact support.";
 }
 
-async function deliverOtpViaServer(
-  email: string,
-  purpose: OtpPurpose
+function otpDeliverPayload(url: string, email: string, purpose: OtpPurpose): string {
+  return JSON.stringify(
+    url.includes("otp-deliver")
+      ? { email, purpose }
+      : { action: "otp_deliver", email, purpose }
+  );
+}
+
+async function parseOtpDeliverResponse(
+  res: Response,
+  email: string
 ): Promise<
   | { ok: true; email: string; sesSandboxLimited?: boolean }
-  | { ok: false; error: Error }
+  | { ok: false; error: Error; edgeFakeSuccess?: boolean }
 > {
-  const res = await fetch(getOtpDeliverApiUrl(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(
-      getOtpDeliverApiUrl().includes("otp-deliver")
-        ? { email, purpose }
-        : { action: "otp_deliver", email, purpose }
-    ),
-  });
-
   const text = await res.text().catch(() => "");
   let body: OtpApiJson = {};
   try {
     body = JSON.parse(text) as OtpApiJson;
   } catch {
-    throw new Error(
-      text.includes("FUNCTION_INVOCATION_FAILED")
-        ? "Email server error. Open https://apnaintern.in and try again."
-        : text.trim().slice(0, 280) || `OTP request failed (${res.status})`
-    );
+    return {
+      ok: false,
+      error: new Error(
+        text.includes("FUNCTION_INVOCATION_FAILED")
+          ? "Email server error. Open https://apnaintern.in and try again."
+          : text.trim().slice(0, 280) || `OTP request failed (${res.status})`
+      ),
+    };
   }
 
   const detail = (body.error || body.message || "").trim();
   const messageId = String(body.messageId || "").trim();
-  const trustedId = isTrustedOtpMessageId(messageId, body);
+  const otpDeliveryHeader = (res.headers.get("X-Otp-Delivery") || "").toLowerCase();
+  const edgeFakeSuccess =
+    otpDeliveryHeader.includes("edge-mail-manager") || otpDeliveryHeader.includes("edge-smtp");
+  const trustedId = !edgeFakeSuccess && isTrustedOtpMessageId(messageId, body);
+
   if (!res.ok || body.success !== true || body.emailSent !== true || !trustedId) {
     const smtpHint =
       body.message?.includes("outbound") || body.message?.includes("SMTP")
@@ -104,6 +112,7 @@ async function deliverOtpViaServer(
         : "";
     return {
       ok: false,
+      edgeFakeSuccess,
       error: new Error(
         (detail || missingIdHint || `OTP request failed (${res.status})`) + smtpHint
       ),
@@ -115,6 +124,37 @@ async function deliverOtpViaServer(
     email: body.email || email,
     sesSandboxLimited: body.sesSandboxLimited,
   };
+}
+
+async function deliverOtpViaServer(
+  email: string,
+  purpose: OtpPurpose
+): Promise<
+  | { ok: true; email: string; sesSandboxLimited?: boolean }
+  | { ok: false; error: Error }
+> {
+  const primaryUrl = getOtpDeliverApiUrl();
+  const vercelUrl = `${OTP_VERCEL_ORIGIN}/api/otp-deliver`;
+
+  const attempt = async (url: string) => {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: otpDeliverPayload(url, email, purpose),
+    });
+    return parseOtpDeliverResponse(res, email);
+  };
+
+  const first = await attempt(primaryUrl);
+  if (first.ok) return first;
+
+  if (first.edgeFakeSuccess && primaryUrl !== vercelUrl) {
+    const retry = await attempt(vercelUrl);
+    if (retry.ok) return retry;
+    return retry;
+  }
+
+  return first;
 }
 
 async function deliverOtpViaClient(
