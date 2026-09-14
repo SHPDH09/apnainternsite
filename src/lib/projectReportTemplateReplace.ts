@@ -1,4 +1,5 @@
 import { rgb, type PDFPage, type PDFFont } from "pdf-lib";
+import { getPdfJs } from "@/lib/pdfJsClient";
 
 export type PdfTextLine = {
   pageIndex: number;
@@ -102,26 +103,29 @@ function groupTextItemsIntoLines(
 
 /** Extract grouped text lines with PDF coordinates from a template PDF. */
 export async function extractPdfTextLines(pdfBytes: Uint8Array): Promise<PdfTextLine[]> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({ data: pdfBytes.slice() });
-  const pdf = await loadingTask.promise;
-  const lines: PdfTextLine[] = [];
+  try {
+    const pdfjs = await getPdfJs();
+    const loadingTask = pdfjs.getDocument({ data: pdfBytes.slice() });
+    const pdf = await loadingTask.promise;
+    const lines: PdfTextLine[] = [];
 
-  for (let pageIndex = 0; pageIndex < pdf.numPages; pageIndex += 1) {
-    const page = await pdf.getPage(pageIndex + 1);
-    const viewport = page.getViewport({ scale: 1 });
-    const textContent = await page.getTextContent();
-    lines.push(
-      ...groupTextItemsIntoLines(
-        textContent.items as Array<{ str: string; transform: number[]; width: number; height: number }>,
-        pageIndex
-      )
-    );
-    void viewport;
+    for (let pageIndex = 0; pageIndex < pdf.numPages; pageIndex += 1) {
+      const page = await pdf.getPage(pageIndex + 1);
+      const textContent = await page.getTextContent();
+      lines.push(
+        ...groupTextItemsIntoLines(
+          textContent.items as Array<{ str: string; transform: number[]; width: number; height: number }>,
+          pageIndex
+        )
+      );
+    }
+
+    await pdf.destroy();
+    return lines;
+  } catch (err) {
+    console.warn("[project-report] PDF text extraction failed; using layout fallback.", err);
+    return [];
   }
-
-  await pdf.destroy();
-  return lines;
 }
 
 function wrapToWidth(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
