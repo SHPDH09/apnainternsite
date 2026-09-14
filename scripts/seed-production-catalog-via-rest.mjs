@@ -71,6 +71,14 @@ function parseDomainNamesFromSql(relPath) {
   return [...new Set(names)];
 }
 
+function parseTechDomainsFromTs() {
+  const fp = path.join(root, "src/lib/technicalInternshipDomains.ts");
+  const src = fs.readFileSync(fp, "utf8");
+  return src
+    .match(/^\s*"([^"]+)"/gm)
+    ?.map((line) => line.replace(/^\s*"/, "").replace(/"$/, "")) || [];
+}
+
 async function rest(method, table, { query = "", body, prefer = "return=representation" } = {}) {
   const url = `${REST_BASE}/${table}${query}`;
   const res = await fetch(url, {
@@ -218,7 +226,7 @@ async function main() {
     console.log("tech: BEU (backfill)");
   }
 
-  const techDomains = parseDomainNamesFromSql("aws/scripts/65-rds-technical-internship-domains.sql");
+  const techDomains = parseTechDomainsFromTs();
   const nonTechDomains = parseDomainNamesFromSql("aws/scripts/66-rds-non-technical-internship-domains.sql");
   const allDomains = [...new Set([...techDomains, ...nonTechDomains])];
 
@@ -236,10 +244,9 @@ async function main() {
     });
     const row = Array.isArray(rows) ? rows[0] : null;
     if (!row?.id) continue;
-    const merged = [...new Set([...(row.domains || []), ...techDomains])].sort();
     await rest("PATCH", "engineering_university_configs", {
       query: `?id=eq.${row.id}`,
-      body: { domains: merged },
+      body: { domains: [...techDomains].sort() },
       prefer: "return=minimal",
     });
   }
