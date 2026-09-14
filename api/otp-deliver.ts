@@ -112,7 +112,7 @@ function resolveSmtpFromEnv(): SmtpCreds {
   };
 }
 
-async function loadSmtpFromDatabase(): Promise<SmtpCreds | null> {
+async function loadHostingerSmtpFromDatabase(): Promise<SmtpCreds | null> {
   if (cachedDbSmtp !== undefined) return cachedDbSmtp;
   cachedDbSmtp = null;
 
@@ -143,15 +143,14 @@ async function loadSmtpFromDatabase(): Promise<SmtpCreds | null> {
 
     const user = row.smtp_user.trim();
     const pass = row.smtp_pass.trim();
-    const host = row.smtp_host.trim();
-    if (isBrokenApnamailEnv(user, host, normalizeSmtpPassword(pass))) {
-      return null;
-    }
+    const host = row.smtp_host.trim().toLowerCase();
+    if (!host.includes('hostinger')) return null;
+    if (isBrokenApnamailEnv(user, host, normalizeSmtpPassword(pass))) return null;
 
     cachedDbSmtp = {
       user,
       pass,
-      host,
+      host: row.smtp_host.trim(),
       port: Number(row.smtp_port) || 587,
       fromAddress: row.mail_from_address.trim() || resolveMailFromAddress(),
     };
@@ -334,7 +333,17 @@ async function sendOtpViaSmtpWithCreds(
 
   const messageId = String(info.messageId || '').trim();
   if (!messageId) throw new Error('SMTP send returned no message id');
+  const smtpResponse = String(info.response || '').trim();
+  if (smtpResponse && !/^250\b/i.test(smtpResponse)) {
+    throw new Error(`SMTP did not confirm delivery: ${smtpResponse.slice(0, 120)}`);
+  }
   return messageId;
+}
+
+function isHostingerAligned(creds: SmtpCreds): boolean {
+  const host = creds.host.toLowerCase();
+  const user = creds.user.toLowerCase();
+  return host.includes('hostinger') || user.endsWith('@apnaintern.in');
 }
 
 async function collectSmtpCandidatesForOtp(): Promise<SmtpCreds[]> {
@@ -342,16 +351,16 @@ async function collectSmtpCandidatesForOtp(): Promise<SmtpCreds[]> {
   const seen = new Set<string>();
   const push = (creds: SmtpCreds | null | undefined) => {
     if (!creds?.pass?.trim()) return;
+    if (!isHostingerAligned(creds)) return;
     const key = `${creds.host}|${creds.user}|${creds.fromAddress}`;
     if (seen.has(key)) return;
     seen.add(key);
     smtpCandidates.push(creds);
   };
 
-  push(await loadSmtpFromDatabase());
-  push(resolveSmtpFromEnv());
   push(hostingerSmtpCreds());
-  push(mailManagerSmtpCreds());
+  push(resolveSmtpFromEnv());
+  push(await loadHostingerSmtpFromDatabase());
   return smtpCandidates;
 }
 
@@ -359,7 +368,7 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
   const mail = buildOtpMail(otp, purpose);
   const errors: string[] = [];
 
-  // SMTP first — Mail Manager delivers to any inbox. SES sandbox only allows verified recipients.
+  // Hostinger mailbox only — Mail Manager accepts mail but often never reaches the inbox.
   for (const creds of await collectSmtpCandidatesForOtp()) {
     try {
       const messageId = await sendOtpViaSmtpWithCreds(email, mail, creds);
@@ -385,7 +394,10 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
     }
   }
 
-  throw new Error(errors.join(' | ') || 'Failed to send verification email');
+  throw new Error(
+    errors.join(' | ') ||
+      'Failed to send verification email via Hostinger (info@apnaintern.in). Check SMTP_PASS on Vercel.'
+  );
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -426,6 +438,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       emailSent: true,
       email,
       channel: delivery.channel,
+      smtpProvider: 'hostinger',
       sesSandboxLimited: delivery.sesSandboxLimited ?? false,
       message: `Verification code sent to ${email} from info@apnaintern.in. Check Inbox and Spam/Promotions.${sandboxNote}`,
       messageId: delivery.messageId,

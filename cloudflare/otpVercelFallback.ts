@@ -8,6 +8,7 @@ export function vercelMailOrigin(env: { VERCEL_MAIL_ORIGIN?: string }): string {
 export async function proxyOtpDeliverToVercel(
   request: Request,
   env: { VERCEL_MAIL_ORIGIN?: string },
+  jsonBody?: Record<string, unknown>,
 ): Promise<Response> {
   const origin = vercelMailOrigin(env);
   const url = new URL(request.url);
@@ -23,7 +24,11 @@ export async function proxyOtpDeliverToVercel(
   };
 
   if (request.method !== "GET" && request.method !== "HEAD") {
-    init.body = await request.clone().text();
+    if (jsonBody) {
+      init.body = JSON.stringify(jsonBody);
+    } else {
+      init.body = await request.clone().text();
+    }
   }
 
   const res = await fetch(target, init);
