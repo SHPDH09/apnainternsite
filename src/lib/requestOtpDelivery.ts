@@ -20,7 +20,19 @@ type OtpApiJson = {
   sesSandboxLimited?: boolean;
   messageId?: string;
   channel?: string;
+  via?: string;
 };
+
+/** Reject synthetic ids from edge/mailchannels — they caused false "sent" toasts without inbox delivery. */
+function isTrustedOtpMessageId(messageId: string, body: OtpApiJson): boolean {
+  const id = messageId.trim();
+  if (!id) return false;
+  if (id.startsWith("edge-smtp-")) return false;
+  if (body.via === "mailchannels") return false;
+  if (id.includes("@")) return true;
+  if (/^[0-9a-f-]{20,}$/i.test(id)) return true;
+  return id.startsWith("<") && id.includes("@");
+}
 
 /** Production OTP — dedicated Vercel route (send-mail is heavier and can crash on import). */
 function getOtpDeliverApiUrl(): string {
@@ -78,14 +90,15 @@ async function deliverOtpViaServer(
 
   const detail = (body.error || body.message || "").trim();
   const messageId = String(body.messageId || "").trim();
-  if (!res.ok || body.success !== true || body.emailSent !== true || !messageId) {
+  const trustedId = isTrustedOtpMessageId(messageId, body);
+  if (!res.ok || body.success !== true || body.emailSent !== true || !trustedId) {
     const sandboxHint =
       body.message?.includes("sandbox") || body.error?.includes("not verified")
         ? " Request AWS SES Production Access once (AWS Console → SES) so OTP reaches all inboxes."
         : "";
     const missingIdHint =
-      res.ok && body.success === true && body.emailSent === true && !messageId
-        ? " Email server did not confirm delivery — no message id returned."
+      res.ok && body.success === true && body.emailSent === true && !trustedId
+        ? " Email server did not confirm delivery — OTP was not sent from info@apnaintern.in."
         : "";
     return {
       ok: false,

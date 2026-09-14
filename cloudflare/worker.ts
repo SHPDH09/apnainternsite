@@ -1,11 +1,10 @@
 /**
  * Cloudflare Worker — proxy /auth, /rest, /storage, /functions, /api to AWS Lambda.
- * OTP mail (login_otp / send_otp) is sent at the edge via SES Mail Manager SMTP when configured,
- * so login works even when Lambda still has broken SES/SMTP env.
+ * OTP mail is relayed to Vercel (/api/otp-deliver) for Hostinger SMTP + real messageId.
  */
 
 import { tryHandleOtpDeliver } from "./otpDeliver";
-import { buildOtpMailHtml, resolveOtpPurpose, sendOtpViaHostinger } from "./otpMail";
+import { resolveOtpPurpose } from "./otpMail";
 import { proxyOtpDeliverToVercel } from "./otpVercelFallback";
 
 export interface Env {
@@ -75,39 +74,6 @@ type SendMailBody = {
   purpose?: string;
 };
 
-async function tryMailchannelsOtp(
-  to: string,
-  otp: string,
-  purpose: ReturnType<typeof resolveOtpPurpose>,
-  request: Request,
-): Promise<Response | null> {
-  void request;
-  const mail = buildOtpMailHtml(otp, purpose);
-  const fromAddress = "info@apnaintern.in";
-  try {
-    const res = await fetch("https://api.mailchannels.net/tx/v1/send", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: to }] }],
-        from: { email: fromAddress, name: "Apna Intern" },
-        subject: mail.subject,
-        content: [{ type: "text/html", value: mail.html }],
-      }),
-    });
-    if (res.ok) {
-      return Response.json(
-        { success: true, emailSent: true, message: "Email sent successfully!", via: "mailchannels" },
-        { status: 200, headers: { "X-Otp-Delivery": "mailchannels" } },
-      );
-    }
-    console.warn("mailchannels OTP failed", res.status, await res.text());
-  } catch (e) {
-    console.warn("mailchannels OTP error", e);
-  }
-  return null;
-}
-
 async function tryHandleOtpSendMail(request: Request, env: Env): Promise<Response | null> {
   if (request.method !== "POST" || !isSendMailPath(new URL(request.url).pathname)) {
     return null;
@@ -147,65 +113,15 @@ async function tryHandleOtpSendMail(request: Request, env: Env): Promise<Respons
     );
   }
 
-  const purpose = resolveOtpPurpose(
-    body.purpose || (action === "login_otp" ? "login" : "password_reset"),
-  );
+  resolveOtpPurpose(body.purpose || (action === "login_otp" ? "login" : "password_reset"));
 
-  if (!String(env.SMTP_PASS || "").trim()) {
-    const mc = await tryMailchannelsOtp(recipient, otp, purpose, request);
-    if (mc) return mc;
-    if (action === "otp_deliver" || action === "request_otp") {
-      return proxyOtpDeliverToVercel(request, env);
-    }
-    return Response.json(
-      {
-        success: false,
-        emailSent: false,
-        message:
-          "Verification email could not be sent — add SMTP_PASS as a Cloudflare Worker secret, or rely on Vercel mail fallback.",
-      },
-      { status: 503, headers: { "X-Otp-Delivery": "edge-unconfigured" } },
-    );
-  }
-
-  try {
-    await sendOtpViaHostinger(env, recipient, otp, purpose);
-    const messageId = `edge-smtp-${crypto.randomUUID()}`;
-    return Response.json(
-      {
-        success: true,
-        emailSent: true,
-        email: recipient,
-        channel: "smtp",
-        message: `Verification code sent to ${recipient} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
-        messageId,
-        via: "cloudflare-edge-smtp",
-      },
-      {
-        status: 200,
-        headers: { "X-Otp-Delivery": "edge-smtp" },
-      },
-    );
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("edge OTP mail failed:", msg);
-    if (action === "otp_deliver" || action === "request_otp") {
-      try {
-        return await proxyOtpDeliverToVercel(request, env);
-      } catch {
-        /* fall through */
-      }
-    }
-    return Response.json(
-      {
-        success: false,
-        emailSent: false,
-        message: "Failed to send verification email",
-        error: msg,
-      },
-      { status: 502, headers: { "X-Otp-Delivery": "edge-smtp-error" } },
-    );
-  }
+  return proxyOtpDeliverToVercel(request, env, {
+    action,
+    email: recipient,
+    to: recipient,
+    otp,
+    purpose: body.purpose || (action === "login_otp" ? "login" : "password_reset"),
+  });
 }
 
 async function proxyToLambda(request: Request, env: Env): Promise<Response> {
