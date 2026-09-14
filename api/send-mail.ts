@@ -25,11 +25,26 @@ function readSmtpPassFromEnv(): string {
   return normalizeSmtpPassword(raw);
 }
 
+function isBrokenRelayHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h.includes('mail-manager-smtp') || h.includes('mail1.apnamail');
+}
+
 function defaultHostForUser(user: string): string {
   const u = user.toLowerCase();
   if (u.includes('gmail')) return 'smtp.gmail.com';
   if (u.startsWith('akia')) return 'email-smtp.ap-south-1.amazonaws.com';
   if (u.endsWith('@apnaintern.in')) return HOSTINGER_SMTP_HOST;
+  return HOSTINGER_SMTP_HOST;
+}
+
+/** OTP/login mail must not use Mail Manager — it accepts but never delivers. */
+function resolveOtpSmtpHost(user: string): string {
+  const envHost = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').trim();
+  const u = user.toLowerCase();
+  if (u.endsWith('@apnaintern.in') || u.includes('apnaintern')) return HOSTINGER_SMTP_HOST;
+  if (u.includes('gmail')) return 'smtp.gmail.com';
+  if (envHost && !isBrokenRelayHost(envHost) && !envHost.includes('email-smtp.')) return envHost;
   return HOSTINGER_SMTP_HOST;
 }
 
@@ -74,9 +89,10 @@ function resolveSmtpFromEnv(): {
   const apnamailBroken =
     user.toLowerCase().endsWith('@apnamail.in') ||
     host.toLowerCase().includes('mail1.apnamail.in') ||
+    isBrokenRelayHost(host) ||
     pass === 'wuh4ovfk38aiuboa';
 
-  if (apnamailBroken) {
+  if (apnamailBroken || user.endsWith('@apnaintern.in') || isBrokenRelayHost(process.env.SMTP_HOST || '')) {
     user = HOSTINGER_SMTP_USER;
     host = HOSTINGER_SMTP_HOST;
     pass = DEFAULT_SMTP_PASS;

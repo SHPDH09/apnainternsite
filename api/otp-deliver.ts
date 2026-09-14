@@ -60,14 +60,31 @@ function resolveMailFromAddress(): string {
   );
 }
 
+function isBrokenRelayHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h.includes('mail-manager-smtp') || h.includes('mail1.apnamail');
+}
+
 function isBrokenApnamailEnv(user: string, host: string, pass: string): boolean {
   const u = user.toLowerCase();
   const h = host.toLowerCase();
   return (
     u.endsWith('@apnamail.in') ||
     h.includes('mail1.apnamail.in') ||
+    isBrokenRelayHost(h) ||
     pass === 'wuh4ovfk38aiuboa'
   );
+}
+
+/** Never use Mail Manager for OTP — it returns 250 OK but mail never reaches inbox. */
+function resolveOtpSmtpHost(user: string): string {
+  const envHost = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').trim();
+  const u = user.toLowerCase();
+  if (u.endsWith('@apnaintern.in') || u.includes('apnaintern')) return HOSTINGER_SMTP_HOST;
+  if (u.includes('gmail')) return 'smtp.gmail.com';
+  if (envHost && !isBrokenRelayHost(envHost) && !envHost.includes('email-smtp.')) return envHost;
+  if (isBrokenRelayHost(envHost)) return HOSTINGER_SMTP_HOST;
+  return HOSTINGER_SMTP_HOST;
 }
 
 function hostingerSmtpCreds(): SmtpCreds {
@@ -92,32 +109,23 @@ function deriveSesSmtpPassword(secretAccessKey: string, region = 'ap-south-1'): 
   return Buffer.concat([version, signature]).toString('base64');
 }
 
-function sesSmtpCreds(): SmtpCreds | null {
+function otpSesSmtpFallbackCreds(): SmtpCreds | null {
+  const secret = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (!secret) return null;
   const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
-  const user = (process.env.SMTP_USER || process.env.SES_SMTP_USER || SES_SMTP_USER).trim();
-  const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || SES_SMTP_HOST).trim();
-  if (!host.includes('email-smtp.')) return null;
-
-  let pass = readSmtpPassFromEnv();
-  if (!pass && user.startsWith('AKIA')) {
-    const secret = process.env.AWS_SECRET_ACCESS_KEY?.trim();
-    if (secret) pass = deriveSesSmtpPassword(secret, region);
-  }
-  if (!pass) return null;
-
   return {
-    user,
-    pass,
-    host,
-    port: Number.parseInt(process.env.SMTP_PORT || '587', 10) || 587,
+    user: SES_SMTP_USER,
+    pass: deriveSesSmtpPassword(secret, region),
+    host: SES_SMTP_HOST,
+    port: 587,
     fromAddress: resolveMailFromAddress(),
   };
 }
 
 function resolveSmtpFromEnv(): SmtpCreds {
   const pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
-  const host = (process.env.SMTP_HOST || HOSTINGER_SMTP_HOST).trim();
   const user = (process.env.SMTP_USER || HOSTINGER_SMTP_USER).trim();
+  const host = resolveOtpSmtpHost(user);
   const portRaw = process.env.SMTP_PORT || '587';
   const port = Number.parseInt(portRaw, 10);
 
@@ -126,7 +134,7 @@ function resolveSmtpFromEnv(): SmtpCreds {
   }
 
   return {
-    user,
+    user: user.endsWith('@apnaintern.in') ? HOSTINGER_SMTP_USER : user,
     pass,
     host,
     port: Number.isFinite(port) ? port : 587,
@@ -200,7 +208,7 @@ function appMailboxSmtpCreds(): SmtpCreds | null {
   const pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
   if (!user || !pass || !isMailboxSmtpUser(user)) return null;
 
-  const host = (process.env.SMTP_HOST || defaultSmtpHostForUser(user)).trim();
+  const host = resolveOtpSmtpHost(user);
   if (isBrokenApnamailEnv(user, host, pass)) return hostingerSmtpCreds();
 
   return {
@@ -414,9 +422,10 @@ async function collectSmtpCandidatesForOtp(): Promise<SmtpCreds[]> {
     smtpCandidates.push(creds);
   };
 
-  push(appMailboxSmtpCreds());
   push(hostingerSmtpCreds());
+  push(appMailboxSmtpCreds());
   push(resolveSmtpFromEnv());
+  push(otpSesSmtpFallbackCreds());
   push(await loadHostingerSmtpFromDatabase());
   return smtpCandidates;
 }
@@ -458,13 +467,6 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
 
   if (errors.some((e) => isMailboxSuspendedError(new Error(e)))) {
     throw new Error(HOSTINGER_OUTBOUND_MESSAGE);
-  }
-
-  // Optional fallback: Amazon SES (only when USE_SES_API=true and no mailbox user configured).
-  const sesSmtp = sesSmtpCreds();
-  if (sesSmtp) {
-    const sesResult = await trySmtpCandidates([sesSmtp], email, mail, errors);
-    if (sesResult) return sesResult;
   }
 
   if (canUseSesApi()) {
