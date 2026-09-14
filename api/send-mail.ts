@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 
 /** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
-const DEFAULT_SMTP_HOST = 'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
-const DEFAULT_SMTP_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+const DEFAULT_SMTP_HOST = 'smtp.hostinger.com';
+const DEFAULT_SMTP_USER = 'info@apnaintern.in';
 const LEGACY_MAIL_MANAGER_HOST =
   'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
 const LEGACY_MAIL_MANAGER_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
@@ -27,7 +27,8 @@ function readSmtpPassFromEnv(): string {
 
 function defaultHostForUser(user: string): string {
   const u = user.toLowerCase();
-  if (u.endsWith('@apnamail.in')) return DEFAULT_SMTP_HOST;
+  if (u.endsWith('@apnaintern.in')) return 'smtp.hostinger.com';
+  if (u.endsWith('@apnamail.in')) return LEGACY_MAIL_MANAGER_HOST;
   if (u.endsWith('@gmail.com') || u.includes('gmail')) return 'smtp.gmail.com';
   return DEFAULT_SMTP_HOST;
 }
@@ -37,8 +38,7 @@ function shouldUseLegacyMailManager(user: string, pass: string, host: string): b
   if (!user.trim()) return true;
   const h = host.toLowerCase();
   const u = user.toLowerCase();
-  if (u === 'info@apnaintern.in') return true;
-  if (u.includes('@apnaintern.in') && !u.startsWith('inp-')) return true;
+  if (u.includes('@apnaintern.in') && !u.startsWith('inp-')) return false;
   if (h.includes('email-smtp.')) return true;
   return false;
 }

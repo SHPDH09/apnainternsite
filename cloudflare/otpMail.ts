@@ -25,7 +25,10 @@ export function resolveOtpPurpose(raw: unknown): OtpPurpose {
   return "password_reset";
 }
 
-export function buildOtpMailHtml(otp: string, purpose: OtpPurpose): { subject: string; html: string } {
+export function buildOtpMailHtml(
+  otp: string,
+  purpose: OtpPurpose,
+): { subject: string; html: string; text: string } {
   const copy = COPY[purpose];
   const code = String(otp || "").trim();
   const year = new Date().getFullYear();
@@ -44,7 +47,8 @@ export function buildOtpMailHtml(otp: string, purpose: OtpPurpose): { subject: s
 <p style="margin:0;font-size:11px;color:#94a3b8;">© ${year} Apna Intern · SDP Technology Pvt Ltd</p>
 </td></tr>
 </table></body></html>`;
-  return { subject: copy.subject, html };
+  const text = `Apna Intern — ${copy.headline}\n\n${copy.lead}\n\nYour verification code: ${code}\n\nValid for 15 minutes.\nSender: info@apnaintern.in\nIf missing, check Spam/Promotions.\n`;
+  return { subject: copy.subject, html, text };
 }
 
 export interface OtpSmtpEnv {
@@ -73,10 +77,8 @@ export async function sendOtpViaHostinger(
   purpose: OtpPurpose
 ): Promise<void> {
   const pass = normalizeWorkerSmtpPassword(env.SMTP_PASS || "");
-  const user = String(env.SMTP_USER || "inp-3u5sedrqj7kqwjazxwmph2th").trim();
-  const host = String(
-    env.SMTP_HOST || "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com"
-  ).trim();
+  const user = String(env.SMTP_USER || "info@apnaintern.in").trim();
+  const host = String(env.SMTP_HOST || "smtp.hostinger.com").trim();
   const port = Number(env.SMTP_PORT || 587);
   const fromAddress = String(env.MAIL_FROM_ADDRESS || "info@apnaintern.in").trim();
 
@@ -99,5 +101,6 @@ export async function sendOtpViaHostinger(
     to: { mail: to },
     subject: mail.subject,
     html: mail.html,
+    text: mail.text,
   });
 }

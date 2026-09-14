@@ -3,9 +3,9 @@
  */
 
 export const DEFAULT_MAIL_FROM_ADDRESS = "info@apnaintern.in";
-export const DEFAULT_SMTP_HOST =
-  "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com";
-export const DEFAULT_SMTP_USER = "inp-3u5sedrqj7kqwjazxwmph2th";
+/** Primary mailbox — best inbox delivery for info@apnaintern.in OTP mail. */
+export const DEFAULT_SMTP_HOST = "smtp.hostinger.com";
+export const DEFAULT_SMTP_USER = "info@apnaintern.in";
 
 const LEGACY_MAIL_MANAGER_HOST =
   "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com";
@@ -51,7 +51,8 @@ export function resolveMailFromAddress(): string {
 
 function defaultHostForUser(user: string): string {
   const u = user.toLowerCase();
-  if (u.endsWith("@apnamail.in")) return DEFAULT_SMTP_HOST;
+  if (u.endsWith("@apnaintern.in")) return "smtp.hostinger.com";
+  if (u.endsWith("@apnamail.in")) return LEGACY_MAIL_MANAGER_HOST;
   if (u.endsWith("@gmail.com") || u.includes("gmail")) return "smtp.gmail.com";
   return DEFAULT_SMTP_HOST;
 }
@@ -65,8 +66,7 @@ export function shouldUseLegacyMailManager(user: string, pass: string, host: str
   if (!user.trim()) return true;
   const h = host.toLowerCase();
   const u = user.toLowerCase();
-  if (u === "info@apnaintern.in") return true;
-  if (u.includes("@apnaintern.in") && !u.startsWith("inp-")) return true;
+  if (u.includes("@apnaintern.in") && !u.startsWith("inp-")) return false;
   if (h.includes("email-smtp.")) return true;
   return false;
 }
