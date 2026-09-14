@@ -52,9 +52,10 @@ async function sendOneBulkMail(
     const result = (await response.json().catch(() => ({}))) as {
       success?: boolean;
       message?: string;
+      error?: string;
     };
-    if (response.ok && result.success) return { ok: true, rateLimited: false };
-    const errMsg = result.message || `HTTP ${response.status}`;
+    if (response.ok && result.success !== false) return { ok: true, rateLimited: false };
+    const errMsg = result.error || result.message || `HTTP ${response.status}`;
     return {
       ok: false,
       rateLimited: response.status === 429,
@@ -194,9 +195,13 @@ async function sendBatch(
   }
 
   const sent = Number(result.sent) || 0;
-  const failed = Number(result.failed) || 0;
+  let failed = Number(result.failed) || 0;
   const rateLimited = Boolean(result.rateLimited) || response.status === 429;
   const error = result.message || result.error || (response.ok ? undefined : `HTTP ${response.status}`);
+
+  if ((!response.ok || result.success === false) && sent === 0 && failed === 0) {
+    failed = recipients.length;
+  }
 
   return { sent, failed, rateLimited, error };
 }

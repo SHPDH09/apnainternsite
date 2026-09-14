@@ -1,12 +1,11 @@
 import { forwardRef } from "react";
+import { DocumentBrandLogo } from "@/components/brand/DocumentBrandLogo";
 import {
-  CERTIFICATE_CEO,
-  CERTIFICATE_CEO_TITLE,
-  CERTIFICATE_VERIFY_URL,
   certificatePronouns,
   certificateVerifyUrl,
   type CertificateDisplayData,
 } from "@/lib/certificateFormat";
+import { resolveCertificateBranding } from "@/lib/documentTemplates";
 
 type Props = {
   data: CertificateDisplayData;
@@ -21,11 +20,8 @@ const PAGE = {
   height: "210mm",
 } as const;
 
-/** Official transparent signature + company stamp from /public/certificate. */
-const SIGNATURE_SRC = "/certificate/signature.png?v=8";
-const STAMP_SRC = "/certificate/stamp.png";
 const BORDER_SRC = "/certificate/engineering-border.png";
-const WATERMARK_SRC = "/certificate/ei-icon.png";
+const WATERMARK_SRC = "/certificate/logo.png";
 
 const TEAL = "#2F9ED8";
 const TITLE_BLUE = "#0084FF";
@@ -52,6 +48,7 @@ function EngineeringCertificatePage({
   data: CertificateDisplayData;
   showSignature?: boolean;
 }) {
+  const branding = resolveCertificateBranding();
   const pronouns = certificatePronouns(data.gender);
   const college = data.collegeName || data.universityName || "—";
   const semNum = data.semester ? semesterNumber(data.semester) : "";
@@ -70,7 +67,7 @@ function EngineeringCertificatePage({
   const issueDate = data.issueDate || "—";
   const verifyLink = data.certificateId
     ? certificateVerifyUrl(data.certificateId)
-    : CERTIFICATE_VERIFY_URL;
+    : branding.verifyUrl;
 
   return (
     <div
@@ -94,7 +91,7 @@ function EngineeringCertificatePage({
         decoding="sync"
       />
 
-      {/* EI watermark */}
+      {/* Apna Intern shield watermark */}
       <img
         src={WATERMARK_SRC}
         alt=""
@@ -106,14 +103,7 @@ function EngineeringCertificatePage({
 
       {/* Header */}
       <header className="relative z-10 flex items-start justify-between gap-4 shrink-0">
-        <img
-          src="/certificate/header-logo.png"
-          alt="Apna Intern"
-          className="block shrink-0"
-          style={{ height: "13mm", width: "auto", objectFit: "contain" }}
-          crossOrigin="anonymous"
-          decoding="sync"
-        />
+        <DocumentBrandLogo heightMm={13} />
         <div className="flex items-center gap-3.5 shrink-0">
           <img
             src="/certificate/mca.png"
@@ -222,10 +212,10 @@ function EngineeringCertificatePage({
               <span className="font-semibold">Date of Certification: </span>
               <span className="font-bold">{issueDate}</span>
             </p>
-            <p className="mt-1 leading-tight" style={{ fontSize: "8.5px", color: TEAL }}>
+            <p className="mt-1 leading-tight break-all" style={{ fontSize: "8.5px", color: TEAL }}>
               Online Certificate Verification Available on:
               <br />
-              www.ezyintern.com/certificate-verification/
+              {branding.verifyUrl}
             </p>
           </div>
         </div>
@@ -265,7 +255,7 @@ function EngineeringCertificatePage({
           {showSignature ? (
             <div className="relative w-full flex justify-end items-end" style={{ height: "22mm" }}>
               <img
-                src={STAMP_SRC}
+                src={branding.stampSrc}
                 alt="Apna Intern company stamp"
                 className="absolute object-contain"
                 style={{
@@ -278,8 +268,8 @@ function EngineeringCertificatePage({
                 crossOrigin="anonymous"
               />
               <img
-                src={SIGNATURE_SRC}
-                alt={`Signature of ${CERTIFICATE_CEO}`}
+                src={branding.signatureSrc}
+                alt={`Signature of ${branding.ceoName}`}
                 className="relative z-10 object-contain object-bottom"
                 style={{
                   height: "18mm",
@@ -301,7 +291,7 @@ function EngineeringCertificatePage({
               fontStyle: "italic",
             }}
           >
-            Mr. {CERTIFICATE_CEO}
+            Mr. {branding.ceoName}
           </p>
           <p
             className="font-bold leading-tight"
@@ -311,7 +301,7 @@ function EngineeringCertificatePage({
               color: TITLE_BLUE,
             }}
           >
-            {CERTIFICATE_CEO_TITLE}
+            {branding.ceoTitle}
           </p>
         </div>
       </footer>

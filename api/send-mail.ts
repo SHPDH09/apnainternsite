@@ -1,14 +1,252 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { randomUUID } from 'node:crypto';
 
-/** Inlined — importing api/lib/*.ts crashes this Vercel function (FUNCTION_INVOCATION_FAILED). */
+/** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
+const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
+const DEFAULT_SMTP_HOST = 'smtp.hostinger.com';
+const DEFAULT_SMTP_USER = 'info@apnaintern.in';
+const LEGACY_MAIL_MANAGER_HOST =
+  'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
+const LEGACY_MAIL_MANAGER_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+
+function normalizeSmtpPassword(raw: string): string {
+  return String(raw || '')
+    .trim()
+    .replace(/[\s-]+/g, '');
+}
+
+function readSmtpPassFromEnv(): string {
+  const raw =
+    process.env.SMTP_PASS ||
+    process.env.HOSTINGER_SMTP_PASS ||
+    process.env.MAIL_SMTP_PASS ||
+    process.env.EMAIL_SMTP_PASS ||
+    '';
+  return normalizeSmtpPassword(raw);
+}
+
+function defaultHostForUser(user: string): string {
+  const u = user.toLowerCase();
+  if (u.endsWith('@apnaintern.in')) return 'smtp.hostinger.com';
+  if (u.endsWith('@apnamail.in')) return LEGACY_MAIL_MANAGER_HOST;
+  if (u.endsWith('@gmail.com') || u.includes('gmail')) return 'smtp.gmail.com';
+  return DEFAULT_SMTP_HOST;
+}
+
+function shouldUseLegacyMailManager(user: string, pass: string, host: string): boolean {
+  if (pass.trim()) return false;
+  if (!user.trim()) return true;
+  const h = host.toLowerCase();
+  const u = user.toLowerCase();
+  if (u.includes('@apnaintern.in') && !u.startsWith('inp-')) return false;
+  if (h.includes('email-smtp.')) return true;
+  return false;
+}
+
+function resolveSmtpHostFromEnv(user = ''): string {
+  const explicit = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').trim();
+  const resolvedUser = (process.env.SMTP_USER || user || DEFAULT_SMTP_USER).trim();
+  if (explicit) return explicit;
+  return defaultHostForUser(resolvedUser);
+}
+
+const MAIL_MANAGER_SMTP_PASS = 'Raunak@12583';
+
+function resolveSmtpFromEnv(): {
+  user: string;
+  pass: string;
+  host: string;
+  port: number;
+  fromAddress: string;
+} {
+  let user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim();
+  let pass = readSmtpPassFromEnv();
+  let host = resolveSmtpHostFromEnv(user);
+  const port = resolveSmtpPort();
+  const fromAddress = resolveMailFromAddress();
+
+  const apnamailBroken =
+    user.toLowerCase().endsWith('@apnamail.in') ||
+    host.toLowerCase().includes('mail1.apnamail.in') ||
+    pass === 'wuh4ovfk38aiuboa';
+
+  if (apnamailBroken || shouldUseLegacyMailManager(user, pass, host)) {
+    user = LEGACY_MAIL_MANAGER_USER;
+    host = LEGACY_MAIL_MANAGER_HOST;
+    pass = MAIL_MANAGER_SMTP_PASS;
+  }
+
+  if (!pass) pass = MAIL_MANAGER_SMTP_PASS;
+
+  return { user, pass, host, port, fromAddress };
+}
 type MailFrom = { name: string; address: string };
+type OtpMailPurpose = 'login' | 'password_reset' | 'security';
 
-function resolveSmtpHost(): string {
-  return (
-    process.env.SMTP_HOST ||
-    process.env.SES_SMTP_HOST ||
-    'email-smtp.ap-south-1.amazonaws.com'
+const SES_REGION = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+
+function isSesIdentityNotVerifiedError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return raw.includes('not verified') || raw.includes('messagerejected') || (raw.includes('554') && raw.includes('verified'));
+}
+
+function isSmtpAuthError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return raw.includes('535') || raw.includes('authentication credentials invalid') || raw.includes('invalid login');
+}
+
+function formatSmtpError(e: unknown, context?: { to?: string; from?: string }): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  if (isSmtpAuthError(e)) {
+    return 'Email server login failed (SMTP 535 — invalid credentials). Update SMTP_USER/SMTP_PASS in deployment env.';
+  }
+  if (!isSesIdentityNotVerifiedError(e)) return raw;
+  const identity = context?.to?.trim() || context?.from?.trim() || 'email address';
+  return `AWS SES (${SES_REGION}): "${identity}" is not verified. Use Hostinger SMTP (SMTP_HOST=smtp.hostinger.com, USE_SES_API=false).`;
+}
+
+function resolveOtpMailPurpose(raw: unknown): OtpMailPurpose {
+  const v = String(raw || '').trim().toLowerCase();
+  if (v === 'login' || v === 'login_otp') return 'login';
+  if (v === 'security' || v === 'pin') return 'security';
+  return 'password_reset';
+}
+
+function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_reset'): { subject: string; html: string; text: string } {
+  const copy =
+    purpose === 'login'
+      ? {
+          subject: 'Apna Intern — Your sign-in verification code',
+          headline: 'Sign-in verification',
+          lead: 'Use the one-time code below to complete your secure sign-in to Apna Intern.',
+          footerNote: 'This code was requested for your Apna Intern account sign-in.',
+        }
+      : purpose === 'security'
+        ? {
+            subject: 'Apna Intern — Security verification code',
+            headline: 'Security verification',
+            lead: 'Use this verification code to confirm your identity for a sensitive account action.',
+            footerNote: 'Never share this code with anyone, including Apna Intern staff.',
+          }
+        : {
+            subject: 'Apna Intern — Password reset verification code',
+            headline: 'Password reset',
+            lead: 'You requested to reset your password. Enter this verification code to continue.',
+            footerNote: 'If you did not request a password reset, you can safely ignore this email.',
+          };
+  const code = String(otp || '').trim();
+  const year = new Date().getFullYear();
+  const html = `<!DOCTYPE html><html lang="en"><body style="margin:0;padding:0;background:#f1f5f9;font-family:system-ui,sans-serif;"><table role="presentation" width="100%" style="background:#f1f5f9;padding:32px 16px;"><tr><td align="center"><table role="presentation" width="100%" style="max-width:560px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;"><tr><td style="padding:28px 32px 8px;text-align:center;"><p style="margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;">Apna Intern</p><h1 style="margin:0;font-size:22px;color:#0f172a;">${copy.headline}</h1></td></tr><tr><td style="padding:8px 32px 0;text-align:center;"><p style="margin:0;font-size:15px;color:#475569;">${copy.lead}</p></td></tr><tr><td style="padding:28px 32px;text-align:center;"><p style="margin:0;font-size:36px;font-weight:700;letter-spacing:.35em;color:#1e40af;font-family:monospace;">${code}</p><p style="margin:20px 0 0;font-size:13px;color:#64748b;">Valid for 15 minutes.</p></td></tr><tr><td style="padding:0 32px 24px;"><div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 16px;"><p style="margin:0;font-size:13px;color:#1e3a8a;">${copy.footerNote}</p></div></td></tr><tr><td style="padding:20px 32px;background:#f8fafc;text-align:center;border-top:1px solid #e2e8f0;"><p style="margin:0;font-size:11px;color:#94a3b8;">© ${year} Apna Intern</p></td></tr></table></td></tr></table></body></html>`;
+  const text = `Apna Intern — ${copy.headline}\n\n${copy.lead}\n\nYour verification code: ${code}\n\nValid for 15 minutes.\n${copy.footerNote}\n`;
+  return { subject: copy.subject, html, text };
+}
+
+function canUseSesApiForOtp(): boolean {
+  if (process.env.USE_SES_API === 'false') return false;
+  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
+  const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').toLowerCase();
+  if (host.includes('mail-manager-smtp') || host.includes('hostinger') || host.includes('apnamail')) {
+    return false;
+  }
+  return Boolean(
+    process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
   );
+}
+
+async function sendOtpViaSesApi(
+  recipient: string,
+  mailContent: { subject: string; html: string; text: string }
+): Promise<string> {
+  const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
+  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+  const client = new SESv2Client({ region });
+  const fromAddress = resolveMailFromAddress();
+  const result = await client.send(
+    new SendEmailCommand({
+      FromEmailAddress: `Apna Intern <${fromAddress}>`,
+      Destination: { ToAddresses: [recipient] },
+      Content: {
+        Simple: {
+          Subject: { Data: mailContent.subject, Charset: 'UTF-8' },
+          Body: {
+            Html: { Data: mailContent.html, Charset: 'UTF-8' },
+            Text: { Data: mailContent.text, Charset: 'UTF-8' },
+          },
+        },
+      },
+    })
+  );
+  return String(result.MessageId || 'ses');
+}
+
+async function sendOtpViaSmtp(
+  recipient: string,
+  mailContent: { subject: string; html: string; text: string }
+): Promise<string> {
+  const smtpCreds = await resolveSmtpCredentials();
+  if (!smtpCreds.user || !smtpCreds.pass) {
+    throw new Error(
+      'SMTP credentials missing on server. Add SMTP_PASS in Vercel project env, or store Mail Manager SMTP in RDS site_smtp_config.'
+    );
+  }
+  const transporter = await createSmtpTransporter(smtpCreds);
+  await transporter.verify();
+  const fromAddress = smtpCreds.fromAddress || resolveMailFromAddress();
+  const info = await transporter.sendMail({
+    from: { name: 'Apna Intern', address: fromAddress },
+    sender: fromAddress,
+    to: recipient,
+    subject: mailContent.subject,
+    html: mailContent.html,
+    text: mailContent.text,
+    replyTo: fromAddress,
+  });
+  const accepted = Array.isArray(info.accepted) ? info.accepted : [];
+  if (
+    accepted.length === 0 ||
+    !accepted.some((addr) => String(addr).toLowerCase() === recipient.toLowerCase())
+  ) {
+    throw new Error(`SMTP did not accept recipient ${recipient}`);
+  }
+  const messageId = String(info.messageId || '').trim();
+  if (!messageId) throw new Error('SMTP send returned no message id');
+  return messageId;
+}
+
+function canUseSesApi(): boolean {
+  if (process.env.USE_SES_API === 'false') return false;
+  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
+  const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').toLowerCase();
+  if (host.includes('mail-manager-smtp') || host.includes('hostinger') || host.includes('apnamail')) return false;
+  if (host && !host.includes('amazonaws.com')) return false;
+  return Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.USE_SES_API === 'true' || process.env.AWS_EXECUTION_ENV);
+}
+
+const RDS_REST =
+  process.env.RDS_REST_URL?.trim() ||
+  'https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/v1/password_resets';
+const REST_KEY = process.env.RDS_ANON_KEY?.trim() || 'local-anon-key';
+
+async function storeOtpInRds(normalizedEmail: string, code: string): Promise<void> {
+  const res = await fetch(RDS_REST, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: REST_KEY,
+      Authorization: `Bearer ${REST_KEY}`,
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({
+      id: randomUUID(),
+      email: normalizedEmail,
+      otp: code,
+      expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(detail.trim().slice(0, 240) || `Could not store OTP (${res.status})`);
+  }
 }
 
 function resolveSmtpPort(): number {
@@ -22,7 +260,12 @@ function resolveMailFromAddress(): string {
   const angle = explicit.match(/<([^>]+)>/);
   if (angle) return angle[1].trim();
   if (explicit.includes('@')) return explicit;
-  return process.env.MAIL_FROM_ADDRESS || 'admin@ezyintern.in';
+  return (
+    process.env.MAIL_FROM_ADDRESS?.trim() ||
+    process.env.SES_FROM_ADDRESS?.trim() ||
+    process.env.SMTP_USER?.trim() ||
+    DEFAULT_MAIL_FROM
+  );
 }
 
 function resolveMailFrom(label = 'Apna Intern'): MailFrom {
@@ -38,22 +281,69 @@ function sesMailHeaders(label = 'Apna Intern'): { from: MailFrom; sender: string
   return { from, sender: from.address };
 }
 
-function getSmtpCredentials(): { user: string; pass: string } {
-  return {
-    user: process.env.SMTP_USER || '',
-    pass: process.env.SMTP_PASS || '',
-  };
+type SmtpCreds = { user: string; pass: string; host: string; port: number; fromAddress: string };
+
+let cachedDbSmtp: SmtpCreds | null | undefined;
+
+async function loadSmtpFromDatabase(): Promise<SmtpCreds | null> {
+  if (cachedDbSmtp !== undefined) return cachedDbSmtp;
+  cachedDbSmtp = null;
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) return null;
+  try {
+    const pg = await import('pg');
+    const pool = new pg.default.Pool({
+      connectionString: databaseUrl,
+      ssl: /rds\.amazonaws\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+      max: 1,
+      connectionTimeoutMillis: 8000,
+    });
+    const { rows } = await pool.query<{
+      smtp_host: string;
+      smtp_port: string;
+      smtp_user: string;
+      smtp_pass: string;
+      mail_from_address: string;
+    }>(
+      `SELECT smtp_host, smtp_port, smtp_user, smtp_pass, mail_from_address
+       FROM public.site_smtp_config WHERE id = 1 LIMIT 1`
+    );
+    await pool.end();
+    const row = rows[0];
+    if (!row?.smtp_pass?.trim()) return null;
+    cachedDbSmtp = {
+      user: row.smtp_user.trim(),
+      pass: row.smtp_pass.trim(),
+      host: row.smtp_host.trim(),
+      port: Number(row.smtp_port) || 587,
+      fromAddress: row.mail_from_address.trim() || resolveMailFromAddress(),
+    };
+    return cachedDbSmtp;
+  } catch (e) {
+    console.warn('site_smtp_config load failed:', e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
-async function createSmtpTransporter() {
+async function resolveSmtpCredentials(): Promise<SmtpCreds> {
+  const envCreds = resolveSmtpFromEnv();
+  if (envCreds.pass) return envCreds;
+
+  const db = await loadSmtpFromDatabase();
+  if (db) return db;
+
+  return envCreds;
+}
+
+async function createSmtpTransporter(creds?: SmtpCreds) {
   const nodemailer = (await import('nodemailer')).default;
-  const { user, pass } = getSmtpCredentials();
+  const resolved = creds || (await resolveSmtpCredentials());
+  const { user, pass, host, port } = resolved;
   if (!user || !pass) {
     throw new Error('SMTP credentials missing');
   }
-  const port = resolveSmtpPort();
   return nodemailer.createTransport({
-    host: resolveSmtpHost(),
+    host,
     port,
     secure: port === 465,
     auth: { user, pass },
@@ -137,13 +427,30 @@ async function sendMailWithRetry(
   throw last;
 }
 
+async function deliverOutbound(
+  mailOptions: Record<string, unknown>,
+  transporter: { sendMail: (opts: Record<string, unknown>) => Promise<unknown> } | null,
+  opts?: { fast?: boolean; bulk?: boolean; sendWithRetry?: typeof sendMailWithRetry }
+): Promise<void> {
+  if (!transporter) throw new Error('SMTP credentials missing');
+  if (opts?.fast) {
+    await transporter.sendMail(mailOptions);
+    return;
+  }
+  if (opts?.sendWithRetry) {
+    await opts.sendWithRetry(transporter, mailOptions, 3, { bulk: opts.bulk });
+    return;
+  }
+  await transporter.sendMail(mailOptions);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+    'Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
   if (req.method === 'OPTIONS') {
@@ -167,6 +474,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const type = body.type as string | undefined;
     const to = body.to as string | undefined;
     const subject = body.subject as string | undefined;
+    const purposeRaw = body.purpose as string | undefined;
     const data = (body.data || {}) as Record<string, string | undefined>;
 
     /** Lovable / some proxies drop `action`; infer college welcome from payload shape. */
@@ -181,6 +489,179 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return '';
     })();
 
+    if (normalizedAction === 'ensure_blog_cms') {
+      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
+      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) {
+        return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
+      }
+      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
+      const session = await verifyBearerSession(tokenMatch[1]);
+      if (!session?.sub) {
+        return res.status(401).json({ success: false, message: 'Invalid or expired session' });
+      }
+      try {
+        const { ensureBlogCmsWithFallback } = await import('./lib/blogCmsBootstrap.js');
+        const result = await ensureBlogCmsWithFallback(authHeader);
+        return res.status(200).json({
+          success: true,
+          ok: true,
+          table: 'site_blog_posts',
+          via: result.via,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail ensure_blog_cms]', message);
+        return res.status(500).json({ success: false, message });
+      }
+    }
+
+    if (
+      normalizedAction === 'ensure_project_report_templates' ||
+      normalizedAction === 'save_project_report_template'
+    ) {
+      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
+      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) {
+        return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
+      }
+      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
+      const session = await verifyBearerSession(tokenMatch[1]);
+      if (!session?.sub) {
+        return res.status(401).json({ success: false, message: 'Invalid or expired session' });
+      }
+      const adminUserId = session.sub;
+      if (!process.env.DATABASE_URL?.trim()) {
+        return res.status(503).json({
+          success: false,
+          message: 'DATABASE_URL is not configured on this deployment',
+        });
+      }
+      try {
+        const {
+          assertAdminUserId,
+          saveProjectReportTemplateRow,
+        } = await import('../aws/server/project-report-template-save.js');
+
+        await assertAdminUserId(adminUserId);
+
+        if (normalizedAction === 'ensure_project_report_templates') {
+          const { ensureProjectReportSchema } = await import('../aws/server/project-report-bootstrap.js');
+          const result = await ensureProjectReportSchema();
+          return res.status(200).json({
+            success: true,
+            ok: true,
+            table: 'project_report_domain_templates',
+            applied: result.applied,
+          });
+        }
+
+        const payload =
+          body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)
+            ? (body.payload as Record<string, unknown>)
+            : body;
+        const domainName = String(payload.domain_name || payload.domain || '').trim();
+        const domainKey = String(payload.domain_key || domainName.toLowerCase().replace(/\s+/g, ' ')).trim();
+        const templatePdfPath = String(payload.template_pdf_path || '').trim();
+        const templatePdfUrl = String(payload.template_pdf_url || '').trim();
+        const templateFileName = String(payload.template_file_name || '').trim();
+
+        if (!domainName || !domainKey) {
+          return res.status(400).json({ success: false, message: 'domain_name is required.' });
+        }
+        if (!templatePdfPath || !templatePdfUrl) {
+          return res.status(400).json({ success: false, message: 'template_pdf_path and template_pdf_url are required.' });
+        }
+
+        const row = await saveProjectReportTemplateRow({
+          domain_name: domainName,
+          domain_key: domainKey,
+          template_pdf_path: templatePdfPath,
+          template_pdf_url: templatePdfUrl,
+          template_file_name: templateFileName || 'Project_Report_Template.pdf',
+          updated_by: adminUserId,
+        });
+
+        return res.status(200).json({
+          success: true,
+          ok: true,
+          row,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[send-mail ${normalizedAction}]`, message);
+        return res.status(500).json({ success: false, message });
+      }
+    }
+
+    if (normalizedAction === 'otp_deliver' || normalizedAction === 'request_otp') {
+      const recipient = String(to || email || '').trim().toLowerCase();
+      if (!recipient.includes('@')) {
+        return res.status(400).json({ success: false, message: 'Valid email required' });
+      }
+      const otpPurpose = resolveOtpMailPurpose(purposeRaw || 'login');
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const mailContent = buildOtpMailContent(code, otpPurpose);
+
+      try {
+        let messageId = '';
+        let channel = 'smtp';
+        let sesSandboxLimited = false;
+
+        try {
+          messageId = await sendOtpViaSmtp(recipient, mailContent);
+          channel = 'smtp';
+        } catch (smtpErr) {
+          console.warn('SMTP OTP send failed, trying SES if enabled:', smtpErr instanceof Error ? smtpErr.message : smtpErr);
+        }
+
+        if (!messageId && canUseSesApiForOtp()) {
+          try {
+            messageId = await sendOtpViaSesApi(recipient, mailContent);
+            channel = 'ses';
+          } catch (sesErr) {
+            if (isSesIdentityNotVerifiedError(sesErr)) {
+              sesSandboxLimited = true;
+              console.warn('SES sandbox blocked recipient:', recipient);
+            } else {
+              console.warn('SES OTP send failed:', sesErr instanceof Error ? sesErr.message : sesErr);
+            }
+          }
+        }
+
+        if (!String(messageId || '').trim()) {
+          throw new Error('Email server did not confirm delivery — no message id returned');
+        }
+
+        // Store OTP only after the mail server confirms acceptance.
+        await storeOtpInRds(recipient, code);
+
+        const deliveryNote = sesSandboxLimited
+          ? ' Amazon SES is still in sandbox — request Production Access once in AWS Console so OTP reaches all users (no per-email verification).'
+          : '';
+
+        return res.status(200).json({
+          success: true,
+          emailSent: true,
+          email: recipient,
+          channel,
+          sesSandboxLimited,
+          message: `Verification code sent to ${recipient}. Check inbox and spam (sender: ${resolveMailFromAddress()}).${deliveryNote}`,
+          messageId,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return res.status(isSmtpAuthError(e) ? 502 : 500).json({
+          success: false,
+          emailSent: false,
+          message: isSmtpAuthError(e)
+            ? 'Email server authentication failed (SMTP 535)'
+            : 'Failed to send verification email',
+          error: formatSmtpError(e, { to: recipient, from: resolveMailFromAddress() }),
+        });
+      }
+    }
+
     if (normalizedAction === 'send_otp' || normalizedAction === 'login_otp') {
       const recipient = String(to || email || '').trim();
       const code = String(otp || '').trim();
@@ -192,14 +673,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
-    const { from: mailFrom, sender: mailSender } = sesMailHeaders('Apna Intern');
+    const smtpCreds = await resolveSmtpCredentials();
+    const { user: SMTP_USER, pass: SMTP_PASS } = smtpCreds;
+    const mailFrom = { name: 'Apna Intern', address: smtpCreds.fromAddress };
+    const mailSender = smtpCreds.fromAddress;
+    const useSesApi = canUseSesApi();
 
-    if (!SMTP_USER || !SMTP_PASS) {
-      return res.status(500).json({ success: false, message: 'SMTP Credentials missing' });
+    if (!useSesApi && (!SMTP_USER || !SMTP_PASS)) {
+      return res.status(500).json({
+        success: false,
+        message:
+          'SMTP credentials missing on server. Add SMTP_PASS in Vercel project env, or store Mail Manager SMTP in RDS site_smtp_config.',
+      });
     }
 
-    const transporter = await createSmtpTransporter();
+    const transporter = useSesApi ? null : await createSmtpTransporter(smtpCreds);
 
     if (normalizedAction === 'bulk_custom_mail_batch') {
       const rawRecipients = body.recipients;
@@ -233,17 +721,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const outcomes = await Promise.all(
         list.map(async (to) => {
           try {
-            await sendMailWithRetry(
-              transporter,
+            await deliverOutbound(
               { from, sender, to, subject: mailSubject, html },
-              2,
-              { bulk: true }
+              transporter,
+              { bulk: true, sendWithRetry: sendMailWithRetry }
             );
             return { ok: true as const };
           } catch (e: unknown) {
             return {
               ok: false as const,
-              error: e instanceof Error ? e.message : String(e),
+              error: formatSmtpError(e, { to, from: from.address }),
               rateLimited: isSmtpRateLimitError(e),
             };
           }
@@ -255,10 +742,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           sent++;
           continue;
         }
-        failed++;
-        lastError = o.error;
-        if (o.rateLimited) {
-          rateLimited = true;
+        if (o.ok === false) {
+          failed++;
+          lastError = o.error;
+          if (o.rateLimited) {
+            rateLimited = true;
+          }
         }
       }
 
@@ -290,6 +779,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Skip verify on OTP + bulk — extra SMTP handshakes add 2–10s latency per login code.
     if (
+      transporter &&
       !fastOtpMail &&
       normalizedAction !== 'bulk_custom_mail' &&
       normalizedAction !== 'bulk_custom_mail_batch'
@@ -320,22 +810,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         </div>
       `;
     } else if (normalizedAction === 'send_otp' || normalizedAction === 'login_otp') {
-      const isLogin = normalizedAction === 'login_otp';
-      mailOptions.subject = isLogin ? 'Your Login Verification Code' : 'Your Password Reset OTP';
-      mailOptions.html = `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-          <div style="background-color: #0084FF; padding: 24px; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">${isLogin ? 'Login Verification' : 'Password Reset'}</h1>
-          </div>
-          <div style="padding: 32px; text-align: center; color: #1e293b;">
-            <p style="font-size: 16px; margin-bottom: 24px;">Hello,</p>
-            <p style="font-size: 16px; line-height: 1.5;">${isLogin ? 'Use the following code to complete your login:' : 'You requested to reset your password. Use the 6-digit code below to proceed:'}</p>
-            <div style="background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 16px; margin: 32px 0; display: inline-block;">
-              <span style="font-size: 36px; font-weight: 800; letter-spacing: 12px; color: #0084FF; font-family: monospace;">${otp}</span>
-            </div>
-          </div>
-        </div>
-      `;
+      const otpPurpose = resolveOtpMailPurpose(
+        purposeRaw || (normalizedAction === 'login_otp' ? 'login' : 'password_reset')
+      );
+      const mailContent = buildOtpMailContent(String(otp || ''), otpPurpose);
+      mailOptions.subject = mailContent.subject;
+      mailOptions.html = mailContent.html;
+      mailOptions.text = mailContent.text;
     } else if (normalizedAction === 'registration_confirmation' || normalizedAction === 'registration_success') {
       const isResend = normalizedAction === 'registration_success';
       mailOptions.subject = isResend
@@ -510,23 +991,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (fastOtpMail) {
       try {
-        await transporter.sendMail(mailOptions);
+        await deliverOutbound(mailOptions, transporter, {
+          fast: true,
+          sendWithRetry: sendMailWithRetry,
+        });
       } catch (e) {
         if (isSmtpRateLimitError(e)) {
           return res.status(429).json({
             success: false,
+            emailSent: false,
             message: 'SMTP rate limit. Wait a few minutes or use password sign-in.',
             error: e instanceof Error ? e.message : String(e),
           });
         }
-        throw e;
+        const toAddr = String(mailOptions.to || '').trim();
+        return res.status(isSesIdentityNotVerifiedError(e) ? 503 : isSmtpAuthError(e) ? 502 : 500).json({
+          success: false,
+          emailSent: false,
+          message: isSesIdentityNotVerifiedError(e)
+            ? 'Verification email could not be delivered — recipient not verified in Amazon SES'
+            : isSmtpAuthError(e)
+              ? 'Email server authentication failed (SMTP 535)'
+              : 'Failed to send verification email',
+          error: formatSmtpError(e, { to: toAddr, from: resolveMailFromAddress() }),
+        });
       }
     } else {
-      await sendMailWithRetry(transporter, mailOptions, 3, {
+      await deliverOutbound(mailOptions, transporter, {
         bulk: normalizedAction === 'bulk_custom_mail',
+        sendWithRetry: sendMailWithRetry,
       });
     }
-    return res.status(200).json({ success: true, message: 'Email sent successfully!' });
+    return res.status(200).json({
+      success: true,
+      emailSent: true,
+      message: 'Email sent successfully!',
+    });
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error('send-mail error:', err);
@@ -540,8 +1040,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     return res.status(500).json({
       success: false,
-      message: 'Failed to send email',
-      error: err.message,
+      message: isSesIdentityNotVerifiedError(error)
+        ? 'Email address not verified in Amazon SES'
+        : 'Failed to send email',
+      error: formatSmtpError(error, { from: resolveMailFromAddress() }),
       code: (error as { code?: string })?.code,
     });
   }

@@ -34,8 +34,12 @@ export const REFERRAL_LOGIN_PATH = "/referral/login";
 
 export const REFERRAL_DASHBOARD_PATH = "/referral/dashboard";
 
+export const PARTNER_REGISTER_PATH = "/partner/register";
+export const PARTNER_DASHBOARD_PATH = "/partner/dashboard";
+
 /** Dedicated cyber café partner sign-in (not student {@link STUDENT_LOGIN_PATH}). */
 export const CYBER_CAFE_LOGIN_PATH = "/cybercafe/login";
+export const CYBER_CAFE_DASHBOARD_PATH = "/cybercafe/dashboard";
 
 /** Legacy URL (hyphenated); kept for redirects from old bookmarks. */
 export const CYBER_CAFE_LEGACY_LOGIN_PATH = "/cyber-cafe/login";

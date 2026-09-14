@@ -38,7 +38,7 @@ function friendlyCybercafePartnerError(err: unknown): string {
 export async function registerCybercafePartner(
   directoryClient: SupabaseClient,
   input: CybercafePartnerRegistrationInput
-): Promise<{ userId: string }> {
+): Promise<{ userId: string; accessToken?: string | null }> {
   const normalizedEmail = input.email.trim().toLowerCase();
   const password = input.password.trim();
   if (password.length < REGISTRATION_PASSWORD_MIN_LENGTH) {
@@ -77,5 +77,8 @@ export async function registerCybercafePartner(
     throw new Error("Partner profile could not be saved.");
   }
 
-  return { userId };
+  return {
+    userId,
+    accessToken: signIn.ok ? signIn.session.access_token : null,
+  };
 }

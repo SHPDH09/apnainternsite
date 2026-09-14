@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Award,
   BookOpen,
+  Briefcase,
   CheckSquare,
   ClipboardList,
   Download,
@@ -20,6 +21,11 @@ import { Badge } from "@/components/ui/badge";
 import type { LearningPanelTab } from "@/components/student/StudentLearningPanel";
 import { StudentMyCoursesPanel } from "@/components/student/StudentMyCoursesPanel";
 import type { StudentDocumentId, StudentDocumentMeta } from "@/hooks/useStudentDocumentActions";
+import {
+  documentIdToServiceKey,
+  learningTabToServiceKey,
+  type StudentServiceKey,
+} from "@/lib/studentServiceKeys";
 type Accent = {
   border: string;
   iconBg: string;
@@ -47,97 +53,97 @@ type DocumentVisual = {
 
 const LEARNING_ACCENTS = {
   blue: {
-    border: "border-t-blue-500",
-    iconBg: "bg-blue-50",
-    iconColor: "text-blue-600",
-    status: "text-blue-600",
-    button: "bg-blue-600",
-    buttonHover: "hover:bg-blue-700",
-    viewBtn: "text-blue-600 hover:bg-blue-50",
+    border: "border-l-[#5AA3E6]",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   purple: {
-    border: "border-t-violet-500",
-    iconBg: "bg-violet-50",
-    iconColor: "text-violet-600",
-    status: "text-violet-600",
-    button: "bg-violet-600",
-    buttonHover: "hover:bg-violet-700",
-    viewBtn: "text-violet-600 hover:bg-violet-50",
+    border: "border-l-violet-500",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   amber: {
-    border: "border-t-amber-500",
-    iconBg: "bg-amber-50",
-    iconColor: "text-amber-600",
-    status: "text-amber-600",
-    button: "bg-amber-500",
-    buttonHover: "hover:bg-amber-600",
-    viewBtn: "text-amber-600 hover:bg-amber-50",
+    border: "border-l-amber-500",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   green: {
-    border: "border-t-emerald-500",
-    iconBg: "bg-emerald-50",
-    iconColor: "text-emerald-600",
-    status: "text-emerald-600",
-    button: "bg-emerald-600",
-    buttonHover: "hover:bg-emerald-700",
-    viewBtn: "text-emerald-600 hover:bg-emerald-50",
+    border: "border-l-emerald-600",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
 } as const;
 
 const DOCUMENT_ACCENTS: Record<StudentDocumentId, Accent> = {
   consent: {
-    border: "border-t-violet-500",
-    iconBg: "bg-violet-50",
-    iconColor: "text-violet-600",
-    status: "text-violet-600",
-    button: "bg-violet-600",
-    buttonHover: "hover:bg-violet-700",
-    viewBtn: "text-violet-600 hover:bg-violet-50",
+    border: "border-l-violet-500",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   acceptance: {
-    border: "border-t-teal-500",
-    iconBg: "bg-teal-50",
-    iconColor: "text-teal-600",
-    status: "text-teal-600",
-    button: "bg-teal-600",
-    buttonHover: "hover:bg-teal-700",
-    viewBtn: "text-teal-600 hover:bg-teal-50",
+    border: "border-l-teal-600",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   logbook: {
-    border: "border-t-orange-500",
-    iconBg: "bg-orange-50",
-    iconColor: "text-orange-600",
-    status: "text-orange-600",
-    button: "bg-orange-500",
-    buttonHover: "hover:bg-orange-600",
-    viewBtn: "text-orange-600 hover:bg-orange-50",
+    border: "border-l-orange-500",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   certificate: {
-    border: "border-t-rose-500",
-    iconBg: "bg-rose-50",
-    iconColor: "text-rose-600",
-    status: "text-rose-600",
-    button: "bg-rose-600",
-    buttonHover: "hover:bg-rose-700",
-    viewBtn: "text-rose-600 hover:bg-rose-50",
+    border: "border-l-rose-600",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   attendance: {
-    border: "border-t-emerald-500",
-    iconBg: "bg-emerald-50",
-    iconColor: "text-emerald-600",
-    status: "text-emerald-600",
-    button: "bg-emerald-600",
-    buttonHover: "hover:bg-emerald-700",
-    viewBtn: "text-emerald-600 hover:bg-emerald-50",
+    border: "border-l-emerald-600",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
   project: {
-    border: "border-t-indigo-500",
-    iconBg: "bg-indigo-50",
-    iconColor: "text-indigo-600",
-    status: "text-indigo-600",
-    button: "bg-indigo-600",
-    buttonHover: "hover:bg-indigo-700",
-    viewBtn: "text-indigo-600 hover:bg-indigo-50",
+    border: "border-l-indigo-600",
+    iconBg: "bg-slate-50",
+    iconColor: "text-slate-700",
+    status: "text-slate-600",
+    button: "bg-slate-800",
+    buttonHover: "hover:bg-slate-900",
+    viewBtn: "text-slate-700 hover:bg-slate-50",
   },
 };
 
@@ -154,23 +160,41 @@ function SectionHeader({
   title,
   subtitle,
   countLabel,
+  icon: Icon,
 }: {
   title: string;
   subtitle: string;
   countLabel: string;
+  icon?: LucideIcon;
 }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
-      <div>
-        <div className="flex items-center gap-3 mb-1">
-          <span className="w-1 h-7 rounded-full bg-orange-500 shrink-0" />
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">{title}</h2>
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 pb-4 border-b border-slate-200">
+      <div className="flex items-start gap-3 min-w-0">
+        {Icon ? (
+          <div className="size-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+            <Icon className="size-4 text-slate-600" />
+          </div>
+        ) : null}
+        <div className="min-w-0">
+          <h2 className="text-lg md:text-xl font-semibold text-slate-900 tracking-tight">{title}</h2>
+          <p className="text-sm text-slate-500 max-w-2xl mt-0.5 leading-relaxed">{subtitle}</p>
         </div>
-        <p className="text-sm text-slate-500 max-w-2xl ml-4">{subtitle}</p>
       </div>
-      <Badge variant="secondary" className="self-start sm:self-auto font-bold text-[10px] tracking-wider uppercase">
+      <Badge
+        variant="outline"
+        className="self-start sm:self-auto font-medium text-[11px] text-slate-600 border-slate-200 bg-white"
+      >
         {countLabel}
       </Badge>
+    </div>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="student-stat-tile min-w-0">
+      <p className="text-xl md:text-2xl font-semibold tabular-nums text-slate-900 truncate">{value}</p>
+      <p className="text-xs font-medium text-slate-500 mt-0.5 truncate">{label}</p>
     </div>
   );
 }
@@ -179,37 +203,46 @@ function LearningCard({
   module,
   onOpen,
   locked,
+  serviceLocked,
 }: {
   module: LearningModule;
   onOpen: () => void;
   locked?: boolean;
+  serviceLocked?: boolean;
 }) {
   const Icon = module.icon;
   const a = module.accent;
+  const showLocked = locked || serviceLocked;
   return (
     <button
       type="button"
       onClick={onOpen}
-      className={`group text-left bg-white rounded-2xl border border-slate-100 border-t-4 ${a.border} shadow-sm hover:shadow-md transition-all p-5 flex flex-col min-h-[220px] ${
-        locked ? "opacity-90" : ""
+      className={`group student-dash-card border-l-[3px] ${a.border} text-left p-5 flex flex-col min-h-[220px] ${
+        showLocked ? "opacity-90" : ""
       }`}
     >
-      <div className={`size-11 rounded-xl ${a.iconBg} ${a.iconColor} flex items-center justify-center mb-4 relative`}>
-        <Icon className="size-5" />
-        {locked ? (
-          <span className="absolute -right-1 -top-1 size-5 rounded-full bg-amber-500 text-white flex items-center justify-center">
-            <Lock className="size-3" />
+      <div
+        className={`size-10 rounded-lg border border-slate-200 ${a.iconBg} ${a.iconColor} flex items-center justify-center mb-4 relative`}
+      >
+        <Icon className="size-4" />
+        {showLocked ? (
+          <span className="absolute -right-1 -top-1 size-4 rounded-full bg-amber-500 text-white flex items-center justify-center">
+            <Lock className="size-2.5" />
           </span>
         ) : null}
       </div>
-      <h3 className="font-bold text-slate-900 text-base mb-2">{module.title}</h3>
+      <h3 className="font-semibold text-slate-900 text-[15px] mb-1.5">{module.title}</h3>
       <p className="text-sm text-slate-500 leading-relaxed flex-1">{module.description}</p>
-      <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
-        <span className={`text-[10px] font-black uppercase tracking-wider ${locked ? "text-amber-600" : a.status}`}>
-          {locked ? "Locked · Pay to unlock" : module.statusLabel}
+      <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+        <span
+          className={`text-xs font-medium ${showLocked ? "text-amber-700" : "text-slate-500"}`}
+        >
+          {locked ? "Locked — payment required" : serviceLocked ? "Locked — contact admin" : module.statusLabel}
         </span>
-        <span className={`size-8 rounded-full ${a.button} ${a.buttonHover} text-white flex items-center justify-center shrink-0 transition-colors`}>
-          {locked ? <Lock className="size-3.5" /> : <ArrowRight className="size-4" />}
+        <span
+          className={`size-8 rounded-lg ${a.button} ${a.buttonHover} text-white flex items-center justify-center shrink-0`}
+        >
+          {showLocked ? <Lock className="size-3.5" /> : <ArrowRight className="size-3.5" />}
         </span>
       </div>
     </button>
@@ -225,6 +258,7 @@ function DocumentCard({
   onView,
   onDownload,
   onUpload,
+  serviceLocked,
 }: {
   doc: StudentDocumentMeta;
   accent: Accent;
@@ -234,20 +268,33 @@ function DocumentCard({
   onView: () => void;
   onDownload: () => void;
   onUpload?: () => void;
+  serviceLocked?: boolean;
 }) {
   const busy = downloading || uploading;
+  const blocked = serviceLocked || (!doc.ready && !doc.canUpload);
 
   return (
     <div
-      className={`bg-white rounded-2xl border border-slate-100 border-t-4 ${accent.border} shadow-sm p-5 flex flex-col min-h-[260px] ${!doc.ready && !doc.canUpload ? "opacity-90" : ""}`}
+      className={`student-dash-card border-l-[3px] ${accent.border} p-5 flex flex-col min-h-[252px] ${blocked ? "opacity-90" : ""}`}
     >
-      <div className={`size-11 rounded-xl ${accent.iconBg} ${accent.iconColor} flex items-center justify-center mb-4`}>
-        <Icon className="size-5" />
+      <div
+        className={`size-10 rounded-lg border border-slate-200 ${accent.iconBg} ${accent.iconColor} flex items-center justify-center mb-4 relative`}
+      >
+        <Icon className="size-4" />
+        {serviceLocked ? (
+          <span className="absolute -right-1 -top-1 size-4 rounded-full bg-amber-500 text-white flex items-center justify-center">
+            <Lock className="size-2.5" />
+          </span>
+        ) : doc.ready ? (
+          <span className="absolute -right-1 -top-1 size-2 rounded-full bg-emerald-500 ring-2 ring-white" />
+        ) : null}
       </div>
-      <h3 className="font-bold text-slate-900 text-base mb-2">{doc.title}</h3>
+      <h3 className="font-semibold text-slate-900 text-[15px] mb-1.5">{doc.title}</h3>
       <p className="text-sm text-slate-500 leading-relaxed flex-1">{doc.description}</p>
-      <p className={`text-[10px] font-black uppercase tracking-wider mt-4 mb-3 ${accent.status}`}>
-        {doc.statusLabel}
+      <p
+        className={`text-xs font-medium mt-4 mb-3 ${serviceLocked ? "text-amber-700" : "text-slate-500"}`}
+      >
+        {serviceLocked ? "Locked" : doc.statusLabel}
       </p>
       {doc.canUpload ? (
         <div className="grid grid-cols-3 gap-2">
@@ -256,7 +303,7 @@ function DocumentCard({
             variant="ghost"
             size="sm"
             disabled={!doc.ready || busy}
-            className={`gap-1 font-bold text-[10px] px-1 ${accent.viewBtn}`}
+            className={`gap-1 font-bold text-[10px] px-1 rounded-lg ${accent.viewBtn}`}
             onClick={onView}
           >
             <Eye className="size-3.5 shrink-0" />
@@ -266,7 +313,7 @@ function DocumentCard({
             type="button"
             size="sm"
             disabled={!doc.ready || busy}
-            className={`gap-1 font-bold text-[10px] px-1 text-white ${accent.button} ${accent.buttonHover}`}
+            className={`gap-1 font-bold text-[10px] px-1 text-white rounded-lg ${accent.button} ${accent.buttonHover}`}
             onClick={onDownload}
           >
             {downloading ? (
@@ -281,7 +328,7 @@ function DocumentCard({
             variant="outline"
             size="sm"
             disabled={busy}
-            className="gap-1 font-bold text-[10px] px-1"
+            className="gap-1 font-bold text-[10px] px-1 rounded-lg border-slate-200"
             onClick={onUpload}
           >
             {uploading ? (
@@ -299,7 +346,7 @@ function DocumentCard({
             variant="ghost"
             size="sm"
             disabled={!doc.ready || busy}
-            className={`gap-1.5 font-bold text-xs ${accent.viewBtn}`}
+            className={`gap-1.5 font-bold text-xs rounded-lg ${accent.viewBtn}`}
             onClick={onView}
           >
             <Eye className="size-3.5" />
@@ -309,7 +356,7 @@ function DocumentCard({
             type="button"
             size="sm"
             disabled={!doc.ready || busy}
-            className={`gap-1.5 font-bold text-xs text-white ${accent.button} ${accent.buttonHover}`}
+            className={`gap-1.5 font-bold text-xs text-white rounded-lg ${accent.button} ${accent.buttonHover}`}
             onClick={onDownload}
           >
             {downloading ? (
@@ -348,6 +395,8 @@ type Props = {
   /** When false, internship learning/docs stay locked and clicks go to payment. */
   internshipUnlocked?: boolean;
   onLockedInternshipClick?: () => void;
+  isServiceLocked?: (key: StudentServiceKey) => boolean;
+  onServiceLockedClick?: (key: StudentServiceKey) => void;
 };
 
 export function StudentHomeView({
@@ -372,6 +421,8 @@ export function StudentHomeView({
   onOpenMyCourses,
   internshipUnlocked = true,
   onLockedInternshipClick,
+  isServiceLocked,
+  onServiceLockedClick,
 }: Props) {
   const firstName = String(profile?.full_name || "Student").split(" ")[0];
   const initial = String(profile?.full_name || "S").charAt(0).toUpperCase();
@@ -422,72 +473,140 @@ export function StudentHomeView({
     },
   ];
 
+  const guardService = (key: StudentServiceKey, action: () => void) => {
+    if (isServiceLocked?.(key)) {
+      onServiceLockedClick?.(key);
+      return;
+    }
+    action();
+  };
+
+  const guardLearning = (tab: LearningPanelTab, action: () => void) => {
+    if (!internshipUnlocked) {
+      onLockedInternshipClick?.();
+      return;
+    }
+    guardService(learningTabToServiceKey(tab), action);
+  };
+
+  const guardDocument = (id: StudentDocumentId, action: () => void) => {
+    if (!internshipUnlocked) {
+      onLockedInternshipClick?.();
+      return;
+    }
+    guardService(documentIdToServiceKey(id), action);
+  };
+
+  const domainLabel = String(profile?.internship_domain || profile?.course || "").trim();
+  const docsReady = documents.filter((d) => d.ready).length;
+
   return (
-    <div className="space-y-10">
-      <section className="rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 md:p-8 shadow-elegant">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div className="flex items-center gap-5 min-w-0">
-            <div className="size-16 md:size-[4.5rem] rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-2xl md:text-3xl font-black shrink-0">
-              {initial}
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight truncate">
-                Howdy, {firstName}!
-              </h1>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm text-white/60">
-                <span>Student Dashboard</span>
-                {registrationLabel ? (
-                  <>
-                    <span className="size-1 rounded-full bg-white/30 hidden sm:inline" />
-                    <span className="font-mono text-xs text-white/50">{registrationLabel}</span>
-                  </>
-                ) : null}
+    <div className="space-y-8 md:space-y-9 student-dash-animate-in">
+      <section className="student-dash-hero relative overflow-hidden rounded-xl p-6 md:p-8">
+        <div className="absolute left-0 top-0 bottom-0 w-1 student-dash-hero-accent rounded-l-xl" />
+
+        <div className="relative z-10 flex flex-col gap-6 pl-2 md:pl-3">
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="size-14 md:size-16 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-xl md:text-2xl font-semibold text-slate-700 shrink-0">
+                {initial}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500 mb-1">
+                  Internship Dashboard
+                </p>
+                <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 tracking-tight truncate">
+                  Good day, {firstName}
+                </h1>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-sm text-slate-500">
+                  {domainLabel ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Briefcase className="size-3.5 shrink-0" />
+                      {domainLabel}
+                    </span>
+                  ) : null}
+                  {registrationLabel ? (
+                    <>
+                      {domainLabel ? <span className="text-slate-300 hidden sm:inline">|</span> : null}
+                      <span className="font-mono text-xs text-slate-500">{registrationLabel}</span>
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
+
+            <Button
+              size="default"
+              variant="outline"
+              className="shrink-0 self-start xl:self-center rounded-lg font-medium gap-2 border-slate-300 text-slate-800 hover:bg-slate-50 h-10 px-5"
+              onClick={() => {
+                if (!internshipUnlocked) {
+                  onLockedInternshipClick?.();
+                  return;
+                }
+                guardService("offer_letter", () => onOfferLetter());
+              }}
+            >
+              {!internshipUnlocked || isServiceLocked?.("offer_letter") ? (
+                <Lock className="size-4" />
+              ) : (
+                <FileText className="size-4" />
+              )}
+              View offer letter
+            </Button>
           </div>
-          <Button
-            size="lg"
-            variant="outline"
-            className="border-white/25 bg-white/5 text-white hover:bg-white/10 hover:text-white font-semibold gap-2 shrink-0 self-start lg:self-center"
-            onClick={() => {
-              if (!internshipUnlocked) {
-                onLockedInternshipClick?.();
-                return;
-              }
-              onOfferLetter();
-            }}
-          >
-            {internshipUnlocked ? <FileText className="size-4" /> : <Lock className="size-4" />}
-            Offer Letter
-          </Button>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatTile label="Attendance rate" value={`${attendancePercentage.toFixed(0)}%`} />
+            <StatTile label="Scheduled classes" value={String(liveClassCount)} />
+            <StatTile
+              label="Active assignments"
+              value={activeAssignments > 0 ? String(activeAssignments) : "None"}
+            />
+            <StatTile label="Documents ready" value={`${docsReady} of ${documents.length}`} />
+          </div>
         </div>
       </section>
 
       {!internshipUnlocked ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 flex gap-3 items-start">
+        <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950 flex gap-3 items-start">
           <Lock className="size-4 shrink-0 mt-0.5 text-amber-700" />
-          <p>
-            You have course access only. Internship modules stay locked until you complete the
-            internship registration payment.
+          <p className="leading-relaxed">
+            Course access is active. Internship modules will unlock after registration payment is
+            completed.
           </p>
         </div>
       ) : null}
 
       {studentId ? (
-        <StudentMyCoursesPanel
-          studentId={studentId}
-          compact
-          onViewAll={onOpenMyCourses}
-        />
+        <div className="relative">
+          <StudentMyCoursesPanel
+            studentId={studentId}
+            compact
+            onViewAll={onOpenMyCourses}
+          />
+          {isServiceLocked?.("my_courses") ? (
+            <button
+              type="button"
+              className="absolute inset-0 rounded-2xl bg-white/60 backdrop-blur-[2px] flex items-center justify-center z-10"
+              onClick={() => onServiceLockedClick?.("my_courses")}
+            >
+              <span className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                <Lock className="size-3.5" /> My Courses locked
+              </span>
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
-      <section>
+      <section className="student-dash-animate-in" style={{ animationDelay: "0.05s" }}>
         <SectionHeader
+          icon={BookOpen}
           title="Learning"
           subtitle={
             internshipUnlocked
-              ? "Daily study activities — classes, notes, assignments and attendance."
-              : "Internship learning modules — unlock with college registration payment."
+              ? "Access classes, study materials, assignments, and attendance records."
+              : "Complete registration payment to access internship learning modules."
           }
           countLabel="4 modules"
         />
@@ -497,30 +616,31 @@ export function StudentHomeView({
               key={module.id}
               module={module}
               locked={!internshipUnlocked}
-              onOpen={() => {
-                if (!internshipUnlocked) {
-                  onLockedInternshipClick?.();
-                  return;
-                }
-                onOpenLearning(module.id);
-              }}
+              serviceLocked={
+                internshipUnlocked ? isServiceLocked?.(learningTabToServiceKey(module.id)) : false
+              }
+              onOpen={() => guardLearning(module.id, () => onOpenLearning(module.id))}
             />
           ))}
         </div>
       </section>
 
-      <section>
+      <section className="student-dash-animate-in" style={{ animationDelay: "0.1s" }}>
         <SectionHeader
+          icon={FileText}
           title="Documents"
           subtitle={
             internshipUnlocked
-              ? "Official internship papers — pre-filled with your registration details. View in browser or download as PDF."
-              : "Internship documents unlock after the internship registration payment."
+              ? "Official internship documents — view online or download as PDF."
+              : "Documents become available after internship registration payment."
           }
-          countLabel={`${documents.length} documents`}
+          countLabel={`${documents.length} items`}
         />
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {documents.map((doc) => (
+          {documents.map((doc) => {
+            const serviceKey = documentIdToServiceKey(doc.id);
+            const docServiceLocked = internshipUnlocked ? isServiceLocked?.(serviceKey) : false;
+            return (
             <div key={doc.id} className="relative">
               <DocumentCard
                 doc={doc}
@@ -528,50 +648,43 @@ export function StudentHomeView({
                 icon={DOCUMENT_ICONS[doc.id]}
                 downloading={downloadingDoc === doc.id}
                 uploading={doc.id === "consent" && uploadingConsent}
-                onView={() => {
-                  if (!internshipUnlocked) {
-                    onLockedInternshipClick?.();
-                    return;
-                  }
-                  onViewDocument(doc.id);
-                }}
-                onDownload={() => {
-                  if (!internshipUnlocked) {
-                    onLockedInternshipClick?.();
-                    return;
-                  }
-                  onDownloadDocument(doc.id);
-                }}
+                serviceLocked={!!docServiceLocked}
+                onView={() => guardDocument(doc.id, () => onViewDocument(doc.id))}
+                onDownload={() => guardDocument(doc.id, () => onDownloadDocument(doc.id))}
                 onUpload={
                   onUploadDocument
-                    ? () => {
-                        if (!internshipUnlocked) {
-                          onLockedInternshipClick?.();
-                          return;
-                        }
-                        onUploadDocument(doc.id);
-                      }
+                    ? () => guardDocument(doc.id, () => onUploadDocument(doc.id))
                     : undefined
                 }
               />
               {!internshipUnlocked ? (
                 <button
                   type="button"
-                  className="absolute inset-0 rounded-2xl bg-white/55 backdrop-blur-[1px] flex items-center justify-center"
+                  className="absolute inset-0 rounded-2xl bg-white/65 backdrop-blur-[2px] flex items-center justify-center"
                   onClick={() => onLockedInternshipClick?.()}
                 >
-                  <span className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-black text-white">
-                    <Lock className="size-3.5" /> Pay to unlock
+                  <span className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                    <Lock className="size-3.5" /> Payment required
+                  </span>
+                </button>
+              ) : docServiceLocked ? (
+                <button
+                  type="button"
+                  className="absolute inset-0 rounded-2xl bg-white/65 backdrop-blur-[2px] flex items-center justify-center"
+                  onClick={() => onServiceLockedClick?.(serviceKey)}
+                >
+                  <span className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                    <Lock className="size-3.5" /> Service locked
                   </span>
                 </button>
               ) : null}
             </div>
-          ))}
+          );})}
         </div>
       </section>
 
-      <footer className="text-center text-[11px] text-slate-400 pb-4">
-        Apna Intern · SDP Technology Pvt Ltd · Patna, Bihar · CIN U85500BR2024PTC072653
+      <footer className="text-center text-xs text-slate-400 pb-2 pt-4 border-t border-slate-200">
+        © Apna Intern · SDP Technology Pvt Ltd · Patna, Bihar
       </footer>
     </div>
   );

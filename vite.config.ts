@@ -49,6 +49,26 @@ export default defineConfig(({ mode }) => {
   loadEnv(mode, process.cwd(), "VITE_");
 
   const isAwsRds = mode === "awsrds";
+  const isProdBuild = mode === "production";
+
+  // Production: omit Lambda URL defaults — browser resolves same-origin at runtime
+  // (Cloudflare worker proxies /auth, /rest, /api → Lambda; avoids CORS).
+  const prodEnvDefine = isProdBuild
+    ? {
+        "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
+          process.env.VITE_SUPABASE_URL?.trim() || "",
+        ),
+        "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
+          process.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || "local-anon-key",
+        ),
+        "import.meta.env.VITE_SUPABASE_PROJECT_ID": JSON.stringify(
+          process.env.VITE_SUPABASE_PROJECT_ID?.trim() || "apnaintern-local",
+        ),
+        "import.meta.env.VITE_SITE_API_ORIGIN": JSON.stringify(
+          process.env.VITE_SITE_API_ORIGIN?.trim() || "",
+        ),
+      }
+    : undefined;
 
   return {
     server: {
@@ -74,7 +94,7 @@ export default defineConfig(({ mode }) => {
           "import.meta.env.VITE_SITE_API_ORIGIN": JSON.stringify("http://localhost:8080"),
           "import.meta.env.VITE_PUBLIC_APP_URL": JSON.stringify("http://localhost:8080"),
         }
-      : undefined,
+      : prodEnvDefine,
     plugins: [react()],
     resolve: {
       alias: {

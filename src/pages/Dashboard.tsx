@@ -3,6 +3,10 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { StudentLearningPanel, type LearningPanelTab } from "@/components/student/StudentLearningPanel";
 import { StudentHomeView } from "@/components/student/StudentHomeView";
 import { StudentMyCoursesPanel } from "@/components/student/StudentMyCoursesPanel";
+import { StudentAttendancePanel } from "@/components/student/StudentAttendancePanel";
+import { StudentLiveSessionsSection } from "@/components/student/StudentLiveSessionsSection";
+import { StudentProfileView } from "@/components/student/StudentProfileView";
+import { StudentSettingsView } from "@/components/student/StudentSettingsView";
 import { StudentDocumentPreviewDialog } from "@/components/student/StudentDocumentPreviewDialog";
 import { useStudentDocumentActions } from "@/hooks/useStudentDocumentActions";
 import { fetchStudentLearningMaterials, type LearningMaterialRow } from "@/lib/learningMaterialsApi";
@@ -12,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchRolesForUser } from "@/lib/portalAuth";
 import { Loader2, User, GraduationCap, Phone, ShieldCheck, Download, FileText, ExternalLink, Calendar, MapPin, Award, Briefcase, Mail, Globe, BookOpen, CheckCircle2, LogOut, Bell, Clock, CheckSquare, Edit2, Save, LayoutDashboard } from "lucide-react";
+import { SiteLoader } from "@/components/SiteLoader";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +25,6 @@ import { ScrollableDialogBody, scrollableDialogShellClass } from "@/components/u
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { ChangePinModal } from "@/components/ChangePinModal";
 import { syncDirectoryPasswordAfterAuthChange } from "@/lib/studentCredentials";
 import {
   REGISTRATION_PASSWORD_MIN_LENGTH,
@@ -43,6 +47,14 @@ import {
   internshipUpgradePaymentPath,
   parseStudentAccessScope,
 } from "@/lib/studentPaymentAccess";
+import {
+  fetchDashboardServiceKeys,
+  isStudentServiceLocked,
+  learningTabToServiceKey,
+  resolveStudentServiceAccess,
+  type StudentServiceKey,
+} from "@/lib/studentServiceKeys";
+import { StudentServiceLockDialog } from "@/components/student/StudentServiceLockDialog";
 import { normalizeOfferLetterProfile } from "@/lib/offerLetterProfile";
 import { loadStudentDashboardProfile } from "@/lib/loadStudentDashboardProfile";
 import { displayRegistrationId } from "@/lib/registrationId";
@@ -60,11 +72,7 @@ import { fetchStudentAssignments } from "@/lib/assignmentApi";
 import { matchSubjectToOption, subjectsFor } from "@/lib/subjectOptions";
 import {
   ClassLinkRow,
-  classJoinUrl,
-  inferLinkTypeFromUrl,
-  linkTypeLabel,
   studentMatchesClassTargets,
-  youtubeEmbedUrl,
 } from "@/lib/classLinkTargeting";
 import {
   ATTENDANCE_ELIGIBILITY_MIN_PERCENT,
@@ -84,7 +92,6 @@ import {
 } from "@/lib/internshipProgramme";
 import { isBnmuStudent } from "@/lib/feeRules";
 import { isStudentSelfProfileEditBlocked } from "@/lib/studentPolicy";
-import { StaffSecurityPanel } from "@/components/staff/StaffAccountPanels";
 
 const UG_DEPARTMENTS = ["B.A.", "B.Sc", "B.Com"] as const;
 const PG_DEPARTMENTS = ["M.A.", "M.Sc", "M.Com"] as const;
@@ -114,6 +121,7 @@ const Dashboard = () => {
   const [generating, setGenerating] = useState(false);
   const [liveClasses, setLiveClasses] = useState<any[]>([]);
   const [systemSettings, setSystemSettings] = useState<any[]>([]);
+  const [serviceLockKey, setServiceLockKey] = useState<StudentServiceKey | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const offerLetterRef = useRef<HTMLDivElement>(null);
   const certRef = useRef<HTMLDivElement>(null);
@@ -249,6 +257,7 @@ const Dashboard = () => {
         fetchUnreadNotificationCount(supabase).catch(() => 0),
         fetchStudentAssignments(supabase).catch(() => []),
         supabase.from("payment_success").select("*").eq("user_id", uid).maybeSingle(),
+        fetchDashboardServiceKeys(supabase).catch(() => null),
       ]);
 
       const roles = (roleNames || []).map((role) => ({ role }));
@@ -409,6 +418,16 @@ const Dashboard = () => {
   const internshipUnlocked = useMemo(
     () => hasInternshipAccess(parseStudentAccessScope(profile?.metadata)),
     [profile?.metadata]
+  );
+
+  const isServiceLocked = useCallback(
+    (key: StudentServiceKey) => isStudentServiceLocked(key, profile?.metadata),
+    [profile?.metadata]
+  );
+
+  const serviceLockAccess = useMemo(
+    () => (serviceLockKey ? resolveStudentServiceAccess(serviceLockKey, profile?.metadata) : null),
+    [serviceLockKey, profile?.metadata]
   );
 
   const goUnlockInternship = useCallback(() => {
@@ -755,24 +774,66 @@ const Dashboard = () => {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="size-8 animate-spin text-primary" /></div>;
+    return <SiteLoader />;
   }
 
   const goToDashboardHome = () => setActiveView("home");
   const goToProfileHome = () => setActiveView("profile");
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen flex flex-col student-dashboard-bg">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between max-w-7xl">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="size-8 rounded-lg bg-[#5AA3E6] flex items-center justify-center shrink-0">
-              <span className="text-white font-black text-[11px] tracking-tight">AI</span>
+              <span className="text-white font-semibold text-[10px] tracking-tight">AI</span>
             </div>
-            <span className="font-bold text-slate-900 hidden sm:block">Student Portal</span>
+            <div className="min-w-0 hidden sm:block">
+              <p className="font-semibold text-slate-900 text-sm leading-none truncate">Apna Intern</p>
+              <p className="text-[10px] font-medium text-slate-500 mt-0.5">Student portal</p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 md:gap-4">
+          <nav className="hidden md:flex items-center gap-6 h-full">
+            <button
+              type="button"
+              className={`student-nav-link ${activeView === "home" ? "student-nav-link-active" : "student-nav-link-idle"}`}
+              onClick={() => setActiveView("home")}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <LayoutDashboard className="size-3.5" /> Dashboard
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`student-nav-link ${activeView === "courses" ? "student-nav-link-active" : "student-nav-link-idle"}`}
+              onClick={() => setActiveView("courses")}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <GraduationCap className="size-3.5" /> My courses
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`student-nav-link ${activeView === "profile" ? "student-nav-link-active" : "student-nav-link-idle"}`}
+              onClick={() => setActiveView("profile")}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <User className="size-3.5" /> Profile
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`student-nav-link ${activeView === "settings" ? "student-nav-link-active" : "student-nav-link-idle"}`}
+              onClick={() => setActiveView("settings")}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldCheck className="size-3.5" /> Settings
+              </span>
+            </button>
+          </nav>
+
+          <div className="flex items-center gap-1 md:gap-2">
             <DropdownMenu open={isNotifOpen} onOpenChange={setIsNotifOpen}>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="relative p-2">
@@ -784,9 +845,9 @@ const Dashboard = () => {
                   )}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80 p-0 shadow-elegant">
-                <div className="p-4 border-b bg-muted/20">
-                  <h3 className="font-bold">Notifications</h3>
+              <DropdownMenuContent align="end" className="w-80 overflow-hidden rounded-xl border border-slate-200 p-0 shadow-lg">
+                <div className="border-b border-slate-200 bg-slate-50/80 p-4">
+                  <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
                 </div>
                 <ScrollArea className="max-h-80">
                   {notifications.length === 0 ? (
@@ -796,7 +857,7 @@ const Dashboard = () => {
                       <button
                         key={notif.id}
                         type="button"
-                        className={`w-full text-left p-4 border-b hover:bg-muted/50 transition-colors ${
+                        className={`w-full border-b border-slate-100 p-4 text-left transition-colors hover:bg-slate-50 ${
                           notif.is_read ? "opacity-80" : "bg-primary/5"
                         }`}
                         onClick={() => {
@@ -837,41 +898,57 @@ const Dashboard = () => {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            <div className="flex items-center gap-1 md:hidden">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`size-9 rounded-lg ${activeView === "home" ? "bg-slate-100 text-slate-900" : "text-slate-500"}`}
+                onClick={() => setActiveView("home")}
+              >
+                <LayoutDashboard className="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`size-9 rounded-lg ${activeView === "courses" ? "bg-slate-100 text-slate-900" : "text-slate-500"}`}
+                onClick={() => setActiveView("courses")}
+              >
+                <GraduationCap className="size-4" />
+              </Button>
+            </div>
+
             <Button
               variant="ghost"
               size="sm"
-              className={`text-slate-600 hover:text-primary gap-2 ${
-                activeView === "profile" ? "bg-primary/10 text-primary" : ""
+              className={`hidden md:inline-flex gap-2 rounded-lg text-slate-600 hover:text-slate-900 ${
+                activeView === "profile" ? "bg-slate-100 text-slate-900" : ""
               }`}
               onClick={activeView === "home" ? goToProfileHome : goToDashboardHome}
             >
               {activeView === "home" ? (
                 <>
                   <User className="size-4" />
-                  <span className="hidden sm:inline">Profile</span>
+                  <span className="hidden lg:inline">Profile</span>
                 </>
               ) : (
                 <>
                   <LayoutDashboard className="size-4" />
-                  <span className="hidden sm:inline">Dashboard</span>
+                  <span className="hidden lg:inline">Dashboard</span>
                 </>
               )}
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              className={`text-slate-600 hover:text-primary gap-2 ${activeView === "courses" ? "bg-primary/10 text-primary" : ""}`}
-              onClick={() => setActiveView("courses")}
+              className={`rounded-lg text-slate-600 hover:text-slate-900 md:hidden ${
+                activeView === "profile" ? "bg-slate-100 text-slate-900" : ""
+              }`}
+              onClick={activeView === "home" ? goToProfileHome : goToDashboardHome}
             >
-              <GraduationCap className="size-4" />
-              <span className="hidden sm:inline">My Courses</span>
+              <User className="size-4" />
             </Button>
-            <Button variant="ghost" size="sm" className={`text-slate-600 hover:text-primary gap-2 ${activeView === 'settings' ? 'bg-primary/10 text-primary' : ''}`} onClick={() => setActiveView('settings')}>
-              <ShieldCheck className="size-4" />
-              <span className="hidden sm:inline">Settings</span>
-            </Button>
-            <div className="w-px h-4 bg-slate-200 mx-1"></div>
-            <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 gap-2" onClick={async () => {
+            <div className="hidden md:block w-px h-4 bg-slate-200" />
+            <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 gap-2 rounded-xl" onClick={async () => {
               await supabase.auth.signOut();
               navigate("/login");
             }}>
@@ -883,351 +960,143 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <main className="flex-1 py-8 md:py-10">
-        <div className="container mx-auto px-4 max-w-6xl">
-          {activeView !== "home" && (
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-            <div className="flex items-center gap-5">
-              <div className="size-16 md:size-20 rounded-2xl gradient-hero flex items-center justify-center text-white text-3xl font-bold shadow-elegant">
-                {profile?.full_name?.charAt(0)}
-              </div>
-              <div>
-                <h1 className="text-3xl md:text-5xl font-bold tracking-tight">Howdy, {profile?.full_name?.split(" ")[0]}!</h1>
-                <p className="text-muted-foreground mt-1 flex items-center gap-2">
-                  <span className="flex items-center gap-1">Student Dashboard</span>
-                  <span className="size-1 rounded-full bg-muted-foreground/30"></span>
-                  <span className="text-primary font-medium">
-                    Registration ID:{" "}
-                    {displayRegistrationId(profile?.registration_id, profile?.created_at)}
-                  </span>
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {localStorage.getItem("impersonate_id") && (
-                <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10 w-full sm:w-auto" onClick={() => { localStorage.removeItem("impersonate_id"); window.location.reload(); }}>
-                  Exit Preview
+      <main className="flex-1 py-6 md:py-8">
+        <div className="container mx-auto px-4 max-w-7xl">
+          {activeView !== "home" &&
+          (localStorage.getItem("impersonate_id") ||
+            (isAdmin && !localStorage.getItem("impersonate_id"))) ? (
+            <div className="mb-6 flex flex-wrap gap-2 student-dash-animate-in">
+              {localStorage.getItem("impersonate_id") ? (
+                <Button
+                  variant="outline"
+                  className="rounded-lg border-destructive text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    localStorage.removeItem("impersonate_id");
+                    window.location.reload();
+                  }}
+                >
+                  Exit preview
                 </Button>
-              )}
-              {isAdmin && !localStorage.getItem("impersonate_id") && (
-                <Button variant="outline" className="shadow-sm border-primary/20 hover:bg-primary/5 gap-2 w-full sm:w-auto" onClick={() => navigate("/admin")}>
-                  <ShieldCheck className="size-4 text-primary" /> Admin Panel
+              ) : null}
+              {isAdmin && !localStorage.getItem("impersonate_id") ? (
+                <Button
+                  variant="outline"
+                  className="gap-2 rounded-lg border-slate-300 hover:bg-slate-50"
+                  onClick={() => navigate("/admin")}
+                >
+                  <ShieldCheck className="size-4" /> Admin panel
                 </Button>
-              )}
-              <Button variant="hero" className="gap-2 shadow-lg w-full sm:w-auto" onClick={() => setIsOfferLetterOpen(true)}>
-                <FileText className="size-4" /> Offer Letter
-              </Button>
+              ) : null}
             </div>
-          </div>
-          )}
+          ) : null}
 
-          {activeView === 'settings' ? (
-            <div className="max-w-md mx-auto">
-              <Card className="p-8 shadow-elegant border-none bg-white">
-                <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><ShieldCheck className="size-5 text-primary" /> Security Settings</h3>
-                {currentUserId && (
-                  <div className="mb-6 p-4 bg-slate-50 rounded-xl border">
-                    <p className="text-sm font-bold text-slate-700 mb-3">4-Digit Security Code</p>
-                    <p className="text-xs text-slate-500 mb-4">This code is used as an additional layer of protection when you login.</p>
-                    <ChangePinModal userId={currentUserId} />
-                  </div>
-                )}
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = e.currentTarget;
-                  const newPass = (form.elements.namedItem('new_password') as HTMLInputElement).value;
-                  const confirmPass = (form.elements.namedItem('confirm_password') as HTMLInputElement).value;
+          {activeView === "settings" ? (
+            <StudentSettingsView
+              currentUserId={currentUserId}
+              settingsActive={activeView === "settings"}
+              onSignOut={async () => {
+                await supabase.auth.signOut();
+                navigate("/login");
+              }}
+              onPasswordSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const newPass = (form.elements.namedItem("new_password") as HTMLInputElement).value;
+                const confirmPass = (form.elements.namedItem("confirm_password") as HTMLInputElement)
+                  .value;
 
-                  if (newPass !== confirmPass) return toast.error("Passwords do not match");
-                  if (newPass.length < REGISTRATION_PASSWORD_MIN_LENGTH) {
-                    return toast.error(
-                      `Password must be at least ${REGISTRATION_PASSWORD_MIN_LENGTH} characters`
+                if (newPass !== confirmPass) return toast.error("Passwords do not match");
+                if (newPass.length < REGISTRATION_PASSWORD_MIN_LENGTH) {
+                  return toast.error(
+                    `Password must be at least ${REGISTRATION_PASSWORD_MIN_LENGTH} characters`
+                  );
+                }
+
+                try {
+                  await setLoginPasswordViaRpc(supabase, newPass);
+                  try {
+                    await syncDirectoryPasswordAfterAuthChange(supabase, newPass);
+                  } catch (syncErr: unknown) {
+                    const m = syncErr instanceof Error ? syncErr.message : String(syncErr);
+                    toast.warning(
+                      `Login password updated, but saving copy for admin emails failed: ${m}. Run migration 20260509232000_student_sync_directory_password_rpc.sql or contact support.`
                     );
                   }
-
-                  try {
-                    await setLoginPasswordViaRpc(supabase, newPass);
-                    try {
-                      await syncDirectoryPasswordAfterAuthChange(supabase, newPass);
-                    } catch (syncErr: unknown) {
-                      const m = syncErr instanceof Error ? syncErr.message : String(syncErr);
-                      toast.warning(
-                        `Login password updated, but saving copy for admin emails failed: ${m}. Run migration 20260509232000_student_sync_directory_password_rpc.sql or contact support.`
-                      );
-                    }
-                    toast.success("Password updated successfully!");
-                    form.reset();
-                  } catch (pwErr: unknown) {
-                    toast.error(userFacingPasswordError(pwErr));
-                  }
-                }} className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-muted-foreground uppercase">New Password</label>
-                    <input name="new_password" type="password" className="w-full p-3 rounded-xl border bg-slate-50 focus:ring-2 focus:ring-primary/20 outline-none transition-all" required placeholder="••••••••" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-muted-foreground uppercase">Confirm New Password</label>
-                    <input name="confirm_password" type="password" className="w-full p-3 rounded-xl border bg-slate-50 focus:ring-2 focus:ring-primary/20 outline-none transition-all" required placeholder="••••••••" />
-                  </div>
-                  <Button type="submit" className="w-full h-12 shadow-glow gap-2 mt-2">
-                    <CheckCircle2 className="size-4" /> Update Password
-                  </Button>
-                </form>
-                </Card>
-              <div className="mt-6">
-                <StaffSecurityPanel isActive={activeView === 'settings'} onSignOutCurrent={async () => { await supabase.auth.signOut(); navigate('/login'); }} />
-              </div>
-            </div>
+                  toast.success("Password updated successfully!");
+                  form.reset();
+                } catch (pwErr: unknown) {
+                  toast.error(userFacingPasswordError(pwErr));
+                }
+              }}
+            />
           ) : activeView === "courses" ? (
             currentUserId ? (
               <StudentMyCoursesPanel
                 studentId={localStorage.getItem("impersonate_id") || currentUserId}
               />
             ) : null
-          ) : activeView === 'profile' ? (
-            <>
-              <div id="profile-section" className="grid lg:grid-cols-3 gap-6 mb-8">
-            <div className="lg:col-span-2 space-y-6">
-              <Card className="p-8 shadow-elegant border-none bg-white relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <User className="size-20 text-primary" />
-                </div>
-                <div className="flex items-center justify-between border-b pb-4 mb-6">
-                  <h3 className="text-lg font-bold flex items-center gap-2"><User className="size-5 text-primary" /> Personal Profile</h3>
-                  {!studentProfileEditLocked ? (
-                  <Button variant="ghost" size="sm" className="text-primary hover:bg-primary/5 gap-2" onClick={() => {
-                    setEditProfileData({
-                      email: profile?.email || "",
-                      full_name: profile?.full_name || "",
-                      contact_number: profile?.contact_number || "",
-                      parent_name: profile?.parent_name || profile?.father_name || "",
-                      gender: profile?.gender || "",
-                      university_name: profile?.university_name || "",
-                      college_name: profile?.college_name || "",
-                      degree: profile?.degree || "",
-                      department: profile?.department || "",
-                      subject:
-                        matchSubjectToOption(
-                          profile?.subject || profile?.metadata?.subject,
-                          profile?.department
-                        ) ||
-                        profile?.subject ||
-                        profile?.metadata?.subject ||
-                        "",
-                      academic_session: profile?.academic_session || "",
-                      class_semester: profile?.class_semester || "",
-                      roll_number: profile?.roll_number || "",
-                      university_roll_number:
-                        profile?.university_roll_number ||
-                        resolveBnmuUniversityRollNumber(profile) ||
-                        "",
-                      internship_domain: profile?.internship_domain || profile?.course || "",
-                      internship_mode: resolveInternshipModeForUniversity(
-                        profile?.university_name,
-                        profile?.internship_mode || profile?.metadata?.internship_mode
-                      ),
-                      internship_duration: profile?.internship_duration || "",
-                      joining_date: profile?.joining_date || "",
-                      completion_date: profile?.completion_date || "",
-                      emergency_name: profile?.emergency_name || "",
-                      emergency_contact: profile?.emergency_contact || "",
-                      emergency_relation: profile?.emergency_relation || "",
-                    });
-                    setIsEditProfileOpen(true);
-                  }}>
-                    <Edit2 className="size-4" /> Edit Profile
-                  </Button>
-                  ) : null}
-                </div>
-                <div className="grid md:grid-cols-2 gap-x-8 gap-y-6">
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Full Name</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.full_name || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Email Address</p>
-                    <p className="text-sm font-bold text-slate-800 truncate">{profile?.email || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Contact Number</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.contact_number || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Gender</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.gender || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Parent / Guardian Name</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.parent_name || profile?.father_name || "—"}</p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-8 shadow-elegant border-none bg-white relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <GraduationCap className="size-20 text-primary" />
-                </div>
-                <h3 className="text-lg font-bold mb-6 flex items-center gap-2 border-b pb-4"><GraduationCap className="size-5 text-primary" /> Academic Information</h3>
-                <div className="grid md:grid-cols-2 gap-x-8 gap-y-6">
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">University Name</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.university_name || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">College Name</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.college_name || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Degree Program</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.degree || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Department</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.department || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Major / Subject</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.subject || profile?.metadata?.subject || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Academic Session</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.academic_session || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Class / Semester</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.class_semester || profile?.class_sem || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Registration No.</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.roll_number || "—"}</p>
-                  </div>
-                  {isBnmuStudent(profile?.university_name) ? (
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Roll No.</p>
-                      <p className="text-sm font-bold text-slate-800">
-                        {profile?.university_roll_number ||
-                          resolveBnmuUniversityRollNumber(profile) ||
-                          "—"}
-                      </p>
-                    </div>
-                  ) : null}
-                  <div className="space-y-1 md:col-span-2 p-3 bg-primary/5 rounded-lg border border-primary/10">
-                    <p className="text-[10px] text-primary font-black uppercase tracking-widest">Internship Domain</p>
-                    <p className="text-base font-black text-primary">{profile?.course || profile?.internship_domain || "—"}</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
-
-            <div className="space-y-6">
-              <Card className="p-8 shadow-elegant border-none bg-white relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Phone className="size-20 text-primary" />
-                </div>
-                <h3 className="text-lg font-bold mb-6 flex items-center gap-2 border-b pb-4"><Phone className="size-5 text-primary" /> Emergency Details</h3>
-                <div className="space-y-6">
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Contact Name</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.emergency_name || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Contact Phone</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.emergency_contact || "—"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Relationship</p>
-                    <p className="text-sm font-bold text-slate-800">{profile?.emergency_relation || "—"}</p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-6 border-none bg-gradient-to-br from-primary to-accent text-white shadow-elegant">
-                <div className="flex items-start gap-4">
-                  <div className="size-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-sm">
-                    <Award className="size-6 text-white" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm">Status: Active</h4>
-                    <p className="text-xs text-white/80 mt-1 leading-relaxed">You are currently enrolled in the internship program. Your progress is being tracked by our team.</p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-8 shadow-elegant border-none bg-slate-900 text-white overflow-hidden relative">
-                <div className="absolute top-0 right-0 p-8 opacity-20">
-                  <Briefcase className="size-20" />
-                </div>
-                <div className="relative z-10">
-                  <h3 className="text-xl font-bold mb-3">Support & Help</h3>
-                  <p className="text-slate-400 text-sm mb-6 max-w-sm">Need help with your internship or have questions about the portal? Our support team is here to assist you 24/7.</p>
-                  <Button variant="outline" className="border-slate-700 hover:bg-slate-800 text-white gap-2 w-full">
-                    <ExternalLink className="size-4" /> Contact Support
-                  </Button>
-                </div>
-              </Card>
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-1 gap-6">
-            <Card className="p-8 shadow-elegant border-none bg-white overflow-hidden relative border-t-4 border-t-primary">
-              <div className="absolute -bottom-6 -right-6 opacity-10">
-                <FileText className="size-32 text-primary" />
-              </div>
-              <div className="relative z-10">
-                <h3 className="text-2xl font-bold mb-3">Internship Documents</h3>
-                <p className="text-muted-foreground text-sm mb-8 max-w-2xl">Access and download your official internship documents. Your offer letter is available immediately, and your certificate will be generated upon successful completion of the program.</p>
-                <div className="flex flex-wrap gap-4">
-                  <Button variant="default" className="bg-primary hover:bg-primary/90 h-12 px-6 shadow-md gap-2" onClick={() => setIsOfferLetterOpen(true)}>
-                    <Download className="size-5" /> Download Offer Letter
-                  </Button>
-                  <Button variant="outline" className="h-12 px-6 shadow-md gap-2 border-primary/20 hover:bg-primary/5 text-primary" onClick={() => setIsReceiptOpen(true)}>
-                    <FileText className="size-5" /> Payment Receipt
-                  </Button>
-                  {isServiceEnabled('certificates') && (
-                    cert ? (
-                      <Button
-                        variant="hero"
-                        className="h-12 px-6 gap-2"
-                        onClick={() => {
-                          if (!hasRequiredCertificateIdentityFields(profile)) {
-                            toast.error(
-                              isBnmuStudent(profile?.university_name)
-                                ? "Certificate cannot be opened — your Registration number and Roll number are required. Please update them in your profile."
-                                : "Certificate cannot be opened — your University Roll Number is missing. Please update it in your profile."
-                            );
-                            return;
-                          }
-                          setIsCertOpen(true);
-                        }}
-                      >
-                        <Award className="size-5" /> View & Download Certificate
-                      </Button>
-                    ) : (
-                      <Button variant="outline" className="h-12 px-6 bg-slate-100 border-dashed border-slate-300 gap-2 cursor-not-allowed opacity-60 text-slate-500" disabled>
-                        <Award className="size-5" /> Certificate Not Ready
-                      </Button>
-                    )
-                  )}
-                </div>
-                {isServiceEnabled('certificates') && (
-                  <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-100">
-                    {!cert ? (
-                      <p className="text-sm text-slate-600 flex items-center gap-2">
-                        <Loader2 className="size-4 text-primary animate-spin" /> 
-                        Your internship is currently in progress. The certificate will be issued automatically after the evaluation phase.
-                      </p>
-                    ) : (
-                      <p className="text-sm text-green-600 font-bold flex items-center gap-2">
-                        <CheckCircle2 className="size-4" /> 
-                        Congratulations! Your internship certificate has been issued and is ready for download.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </Card>
-          </div>
-            </>
+          ) : activeView === "profile" ? (
+            <StudentProfileView
+              profile={profile}
+              registrationLabel={displayRegistrationId(profile?.registration_id, profile?.created_at)}
+              studentProfileEditLocked={studentProfileEditLocked}
+              onEditProfile={() => {
+                setEditProfileData({
+                  email: profile?.email || "",
+                  full_name: profile?.full_name || "",
+                  contact_number: profile?.contact_number || "",
+                  parent_name: profile?.parent_name || profile?.father_name || "",
+                  gender: profile?.gender || "",
+                  university_name: profile?.university_name || "",
+                  college_name: profile?.college_name || "",
+                  degree: profile?.degree || "",
+                  department: profile?.department || "",
+                  subject:
+                    matchSubjectToOption(
+                      profile?.subject || profile?.metadata?.subject,
+                      profile?.department
+                    ) ||
+                    profile?.subject ||
+                    profile?.metadata?.subject ||
+                    "",
+                  academic_session: profile?.academic_session || "",
+                  class_semester: profile?.class_semester || "",
+                  roll_number: profile?.roll_number || "",
+                  university_roll_number:
+                    profile?.university_roll_number ||
+                    resolveBnmuUniversityRollNumber(profile) ||
+                    "",
+                  internship_domain: profile?.internship_domain || profile?.course || "",
+                  internship_mode: resolveInternshipModeForUniversity(
+                    profile?.university_name,
+                    profile?.internship_mode || profile?.metadata?.internship_mode
+                  ),
+                  internship_duration: profile?.internship_duration || "",
+                  joining_date: profile?.joining_date || "",
+                  completion_date: profile?.completion_date || "",
+                  emergency_name: profile?.emergency_name || "",
+                  emergency_contact: profile?.emergency_contact || "",
+                  emergency_relation: profile?.emergency_relation || "",
+                });
+                setIsEditProfileOpen(true);
+              }}
+              onOfferLetter={() => setIsOfferLetterOpen(true)}
+              onReceipt={() => setIsReceiptOpen(true)}
+              onCertificate={() => {
+                if (!hasRequiredCertificateIdentityFields(profile)) {
+                  toast.error(
+                    isBnmuStudent(profile?.university_name)
+                      ? "Certificate cannot be opened — your Registration number and Roll number are required. Please update them in your profile."
+                      : "Certificate cannot be opened — your University Roll Number is missing. Please update it in your profile."
+                  );
+                  return;
+                }
+                setIsCertOpen(true);
+              }}
+              certificatesEnabled={isServiceEnabled("certificates")}
+              hasCertificate={!!cert}
+              certificateReady={!!cert}
+            />
           ) : (
             <>
               <StudentHomeView
@@ -1237,6 +1106,10 @@ const Dashboard = () => {
                 onOpenLearning={(tab) => {
                   if (!internshipUnlocked) {
                     goUnlockInternship();
+                    return;
+                  }
+                  if (isServiceLocked(learningTabToServiceKey(tab))) {
+                    setServiceLockKey(learningTabToServiceKey(tab));
                     return;
                   }
                   setLearningDefaultTab(tab);
@@ -1259,6 +1132,15 @@ const Dashboard = () => {
                 onOpenMyCourses={() => setActiveView("courses")}
                 internshipUnlocked={internshipUnlocked}
                 onLockedInternshipClick={goUnlockInternship}
+                isServiceLocked={isServiceLocked}
+                onServiceLockedClick={setServiceLockKey}
+              />
+              <StudentServiceLockDialog
+                open={serviceLockKey != null}
+                onOpenChange={(open) => {
+                  if (!open) setServiceLockKey(null);
+                }}
+                access={serviceLockAccess}
               />
               {documentActions.hiddenPdfNodes}
               <StudentDocumentPreviewDialog
@@ -1276,267 +1158,26 @@ const Dashboard = () => {
 
           {/* Attendance Section — internship students only */}
           {activeView === 'home' && internshipUnlocked && (
-            <div id="attendance-section" className="mt-10 mb-10">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold flex items-center gap-3"><CheckSquare className="size-6 text-violet-600" /> Attendance</h2>
-                <div className="h-px flex-1 mx-6 bg-slate-200 hidden md:block"></div>
-                <Badge className="bg-violet-100 text-violet-700 border-none font-black">{attendanceList.length} Total Days</Badge>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-8">
-                {/* Mark Attendance Card */}
-                <Card className="p-8 border-none shadow-elegant bg-gradient-to-br from-slate-900 to-slate-800 text-white flex flex-col items-center justify-center text-center gap-6 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-5"><CheckSquare className="size-32" /></div>
-                  <div>
-                    <h3 className="text-xl font-black mb-1">Mark Attendance</h3>
-                    <p className="text-slate-400 text-sm">
-                      {attendanceMarkedToday
-                        ? "Attendance already marked for today."
-                        : "Hold the button for 10 seconds to mark (once per calendar day)."}
-                    </p>
-                  </div>
-
-                  {/* Circular Hold Button */}
-                  <div className="relative flex items-center justify-center select-none py-4">
-                    <div className="relative flex items-center justify-center">
-                      <svg className="absolute" width="160" height="160" style={{ transform: 'rotate(-90deg)' }}>
-                        {/* Background Track */}
-                        <circle cx="80" cy="80" r="70" fill="none" stroke="#ffffff10" strokeWidth="10" />
-                        {/* Progress Line */}
-                        <circle
-                          cx="80" cy="80" r="70"
-                          fill="none"
-                          stroke={attendanceMarkedToday ? "#10b981" : !canMarkAttendanceToday ? "#475569" : "#8b5cf6"}
-                          strokeWidth="10"
-                          strokeDasharray={`${2 * Math.PI * 70}`}
-                          strokeDashoffset={`${2 * Math.PI * 70 * (1 - holdProgress / 100)}`}
-                          strokeLinecap="round"
-                          className="transition-all duration-75 ease-linear"
-                          style={{ filter: isHolding ? 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.5))' : 'none' }}
-                        />
-                      </svg>
-                      
-                      <button
-                        className={`size-32 rounded-full flex flex-col items-center justify-center gap-1 font-black transition-all select-none touch-none z-10
-                          ${attendanceMarkedToday
-                            ? 'bg-emerald-500/20 text-emerald-400 cursor-not-allowed border-4 border-emerald-500/20'
-                            : !canMarkAttendanceToday
-                            ? 'bg-slate-800/60 text-slate-500 cursor-not-allowed border-4 border-slate-700/30'
-                            : isHolding
-                            ? 'bg-violet-600 text-white scale-90 shadow-[0_0_30px_rgba(139,92,246,0.6)]'
-                            : 'bg-slate-800 hover:bg-slate-700 text-white shadow-xl active:scale-95 border-4 border-slate-700/50'
-                          }`}
-                        onMouseDown={startHold}
-                        onMouseUp={cancelHold}
-                        onMouseLeave={cancelHold}
-                        onTouchStart={startHold}
-                        onTouchEnd={cancelHold}
-                        disabled={!canMarkAttendanceToday}
-                      >
-                        {attendanceMarkedToday ? (
-                          <div className="flex flex-col items-center animate-in zoom-in duration-300">
-                            <CheckCircle2 className="size-10 mb-1" />
-                            <span className="text-[10px] uppercase tracking-tighter">Verified</span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center">
-                            {isHolding ? (
-                              <>
-                                <span className="text-2xl font-black">{Math.round(holdProgress)}%</span>
-                                <span className="text-[10px] uppercase tracking-widest opacity-80">Marking...</span>
-                              </>
-                            ) : (
-                              <>
-                                <CheckSquare className="size-10 mb-1 opacity-20" />
-                                <span className="text-sm font-black uppercase tracking-widest">Hold</span>
-                                <span className="text-[8px] opacity-60">10 Seconds</span>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Stats Row */}
-                  <div className="flex items-center gap-6 pt-4 border-t border-white/10 w-full justify-center">
-                    <div className="text-center">
-                      <div className="text-2xl font-black text-violet-400">{attendanceStats.total}</div>
-                      <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Total Days</div>
-                    </div>
-                    <div className="w-px h-8 bg-white/10"></div>
-                    <div className="text-center">
-                      <div className={`text-sm font-black ${attendanceMarkedToday ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {attendanceMarkedToday ? '✅ Present' : '❌ Absent'}
-                      </div>
-                      <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Today</div>
-                    </div>
-                  </div>
-                </Card>
-
-              <Card className="p-6 border-none shadow-elegant bg-white">
-                <h3 className="text-sm font-black text-slate-800 mb-4 uppercase tracking-wider">Attendance Overview</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-violet-50 border border-violet-100 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-violet-700">Total Attendance</p>
-                    <p className="text-2xl font-black text-violet-700 mt-1">{attendanceStats.total}</p>
-                  </div>
-                  <div
-                    className={`rounded-xl border p-4 ${
-                      attendanceStats.isEligible
-                        ? "bg-emerald-50 border-emerald-100"
-                        : "bg-amber-50 border-amber-100"
-                    }`}
-                  >
-                    <p
-                      className={`text-[10px] font-black uppercase tracking-widest ${
-                        attendanceStats.isEligible ? "text-emerald-700" : "text-amber-700"
-                      }`}
-                    >
-                      Attendance %
-                    </p>
-                    <p
-                      className={`text-2xl font-black mt-1 ${
-                        attendanceStats.isEligible ? "text-emerald-700" : "text-amber-700"
-                      }`}
-                    >
-                      {attendanceStats.percentage.toFixed(1)}%
-                    </p>
-                  </div>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-3">
-                  {attendanceStats.total} of {attendanceStats.attendanceTotalDays} internship programme days marked (
-                  {attendanceStats.percentage.toFixed(1)}%).
-                </p>
-              </Card>
-
-                {/* Attendance History Card */}
-                <Card className="p-6 border-none shadow-elegant bg-white flex flex-col">
-                  <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2">
-                    <Clock className="size-5 text-violet-600" /> Attendance History
-                  </h3>
-                  {attendanceList.length === 0 ? (
-                    <div className="flex-1 flex flex-col items-center justify-center py-12 text-center">
-                      <div className="size-16 rounded-full bg-violet-50 flex items-center justify-center mb-4"><CheckSquare className="size-8 text-violet-300" /></div>
-                      <p className="text-slate-500 font-medium text-sm">No attendance records yet</p>
-                      <p className="text-slate-400 text-xs mt-1">Mark your first attendance using the button</p>
-                    </div>
-                  ) : (
-                    <ScrollArea className="flex-1 max-h-[300px]">
-                      <div className="space-y-2 pr-2">
-                        {attendanceList.map((rec, idx) => (
-                          <div key={rec.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-violet-50 hover:border-violet-100 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <div className="size-8 rounded-lg bg-violet-100 flex items-center justify-center">
-                                <CheckCircle2 className="size-4 text-violet-600" />
-                              </div>
-                              <div>
-                                <div className="text-sm font-bold text-slate-800">
-                                  {new Date(rec.marked_at).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                                </div>
-                                <div className="text-[11px] text-slate-500 font-medium">
-                                  {new Date(rec.marked_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                                </div>
-                              </div>
-                            </div>
-                            <Badge className="bg-emerald-50 text-emerald-700 border-none text-[10px] font-black">Present</Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </Card>
-              </div>
-            </div>
+            <StudentAttendancePanel
+              attendanceList={attendanceList}
+              stats={attendanceStats}
+              attendanceMarkedToday={attendanceMarkedToday}
+              canMarkAttendanceToday={canMarkAttendanceToday}
+              markingBlocked={isLnmuBnmuAttendanceMarkingBlocked(profile?.university_name)}
+              holdProgress={holdProgress}
+              isHolding={isHolding}
+              onHoldStart={startHold}
+              onHoldEnd={cancelHold}
+            />
           )}
 
-          {isServiceEnabled('live_classes') && (
-            <div id="live-classes-section" className="mt-12">
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-2xl font-bold flex items-center gap-3"><BookOpen className="size-6 text-primary" /> Live Learning Sessions</h2>
-                <div className="h-px flex-1 mx-6 bg-slate-200 hidden md:block"></div>
-                <Badge variant="secondary" className="bg-primary/10 text-primary border-none">{liveClasses.length} Scheduled</Badge>
-              </div>
-
-              {liveClasses.length > 0 ? (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {liveClasses.map(c => {
-                    const sessionType =
-                      c.link_type === "youtube" || inferLinkTypeFromUrl(c.url || "") === "youtube"
-                        ? "youtube"
-                        : c.link_type;
-                    const joinUrl = classJoinUrl(c.url || "", sessionType);
-                    const embedUrl = sessionType === "youtube" ? youtubeEmbedUrl(c.url || "") : null;
-
-                    return (
-                      <Card key={c.id} className="overflow-hidden border-none shadow-elegant flex flex-col group hover:-translate-y-2 transition-all duration-500 bg-white">
-                        <div className="p-3 text-[10px] text-center font-black text-white uppercase tracking-[0.2em] bg-slate-900">
-                          {new Date(c.scheduled_at).toLocaleString([], { dateStyle: 'full', timeStyle: 'short' })}
-                        </div>
-                        
-                        {sessionType === "youtube" && embedUrl ? (
-                          <div className="relative w-full aspect-video bg-black shadow-inner">
-                            <iframe
-                              src={embedUrl}
-                              title={c.title || "Live class"}
-                              className="absolute inset-0 w-full h-full border-0"
-                              allowFullScreen
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            />
-                          </div>
-                        ) : (
-                          <div className="w-full aspect-video bg-indigo-50 flex items-center justify-center flex-col gap-3 p-6 text-center border-b border-indigo-100">
-                            <div className="size-16 rounded-full bg-white flex items-center justify-center text-primary shadow-elegant group-hover:scale-110 transition-transform duration-500">
-                              <ExternalLink className="size-8" />
-                            </div>
-                            <div className="font-bold text-sm text-indigo-900">{linkTypeLabel(sessionType)} Session</div>
-                          </div>
-                        )}
-                        
-                        <div className="p-6 flex flex-col flex-1">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-black uppercase tracking-wider">{c.internship_domains?.name || "General"}</span>
-                            <span className="size-1 rounded-full bg-slate-300"></span>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{linkTypeLabel(sessionType)} Session</span>
-                          </div>
-                          <h3 className="font-bold text-lg leading-tight mb-3 flex-1 text-slate-900">{c.title}</h3>
-                          {c.description ? (
-                            <p className="text-sm text-muted-foreground mb-4 line-clamp-3">{c.description}</p>
-                          ) : null}
-
-                          <div className="mt-auto space-y-3">
-                            {sessionType === "youtube" ? (
-                              <div className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-100">
-                                <span className="relative flex h-3 w-3 shrink-0">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
-                                </span>
-                                <span className="text-[10px] font-black text-red-600 uppercase tracking-widest">Live on YouTube</span>
-                              </div>
-                            ) : null}
-                            <a href={joinUrl} target="_blank" rel="noopener noreferrer" className="w-full block">
-                              <Button className="w-full h-11 bg-primary hover:bg-primary/90 gap-2 shadow-lg transition-all">
-                                <ExternalLink className="size-4" />
-                                {sessionType === "youtube" ? "Join Class on YouTube" : "Join Class"}
-                              </Button>
-                            </a>
-                          </div>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
-              ) : (
-                <Card className="p-16 text-center border-none shadow-elegant bg-white/80 backdrop-blur-sm">
-                  <div className="size-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-6 shadow-inner">
-                    <BookOpen className="size-10 text-slate-300" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-slate-800">Stay Tuned for Classes</h3>
-                  <p className="text-slate-500 text-sm max-w-sm mx-auto mt-3 leading-relaxed">There are currently no live sessions scheduled for your internship domain. We'll update this section soon!</p>
-                </Card>
-              )}
-            </div>
-          )}
+          {activeView === "home" && isServiceEnabled("live_classes") ? (
+            <StudentLiveSessionsSection
+              liveClasses={liveClasses}
+              locked={isServiceLocked("live_classes")}
+              onLockedClick={() => setServiceLockKey("live_classes")}
+            />
+          ) : null}
 
         </div>
       </main>
@@ -1603,7 +1244,7 @@ const Dashboard = () => {
               >
                 {/* Background Watermark */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 mt-32 select-none">
-                  <img src="/logo.png" alt="Watermark" className="w-[85%] max-w-[500px] h-auto object-contain opacity-[0.15] grayscale" crossOrigin="anonymous" />
+                  <img src="/certificate/logo.png" alt="" className="w-[85%] max-w-[500px] h-auto object-contain opacity-[0.12]" crossOrigin="anonymous" />
                 </div>
 
                 {/* Custom Header from Certificate */}

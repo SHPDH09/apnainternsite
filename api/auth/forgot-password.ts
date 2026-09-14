@@ -1,7 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomUUID } from 'node:crypto';
-import { query } from '../../aws/server/db';
-import { useRds } from '../lib/useRds';
+import { query } from '../../aws/server/db.js';
+import { useRds } from '../lib/useRds.js';
+import { buildOtpMailContent, resolveOtpMailPurpose, type OtpMailPurpose } from '../lib/otpMailTemplate.js';
+import { formatSmtpError, isSesIdentityNotVerifiedError, isSmtpAuthError } from '../lib/smtpErrors.js';
 
 type Action = 'request_otp' | 'reset_password';
 
@@ -20,31 +22,65 @@ function getJsonBody(req: VercelRequest): Record<string, unknown> {
   }
 }
 
-async function sendOtpEmail(normalizedEmail: string, generatedOtp: string): Promise<void> {
-  const { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } = await import('../lib/smtpTransport');
-  const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
-  if (!SMTP_USER || !SMTP_PASS) {
-    throw new Error('SMTP Credentials missing');
+async function sendOtpEmail(
+  normalizedEmail: string,
+  generatedOtp: string,
+  purpose: OtpMailPurpose
+): Promise<void> {
+  const mailContent = buildOtpMailContent(generatedOtp, purpose);
+  const errors: string[] = [];
+
+  const { createSmtpTransporter, resolveSmtpCredentials, sesMailHeaders } = await import('../lib/smtpTransport.js');
+  const smtpCreds = await resolveSmtpCredentials();
+  if (smtpCreds.user && smtpCreds.pass) {
+    try {
+      const transporter = await createSmtpTransporter(smtpCreds);
+      const info = await transporter.sendMail({
+        ...sesMailHeaders('Apna Intern Security'),
+        to: normalizedEmail,
+        subject: mailContent.subject,
+        html: mailContent.html,
+      });
+      const accepted = Array.isArray(info.accepted) ? info.accepted : [];
+      if (
+        accepted.length > 0 &&
+        accepted.some((addr) => String(addr).toLowerCase() === normalizedEmail.toLowerCase())
+      ) {
+        return;
+      }
+      errors.push('SMTP did not accept recipient');
+    } catch (smtpErr) {
+      errors.push(smtpErr instanceof Error ? smtpErr.message : String(smtpErr));
+      if (isSmtpAuthError(smtpErr)) {
+        throw smtpErr;
+      }
+    }
+  } else {
+    errors.push(
+      'SMTP credentials missing on server. Add SMTP_PASS in Vercel project env, or store Mail Manager SMTP in RDS site_smtp_config.'
+    );
   }
 
-  const transporter = await createSmtpTransporter();
-  await transporter.sendMail({
-    ...sesMailHeaders(),
-    to: normalizedEmail,
-    subject: 'Your Password Reset OTP',
-    html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <div style="background-color: #0084FF; padding: 24px; text-align: center;">
-              <h1 style="color: white; margin: 0;">Password Reset</h1>
-            </div>
-            <div style="padding: 24px; text-align: center;">
-              <p>Use this OTP to reset your password:</p>
-              <p style="font-size: 32px; letter-spacing: 8px; font-weight: 800; color: #0084FF;">${generatedOtp}</p>
-              <p style="font-size: 12px; color: #64748b;">This code expires in 15 minutes.</p>
-            </div>
-          </div>
-        `,
-  });
+  const { canUseSesApi, sendEmailViaSesApi } = await import('../lib/sesSend.js');
+  if (canUseSesApi()) {
+    try {
+      await sendEmailViaSesApi({
+        to: normalizedEmail,
+        subject: mailContent.subject,
+        html: mailContent.html,
+      });
+      return;
+    } catch (sesErr) {
+      errors.push(sesErr instanceof Error ? sesErr.message : String(sesErr));
+      if (isSesIdentityNotVerifiedError(sesErr)) {
+        throw new Error(
+          `${errors.join(' | ')} — Amazon SES sandbox blocks unverified recipients; use Mail Manager SMTP instead.`
+        );
+      }
+    }
+  }
+
+  throw new Error(errors.join(' | ') || 'Failed to send verification email');
 }
 
 async function handleWithRds(
@@ -52,31 +88,46 @@ async function handleWithRds(
   normalizedEmail: string,
   otp: string | undefined,
   newPassword: string | undefined,
+  purpose: OtpMailPurpose,
   res: VercelResponse
 ) {
   if (action === 'request_otp') {
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    try {
+      await sendOtpEmail(normalizedEmail, generatedOtp, purpose);
+    } catch (mailErr) {
+      // Local AWS often has no SMTP — still store OTP so browser/session can verify.
+      if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_OTP_WITHOUT_SMTP === 'true') {
+        return res.status(200).json({
+          success: true,
+          emailSent: false,
+          message: 'OTP stored (email skipped — SMTP missing or failed)',
+          devOtp: generatedOtp,
+        });
+      }
+      const msg = mailErr instanceof Error ? mailErr.message : String(mailErr);
+      return res.status(
+        isSesIdentityNotVerifiedError(mailErr) ? 503 : isSmtpAuthError(mailErr) ? 502 : 500
+      ).json({
+        success: false,
+        emailSent: false,
+        message: isSesIdentityNotVerifiedError(mailErr)
+          ? 'Verification email could not be delivered — Amazon SES sandbox blocks unverified recipients'
+          : isSmtpAuthError(mailErr)
+            ? 'Email server authentication failed (SMTP 535)'
+            : 'Failed to send verification email',
+        error: formatSmtpError(mailErr, { to: normalizedEmail }),
+      });
+    }
+
     await query(
       `INSERT INTO public.password_resets (id, email, otp, expires_at)
        VALUES ($1, $2, $3, now() + interval '15 minutes')`,
       [randomUUID(), normalizedEmail, generatedOtp]
     );
 
-    try {
-      await sendOtpEmail(normalizedEmail, generatedOtp);
-    } catch (mailErr) {
-      // Local AWS often has no SMTP — still store OTP so browser/session can verify.
-      if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_OTP_WITHOUT_SMTP === 'true') {
-        return res.status(200).json({
-          success: true,
-          message: 'OTP stored (email skipped — SMTP missing or failed)',
-          devOtp: generatedOtp,
-        });
-      }
-      throw mailErr;
-    }
-
-    return res.status(200).json({ success: true, message: 'OTP sent successfully' });
+    return res.status(200).json({ success: true, emailSent: true, message: 'OTP sent successfully' });
   }
 
   if (action === 'reset_password') {
@@ -125,14 +176,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const body = getJsonBody(req);
-    const { action, email, otp, newPassword } = body as {
+    const { action, email, otp, newPassword, purpose: purposeRaw } = body as {
       action?: Action;
       email?: string;
       otp?: string;
       newPassword?: string;
+      purpose?: string;
     };
 
     const normalizedEmail = String(email ?? '').trim().toLowerCase();
+    const purpose = resolveOtpMailPurpose(purposeRaw || 'password_reset');
 
     if (!action || !normalizedEmail) {
       return res.status(400).json({ success: false, message: 'Missing action or email' });
@@ -145,7 +198,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    return await handleWithRds(action, normalizedEmail, otp, newPassword, res);
+    return await handleWithRds(action, normalizedEmail, otp, newPassword, purpose, res);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error('forgot-password error:', msg);

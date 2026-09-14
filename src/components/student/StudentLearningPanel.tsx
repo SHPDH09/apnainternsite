@@ -174,32 +174,31 @@ export function StudentLearningPanel({
       <DialogContent
         className={`max-w-5xl border-none shadow-2xl ${scrollableDialogShellClass}`}
         closeClassName={
-          singleModule
-            ? "text-white hover:text-white opacity-90 hover:opacity-100"
-            : undefined
+          singleModule ? "text-slate-500 hover:text-slate-900" : undefined
         }
       >
         <DialogHeader
           className={
             singleModule
-              ? "p-6 pr-14 bg-slate-900 text-white border-b border-white/10 shrink-0"
-              : "p-6 pr-14 bg-muted/30 border-b shrink-0"
+              ? "relative shrink-0 border-b border-slate-200 bg-white p-6 pr-14"
+              : "shrink-0 border-b border-slate-200 bg-white p-6 pr-14"
           }
         >
           {singleModule ? (
             <>
-              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                <ModuleIcon className="size-6 text-white/90" />
+              <div className="absolute bottom-0 left-0 top-0 w-1 student-dash-hero-accent" />
+              <DialogTitle className="flex items-center gap-2 pl-2 text-xl font-semibold text-slate-900">
+                <ModuleIcon className="size-5 text-[#5AA3E6]" />
                 {moduleMeta.title}
               </DialogTitle>
-              <DialogDescription className="text-white/70">{moduleMeta.description}</DialogDescription>
+              <DialogDescription className="pl-2 text-slate-500">{moduleMeta.description}</DialogDescription>
             </>
           ) : (
             <>
-              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                <BookOpen className="size-6 text-primary" /> Learning
+              <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-slate-900">
+                <BookOpen className="size-5 text-[#5AA3E6]" /> Learning
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-slate-500">
                 Classes, assignments, study notes, and your attendance overview.
               </DialogDescription>
             </>
@@ -213,8 +212,8 @@ export function StudentLearningPanel({
           className="flex flex-col flex-1 min-h-0 overflow-hidden"
         >
           {!singleModule ? (
-            <div className="px-6 pt-4 border-b bg-white shrink-0">
-              <TabsList className="grid w-full grid-cols-4 h-auto">
+            <div className="shrink-0 border-b border-slate-200 bg-slate-50/50 px-6 pt-4">
+              <TabsList className="grid h-auto w-full grid-cols-4 bg-white">
                 <TabsTrigger value="classes" className="text-xs sm:text-sm">Classes</TabsTrigger>
                 <TabsTrigger value="assignments" className="text-xs sm:text-sm">Assignments</TabsTrigger>
                 <TabsTrigger value="notes" className="text-xs sm:text-sm">Notes</TabsTrigger>
@@ -229,7 +228,7 @@ export function StudentLearningPanel({
               {!liveClassesEnabled ? (
                 <p className="text-center text-muted-foreground py-10">Live classes are currently disabled.</p>
               ) : liveClasses.length === 0 ? (
-                <Card className="p-10 text-center border-none shadow-sm">
+                <Card className="student-dash-card p-10 text-center shadow-none">
                   <BookOpen className="size-10 text-slate-300 mx-auto mb-4" />
                   <p className="font-bold text-slate-800">No classes scheduled yet</p>
                   <p className="text-sm text-muted-foreground mt-2">
@@ -248,7 +247,7 @@ export function StudentLearningPanel({
                   const isPast = scheduled ? scheduled.getTime() < Date.now() : false;
 
                   return (
-                    <Card key={c.id} className="overflow-hidden border-none shadow-sm">
+                    <Card key={c.id} className="student-dash-card overflow-hidden shadow-none">
                       <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -264,14 +263,14 @@ export function StudentLearningPanel({
                               </span>
                             ) : null}
                           </div>
-                          <h4 className="font-bold text-lg">{c.title || `Class ${idx + 1}`}</h4>
+                          <h4 className="text-lg font-semibold">{c.title || `Class ${idx + 1}`}</h4>
                           {!singleModule && c.description ? (
                             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{c.description}</p>
                           ) : null}
                         </div>
                         <div className="flex flex-col gap-2 shrink-0">
                           <a href={joinUrl} target="_blank" rel="noopener noreferrer">
-                            <Button className="w-full sm:w-auto gap-2">
+                            <Button className="w-full gap-2 bg-slate-800 hover:bg-slate-900 sm:w-auto">
                               <ExternalLink className="size-4" />
                               {isPast ? "Watch Recording" : "Join Class"}
                             </Button>
@@ -321,7 +320,7 @@ export function StudentLearningPanel({
                     activeAssignments.map((a) => {
                       const overdue = a.due_at && new Date(a.due_at).getTime() < Date.now();
                       return (
-                        <Card key={a.id} className="p-5 border-none shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <Card key={a.id} className="student-dash-card flex flex-col justify-between gap-4 p-5 shadow-none sm:flex-row sm:items-center">
                           <div>
                             <h4 className="font-bold flex flex-wrap items-center gap-2">
                               {a.title}
@@ -368,7 +367,7 @@ export function StudentLearningPanel({
                     <p className="text-center text-muted-foreground py-8">No submitted assignments yet.</p>
                   ) : (
                     submittedAssignments.map((a) => (
-                        <Card key={a.id} className="p-5 border-none shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <Card key={a.id} className="student-dash-card flex flex-col justify-between gap-4 p-5 shadow-none sm:flex-row sm:items-center">
                           <div>
                             <h4 className="font-bold">{a.title}</h4>
                             <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -394,14 +393,14 @@ export function StudentLearningPanel({
               <TabPanelScroll>
                 <div className="space-y-4">
               {notes.length === 0 ? (
-                <Card className="p-10 text-center border-none shadow-sm">
+                <Card className="student-dash-card p-10 text-center shadow-none">
                   <FileText className="size-10 text-slate-300 mx-auto mb-4" />
                   <p className="font-bold">No study notes uploaded yet</p>
                   <p className="text-sm text-muted-foreground mt-2">Notes appear day-wise as they are shared by the team.</p>
                 </Card>
               ) : (
                 notes.map((note, idx) => (
-                  <Card key={note.id} className="p-5 border-none shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <Card key={note.id} className="student-dash-card flex flex-col justify-between gap-4 p-5 shadow-none sm:flex-row sm:items-center">
                     <div>
                       <Badge variant="secondary" className="mb-2 text-[10px]">
                         {noteDayLabel(note.title, idx)}
@@ -431,28 +430,28 @@ export function StudentLearningPanel({
               <TabPanelScroll>
                 <div className="space-y-6">
               <div className="grid grid-cols-3 gap-4">
-                <Card className="p-4 text-center border-none shadow-sm bg-violet-50">
-                  <p className="text-[10px] font-black uppercase text-violet-700">Days Marked</p>
-                  <p className="text-3xl font-black text-violet-900">{attendanceSummary.totalMarked}</p>
-                </Card>
-                <Card className="p-4 text-center border-none shadow-sm bg-slate-50">
-                  <p className="text-[10px] font-black uppercase text-slate-600">Programme Days</p>
-                  <p className="text-3xl font-black text-slate-900">{attendanceSummary.programmeDays}</p>
-                </Card>
-                <Card className="p-4 text-center border-none shadow-sm bg-emerald-50">
-                  <p className="text-[10px] font-black uppercase text-emerald-700">Attendance %</p>
-                  <p className="text-3xl font-black text-emerald-900">
+                <div className="student-stat-tile text-center">
+                  <p className="text-xs font-medium text-slate-500">Days marked</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{attendanceSummary.totalMarked}</p>
+                </div>
+                <div className="student-stat-tile text-center">
+                  <p className="text-xs font-medium text-slate-500">Programme days</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{attendanceSummary.programmeDays}</p>
+                </div>
+                <div className="student-stat-tile text-center">
+                  <p className="text-xs font-medium text-slate-500">Attendance %</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700">
                     {calcAttendancePercentage(
                       attendanceSummary.totalMarked,
                       attendanceSummary.programmeDays
                     ).toFixed(1)}%
                   </p>
-                </Card>
+                </div>
               </div>
 
               <div>
-                <h4 className="font-bold flex items-center gap-2 mb-4">
-                  <CheckSquare className="size-4 text-violet-600" /> Programme Calendar
+                <h4 className="mb-4 flex items-center gap-2 font-semibold text-slate-900">
+                  <CheckSquare className="size-4 text-[#5AA3E6]" /> Programme calendar
                 </h4>
                 <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
                   {programmeDays.map((dateKey, i) => {

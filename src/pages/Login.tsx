@@ -13,14 +13,11 @@ import {
   STUDENT_CREDENTIAL_LOGIN_QUERY_VALUE,
   STUDENT_LOGIN_PATH,
 } from "@/lib/authRoutes";
-import { getSendMailApiUrl } from "@/lib/sendMailApi";
-import { siteApiUrl } from "@/lib/siteApi";
+import { deliverOtpEmail } from "@/lib/requestOtpDelivery";
 import { resolveLoginIdentifier } from "@/lib/resolveLoginIdentifier";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { SiteNav } from "@/components/SiteNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,10 +38,9 @@ import {
   REGISTRATION_PASSWORD_MIN_LENGTH,
   userFacingPasswordError,
 } from "@/lib/registrationPassword";
-import { PASSWORD_RESETS_SCHEMA_HINT, passwordResetInsertRow } from "@/lib/passwordResetRow";
+import { PASSWORD_RESETS_SCHEMA_HINT } from "@/lib/passwordResetRow";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, KeyRound } from "lucide-react";
-import { NoticePopup } from "@/components/NoticePopup";
 import {
   Dialog,
   DialogContent,
@@ -57,6 +53,9 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
+import { LoginPremiumLayout } from "@/components/login/LoginPremiumLayout";
+import { LoginSecurityCheck } from "@/components/login/LoginSecurityCheck";
+import { LoginOtpVerification, OTP_VERIFIED_ANIMATION_MS } from "@/components/login/LoginOtpVerification";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -85,6 +84,8 @@ const Login = () => {
   const [studentOtp, setStudentOtp] = useState("");
   const [studentOtpSending, setStudentOtpSending] = useState(false);
   const [studentOtpSent, setStudentOtpSent] = useState(false);
+  const [studentOtpVerified, setStudentOtpVerified] = useState(false);
+  const [studentOtpError, setStudentOtpError] = useState(false);
 
   /** Admin portal: password verified → email OTP before session is kept. */
   const [adminLoginStep, setAdminLoginStep] = useState<"password" | "otp">("password");
@@ -94,6 +95,8 @@ const Login = () => {
   const [adminOtpSending, setAdminOtpSending] = useState(false);
   const [adminOtpSent, setAdminOtpSent] = useState(false);
   const [adminDevOtp, setAdminDevOtp] = useState<string | null>(null);
+  const [adminOtpVerified, setAdminOtpVerified] = useState(false);
+  const [adminOtpError, setAdminOtpError] = useState(false);
   const isLocalDev = isLocalDevEnvironment();
 
   // Captcha State
@@ -127,6 +130,13 @@ const Login = () => {
   const [resetOtp, setResetOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [resetOtpVerified, setResetOtpVerified] = useState(false);
+  const [resetOtpError, setResetOtpError] = useState(false);
+
+  const waitForOtpVerifiedAnimation = () =>
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, OTP_VERIFIED_ANIMATION_MS);
+    });
 
   // Credential emails link with ?portal=student: sign out so admin/staff session does not steal the student login page.
   // Otherwise any existing session skips the form and redirects to that user's dashboard.
@@ -234,7 +244,11 @@ const Login = () => {
         (typeof window !== "undefined" ? window.sessionStorage.getItem("admin_login_otp") : null);
       setAdminDevOtp(devCode);
       setAdminOtpSent(true);
-      toast.success(`Verification code sent to ${sent.email}`);
+      toast.success(
+        sent.sesSandboxLimited
+          ? `Code sent to ${sent.email} via SMTP relay. Check Spam/Promotions and search for info@apnaintern.in. If still missing, ask support to enable AWS SES Production Access.`
+          : `Verification code sent to ${sent.email} from info@apnaintern.in. Check Inbox, Spam, and Promotions folders.`
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to send verification code";
       toast.error(msg);
@@ -252,12 +266,17 @@ const Login = () => {
       toast.error("Please verify you are human");
       return;
     }
+    setAdminOtpError(false);
+    setAdminOtpVerified(false);
     setLoginLoading(true);
     try {
       const valid = await verifyAdminLoginOtp(supabase, adminPendingEmail, adminOtp);
       if (!valid) {
+        setAdminOtpError(true);
         throw new Error("Invalid or expired code. Tap Resend code and try again.");
       }
+      setAdminOtpVerified(true);
+      await waitForOtpVerifiedAnimation();
       const signIn = await signInStudentWithPassword(
         supabase,
         adminPendingEmail,
@@ -285,7 +304,9 @@ const Login = () => {
         if (devOtp) toast.info(`Dev login code: ${devOtp}`);
       }
       setStudentOtpSent(true);
-      toast.success(`Login code sent to ${sent.email}`);
+      toast.success(
+        `Login code sent to ${sent.email} from info@apnaintern.in. Check Inbox, Spam, and Promotions.`
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to send login code";
       toast.error(msg);
@@ -313,10 +334,17 @@ const Login = () => {
       toast.error("Please verify you are human");
       return;
     }
+    setStudentOtpError(false);
+    setStudentOtpVerified(false);
     setLoginLoading(true);
     try {
       const signIn = await signInStudentWithOtp(supabase, studentOtpEmail, studentOtp);
-      if (!signIn.ok) throw signIn.error;
+      if (!signIn.ok) {
+        setStudentOtpError(true);
+        throw signIn.error;
+      }
+      setStudentOtpVerified(true);
+      await waitForOtpVerifiedAnimation();
       await completeAuthAndNavigate();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Login failed";
@@ -388,19 +416,27 @@ const Login = () => {
           );
           return;
         }
-      } else {
-        const { data: studentOnly, error: studentRpcErr } = await supabase.rpc(
-          "account_is_student_only",
-          { check_email: normalizedEmail }
-        );
+      } else if (isAdminLoginRoute) {
+        const [{ data: mayAdmin, error: adminRpcErr }, { data: studentOnly, error: studentRpcErr }] =
+          await Promise.all([
+            supabase.rpc("account_requires_admin_login", { check_email: normalizedEmail }),
+            supabase.rpc("account_is_student_only", { check_email: normalizedEmail }),
+          ]);
+        if (adminRpcErr) {
+          console.warn("account_requires_admin_login RPC:", adminRpcErr.message);
+        }
         if (studentRpcErr) {
           console.warn("account_is_student_only RPC:", studentRpcErr.message);
+        }
+        if (mayAdmin === true) {
+          // Explicit admin/staff/cyber account — allow admin login.
         } else if (studentOnly === true) {
           toast.error(
             "You don't have access to the admin portal. This sign-in is only for authorised staff and administrators."
           );
           return;
         }
+        // If RPCs failed (proxy/network), continue — password + OTP will validate.
       }
 
       if (isStudentLoginRoute) {
@@ -543,49 +579,9 @@ const Login = () => {
         );
       }
 
-      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-
-      // Store OTP via local /rest → RDS (awsrds) or hosted PostgREST; email via /api/send-mail.
-      const { error: insertError } = await supabase
-        .from('password_resets')
-        .insert(passwordResetInsertRow(normalizedEmail, generatedOtp));
-
-      if (!insertError) {
-        const response = await fetch(getSendMailApiUrl(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'send_otp',
-            otp: generatedOtp,
-            to: normalizedEmail,
-            email: normalizedEmail,
-          }),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.success) {
-          const detail = [result.message, result.error].filter(Boolean).join(' ');
-          throw new Error(detail || 'Failed to send OTP');
-        }
-      } else {
-        // Optional: server inserts OTP + sends mail if SUPABASE_SERVICE_ROLE_KEY is configured.
-        const serverRes = await fetch(siteApiUrl('/api/auth/forgot-password'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'request_otp', email: normalizedEmail }),
-        });
-        const serverJson = await serverRes.json().catch(() => ({}));
-        if (!serverRes.ok || !serverJson.success) {
-          throw new Error(
-            [
-              insertError.message,
-              serverJson.message,
-              serverJson.hint,
-              PASSWORD_RESETS_SCHEMA_HINT,
-            ]
-              .filter(Boolean)
-              .join(' ')
-          );
-        }
+      const sent = await deliverOtpEmail(supabase, normalizedEmail, "password_reset");
+      if (!sent.ok) {
+        throw sent.error;
       }
 
       toast.success(
@@ -609,6 +605,8 @@ const Login = () => {
       toast.error("Please enter your 6-digit OTP");
       return;
     }
+    setResetOtpError(false);
+    setResetOtpVerified(false);
     setResetLoading(true);
     try {
       const { data: valid, error: verifyErr } = await supabase.rpc('verify_password_reset_otp', {
@@ -617,8 +615,11 @@ const Login = () => {
       });
       if (verifyErr) throw verifyErr;
       if (!valid) {
+        setResetOtpError(true);
         throw new Error('Invalid or expired OTP. Request a new code and try again.');
       }
+      setResetOtpVerified(true);
+      await waitForOtpVerifiedAnimation();
       setResetOtp(otp);
       setResetStep("password");
     } catch (error: unknown) {
@@ -680,6 +681,8 @@ const Login = () => {
     setResetStep("email");
     setResetOtp("");
     setNewPassword("");
+    setResetOtpVerified(false);
+    setResetOtpError(false);
     setShowResetDialog(true);
   };
 
@@ -689,81 +692,23 @@ const Login = () => {
     if (!normalizedEmail) { toast.error("Please enter your email"); return; }
     setForgotPinLoading(true);
     try {
-      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      const { error: insertError } = await supabase
-        .from("password_resets")
-        .insert(passwordResetInsertRow(normalizedEmail, generatedOtp));
-
-      if (!insertError) {
-        sessionStorage.setItem("fp_otp", generatedOtp);
-        sessionStorage.setItem("fp_email", normalizedEmail);
-        const response = await fetch(getSendMailApiUrl(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "login_otp",
-            otp: generatedOtp,
-            to: normalizedEmail,
-            email: normalizedEmail,
-          }),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.success) {
-          // SMTP can hit 429. Fall back to server-side OTP generation + delivery.
-          const serverRes = await fetch(siteApiUrl("/api/auth/forgot-password"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "request_otp", email: normalizedEmail }),
-          });
-          const serverJson = await serverRes.json().catch(() => ({}));
-          if (!serverRes.ok || !serverJson.success) {
-            throw new Error(
-              [result.message, result.error, serverJson.message, serverJson.hint]
-                .filter(Boolean)
-                .join(" ") || "Failed to send OTP"
-            );
-          }
-          setForgotPinOtpMode("server");
-          sessionStorage.removeItem("fp_otp");
-          sessionStorage.setItem("fp_email", normalizedEmail);
-          toast.success("OTP sent! Check your email.");
-          setForgotPinStep("otp");
-          return;
-        }
-
-        setForgotPinOtpMode("client");
-        toast.success("OTP sent! Check your email.");
-        setForgotPinStep("otp");
-        return;
-      }
-
-      const serverRes = await fetch(siteApiUrl("/api/auth/forgot-password"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "request_otp", email: normalizedEmail }),
+      const sent = await deliverOtpEmail(supabase, normalizedEmail, "security", {
+        devSessionKey: "fp_otp",
       });
-      const serverJson = await serverRes.json().catch(() => ({}));
-      if (!serverRes.ok || !serverJson.success) {
-        throw new Error(
-          [insertError.message, serverJson.message, serverJson.hint]
-            .filter(Boolean)
-            .join(" ") || "Failed to send OTP"
-        );
+      if (!sent.ok) {
+        throw sent.error;
       }
-      setForgotPinOtpMode("server");
-      sessionStorage.removeItem("fp_otp");
+
       sessionStorage.setItem("fp_email", normalizedEmail);
+      setForgotPinOtpMode("server");
+      if (sent.devOtp && isLocalDevEnvironment()) {
+        toast.info(`Dev OTP: ${sent.devOtp}`);
+      }
       toast.success("OTP sent! Check your email.");
       setForgotPinStep("otp");
-    } catch (err: any) {
-      if (window.location.hostname === 'localhost') {
-        const devOtp = sessionStorage.getItem("fp_otp");
-        toast.info(`Dev OTP: ${devOtp}`);
-        setForgotPinOtpMode("client");
-        setForgotPinStep("otp");
-      } else {
-        toast.error(err.message || "Failed to send OTP");
-      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to send OTP";
+      toast.error(message);
     } finally {
       setForgotPinLoading(false);
     }
@@ -772,20 +717,12 @@ const Login = () => {
   const handleForgotPinVerifyOtp = () => {
     if (forgotPinOtp.length !== 6) { toast.error("Enter the 6-digit code"); return; }
     const verify = async () => {
-      if (forgotPinOtpMode === "server") {
-        const { data: valid, error } = await supabase.rpc("verify_password_reset_otp", {
-          p_identifier: forgotPinEmail.trim(),
-          p_otp: forgotPinOtp.trim(),
-        });
-        if (error) throw error;
-        if (!valid) throw new Error("Invalid or expired OTP");
-      } else {
-        const expected = sessionStorage.getItem("fp_otp");
-        const storedEmail = sessionStorage.getItem("fp_email");
-        if (forgotPinOtp !== expected || forgotPinEmail.trim().toLowerCase() !== storedEmail) {
-          throw new Error("Invalid or expired OTP");
-        }
-      }
+      const { data: valid, error } = await supabase.rpc("verify_password_reset_otp", {
+        p_identifier: forgotPinEmail.trim(),
+        p_otp: forgotPinOtp.trim(),
+      });
+      if (error) throw error;
+      if (!valid) throw new Error("Invalid or expired OTP");
       sessionStorage.removeItem("fp_otp");
       sessionStorage.removeItem("fp_email");
       setForgotPinStep("new_pin");
@@ -827,247 +764,142 @@ const Login = () => {
     }
   };
 
+  const loginTitle = isCyberCafeLoginRoute
+    ? "Cyber café sign-in"
+    : isCollegeLoginRoute
+      ? "College portal sign-in"
+      : isReferralLoginRoute
+        ? "Referral sign-in"
+        : isAdminLoginRoute
+          ? "Admin & partner sign-in"
+          : "Student sign-in";
+
+  const loginSubtitle = isCyberCafeLoginRoute
+    ? "Sign in to your cyber café partner dashboard"
+    : isCollegeLoginRoute
+      ? "Use the email and College Admin ID from your invitation email"
+      : isReferralLoginRoute
+        ? "Enter the email and login ID from your invitation to see who registered with your referral link."
+        : isAdminLoginRoute
+          ? "For administrators, sub-admins, staff, and cyber café partners"
+          : "For enrolled students (intern dashboard)";
+
+  const loginBadge = isStaffPortalLogin
+    ? "Staff OTP verification"
+    : isStudentLoginRoute
+      ? "Student secure access"
+      : "Apna Intern portal";
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <SiteNav />
-      <NoticePopup page="login" />
-      <main className="flex-1 gradient-soft py-12 md:py-20">
-        <div className="container mx-auto px-4">
-          <Card
-            className={
-              isReferralLoginRoute
-                ? "max-w-md mx-auto p-7 md:p-8 shadow-elegant animate-fade-in-up border border-slate-200/80"
-                : "max-w-md mx-auto p-8 md:p-10 shadow-elegant animate-fade-in-up"
-            }
-          >
-            <div className="flex justify-center mb-8">
-              <Link to="/" className="flex items-center gap-3">
-                <div className="size-12 rounded-xl overflow-hidden shadow-elegant">
-                  <img src="/logo.png" alt="Apna Intern" className="w-full h-full object-cover" />
-                </div>
-                <span className="text-2xl font-bold tracking-tighter text-slate-900">Apna Intern</span>
-              </Link>
-            </div>
-            <div className="text-center mb-8">
-              <h1
-                className={
-                  isReferralLoginRoute
-                    ? "text-2xl font-bold tracking-tight text-slate-900 mb-2"
-                    : "text-3xl font-black tracking-tight text-slate-900 mb-2"
-                }
-              >
-                {isCyberCafeLoginRoute
-                  ? "Cyber café sign-in"
-                  : isCollegeLoginRoute
-                  ? "College portal sign-in"
-                  : isReferralLoginRoute
-                  ? "Referral sign-in"
-                  : isAdminLoginRoute
-                  ? "Admin & partner sign-in"
-                  : "Student sign-in"}
-              </h1>
-              <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                {isCyberCafeLoginRoute
-                  ? "Sign in to your cyber café partner dashboard"
-                  : isCollegeLoginRoute
-                  ? "Use the email and College Admin ID from your invitation email"
-                  : isReferralLoginRoute
-                  ? "Enter the email and login ID from your invitation to see who registered with your referral link."
-                  : isAdminLoginRoute
-                  ? "For administrators, sub-admins, staff, and cyber café partners"
-                  : "For enrolled students (intern dashboard)"}
-              </p>
-            </div>
-
+      <main className="flex-1">
+        <LoginPremiumLayout title={loginTitle} subtitle={loginSubtitle} badge={loginBadge}>
             {isStaffPortalLogin && adminLoginStep === "otp" ? (
-              <div className="space-y-5">
-                <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-slate-700 leading-relaxed">
-                  Password verified for{" "}
-                  <span className="font-semibold text-slate-900">{adminPendingEmail}</span>.
-                  {adminOtpSent ? (
-                    <> Enter the <strong>6-digit code</strong> sent to that inbox.</>
+              <LoginOtpVerification
+                headline="Two-step verification"
+                description={
+                  adminOtpSent ? (
+                    <>
+                      Password verified for{" "}
+                      <span className="font-semibold text-slate-900">{adminPendingEmail}</span>. Enter the{" "}
+                      <strong>6-digit code</strong> sent to that inbox.
+                    </>
                   ) : (
-                    <> Sending verification code…</>
-                  )}
-                </div>
-                {isLocalDev && adminDevOtp ? (
-                  <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                    <p className="font-bold text-xs uppercase tracking-wide text-amber-800 mb-1">
-                      Local testing only
-                    </p>
-                    <p>
-                      Your verification code:{" "}
-                      <span className="font-mono text-lg font-black tracking-[0.2em]">{adminDevOtp}</span>
-                    </p>
-                  </div>
-                ) : null}
-                <div className="flex flex-col items-center gap-4">
-                  <InputOTP
-                    maxLength={6}
-                    value={adminOtp}
-                    onChange={setAdminOtp}
-                    onComplete={() => void handleAdminOtpVerify()}
-                  >
-                    <InputOTPGroup className="gap-2">
-                      <InputOTPSlot index={0} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                      <InputOTPSlot index={1} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                      <InputOTPSlot index={2} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                      <InputOTPSlot index={3} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                      <InputOTPSlot index={4} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                      <InputOTPSlot index={5} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                    </InputOTPGroup>
-                  </InputOTP>
-                </div>
-                <div
-                  className={`flex items-center gap-4 p-4 border rounded-xl transition-all cursor-pointer select-none bg-slate-50 shadow-inner
-                    ${captchaVerified ? "border-green-400 bg-green-50/50" : "border-slate-200 hover:border-primary/50"}
-                  `}
-                  onClick={handleVerifyCaptcha}
-                >
-                  <div className={`flex items-center justify-center size-8 rounded border transition-all ${captchaVerified ? "bg-green-500 border-green-500" : verifyingCaptcha ? "border-transparent" : "bg-white border-slate-300"}`}>
-                    {verifyingCaptcha ? (
-                      <Loader2 className="size-5 text-primary animate-spin" />
-                    ) : captchaVerified ? (
-                      <svg className="size-5 text-white animate-fade-in" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    ) : null}
-                  </div>
-                  <span className={`text-sm font-bold ${captchaVerified ? "text-green-700" : "text-slate-600"}`}>
-                    {verifyingCaptcha ? "Verifying..." : captchaVerified ? "Success!" : "Verify you are human"}
-                  </span>
-                </div>
-                <Button
-                  type="button"
-                  className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-xl shadow-glow transition-all disabled:opacity-50"
-                  disabled={loginLoading || adminOtpSending || !captchaVerified || adminOtp.length !== 6}
-                  onClick={() => void handleAdminOtpVerify()}
-                >
-                  {loginLoading ? <Loader2 className="size-5 animate-spin mr-2" /> : null}
-                  Verify code & sign in
-                </Button>
-                <div className="flex flex-col items-center gap-2 text-center">
-                  <button
-                    type="button"
-                    className="text-xs font-bold text-primary hover:underline disabled:opacity-50"
-                    disabled={adminOtpSending}
-                    onClick={() => void sendAdminLoginOtp(adminPendingEmail)}
-                  >
-                    {adminOtpSending ? "Sending…" : "Resend code"}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs font-bold text-slate-500 hover:underline"
-                    onClick={() => {
-                      setAdminLoginStep("password");
-                      setAdminPendingPassword("");
-                      setAdminOtp("");
-                      setAdminOtpSent(false);
-                      setAdminDevOtp(null);
-                    }}
-                  >
-                    Back to password sign-in
-                  </button>
-                </div>
-              </div>
+                    <>Sending verification code to {adminPendingEmail}…</>
+                  )
+                }
+                otp={adminOtp}
+                onOtpChange={(value) => {
+                  setAdminOtp(value);
+                  setAdminOtpVerified(false);
+                  setAdminOtpError(false);
+                }}
+                onVerify={() => void handleAdminOtpVerify()}
+                loading={loginLoading}
+                verified={adminOtpVerified}
+                verifying={loginLoading && !adminOtpVerified}
+                error={adminOtpError}
+                sending={adminOtpSending}
+                captchaVerified={captchaVerified}
+                verifyingCaptcha={verifyingCaptcha}
+                onVerifyCaptcha={handleVerifyCaptcha}
+                onResend={() => void sendAdminLoginOtp(adminPendingEmail)}
+                devOtpHint={adminDevOtp}
+                onBack={() => {
+                  setAdminLoginStep("password");
+                  setAdminPendingPassword("");
+                  setAdminOtp("");
+                  setAdminOtpSent(false);
+                  setAdminDevOtp(null);
+                  setAdminOtpVerified(false);
+                  setAdminOtpError(false);
+                }}
+              />
             ) : isStudentLoginRoute && studentLoginStep === "otp" ? (
-              <div className="space-y-5">
-                <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-slate-700 leading-relaxed">
-                  {studentOtpSent ? (
+              studentOtpSent ? (
+                <LoginOtpVerification
+                  headline="Email login code"
+                  description={
                     <>
                       Enter the <strong>6-digit code</strong> sent to{" "}
                       <span className="font-semibold text-slate-900">{studentOtpEmail || email}</span>.
                     </>
-                  ) : (
-                    <>
-                      Password sign-in did not work for{" "}
-                      <span className="font-semibold text-slate-900">{studentOtpEmail || email}</span>.
-                      Tap below to email a one-time login code (nothing is sent until you tap).
-                    </>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">
-                    Email
-                  </Label>
-                  <Input
-                    type="email"
-                    className="h-12 bg-slate-50 border-none shadow-inner rounded-xl pl-4"
-                    value={studentOtpEmail || email}
-                    onChange={(e) => setStudentOtpEmail(e.target.value.trim().toLowerCase())}
-                    placeholder="you@example.com"
-                    required
-                  />
-                </div>
-                {!studentOtpSent ? (
+                  }
+                  otp={studentOtp}
+                  onOtpChange={(value) => {
+                    setStudentOtp(value);
+                    setStudentOtpVerified(false);
+                    setStudentOtpError(false);
+                  }}
+                  onVerify={() => void handleStudentOtpVerify()}
+                  loading={loginLoading}
+                  verified={studentOtpVerified}
+                  verifying={loginLoading && !studentOtpVerified}
+                  error={studentOtpError}
+                  sending={studentOtpSending}
+                  captchaVerified={captchaVerified}
+                  verifyingCaptcha={verifyingCaptcha}
+                  onVerifyCaptcha={handleVerifyCaptcha}
+                  onResend={() => void sendStudentLoginOtp(studentOtpEmail || email)}
+                  onBack={() => {
+                    setStudentLoginStep("password");
+                    setStudentOtp("");
+                    setStudentOtpSent(false);
+                    setStudentOtpVerified(false);
+                    setStudentOtpError(false);
+                  }}
+                />
+              ) : (
+                <div className="space-y-5 animate-fade-in-up">
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-slate-700 leading-relaxed">
+                    Password sign-in did not work for{" "}
+                    <span className="font-semibold text-slate-900">{studentOtpEmail || email}</span>. Tap below to
+                    email a one-time login code.
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Email</Label>
+                    <Input
+                      type="email"
+                      className="h-12 bg-slate-50 border-none shadow-inner rounded-xl pl-4"
+                      value={studentOtpEmail || email}
+                      onChange={(e) => setStudentOtpEmail(e.target.value.trim().toLowerCase())}
+                      placeholder="you@example.com"
+                      required
+                    />
+                  </div>
                   <Button
                     type="button"
-                    className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-xl shadow-glow transition-all disabled:opacity-50"
+                    className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-xl shadow-glow"
                     disabled={studentOtpSending || !(studentOtpEmail || email).includes("@")}
                     onClick={() => void sendStudentLoginOtp(studentOtpEmail || email)}
                   >
                     {studentOtpSending ? <Loader2 className="size-5 animate-spin mr-2" /> : null}
                     Send login code to email
                   </Button>
-                ) : (
-                  <>
-                    <div className="flex flex-col items-center gap-4">
-                      <InputOTP
-                        maxLength={6}
-                        value={studentOtp}
-                        onChange={setStudentOtp}
-                        onComplete={() => void handleStudentOtpVerify()}
-                      >
-                        <InputOTPGroup className="gap-2">
-                          <InputOTPSlot index={0} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                          <InputOTPSlot index={1} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                          <InputOTPSlot index={2} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                          <InputOTPSlot index={3} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                          <InputOTPSlot index={4} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                          <InputOTPSlot index={5} className="size-12 text-xl rounded-xl border-2 border-primary/40 font-black" />
-                        </InputOTPGroup>
-                      </InputOTP>
-                    </div>
-                    <div
-                      className={`flex items-center gap-4 p-4 border rounded-xl transition-all cursor-pointer select-none bg-slate-50 shadow-inner
-                        ${captchaVerified ? "border-green-400 bg-green-50/50" : "border-slate-200 hover:border-primary/50"}
-                      `}
-                      onClick={handleVerifyCaptcha}
-                    >
-                      <div className={`flex items-center justify-center size-8 rounded border transition-all ${captchaVerified ? "bg-green-500 border-green-500" : verifyingCaptcha ? "border-transparent" : "bg-white border-slate-300"}`}>
-                        {verifyingCaptcha ? (
-                          <Loader2 className="size-5 text-primary animate-spin" />
-                        ) : captchaVerified ? (
-                          <svg className="size-5 text-white animate-fade-in" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        ) : null}
-                      </div>
-                      <span className={`text-sm font-bold ${captchaVerified ? "text-green-700" : "text-slate-600"}`}>
-                        {verifyingCaptcha ? "Verifying..." : captchaVerified ? "Success!" : "Verify you are human"}
-                      </span>
-                    </div>
-                    <Button
-                      type="button"
-                      className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-xl shadow-glow transition-all disabled:opacity-50"
-                      disabled={loginLoading || studentOtpSending || !captchaVerified || studentOtp.length !== 6}
-                      onClick={() => void handleStudentOtpVerify()}
-                    >
-                      {loginLoading ? <Loader2 className="size-5 animate-spin mr-2" /> : null}
-                      Verify code & sign in
-                    </Button>
-                  </>
-                )}
-                <div className="flex flex-col items-center gap-2 text-center">
-                  {studentOtpSent ? (
-                    <button
-                      type="button"
-                      className="text-xs font-bold text-primary hover:underline disabled:opacity-50"
-                      disabled={studentOtpSending}
-                      onClick={() => void sendStudentLoginOtp(studentOtpEmail || email)}
-                    >
-                      {studentOtpSending ? "Sending…" : "Resend code"}
-                    </button>
-                  ) : null}
                   <button
                     type="button"
-                    className="text-xs font-bold text-slate-500 hover:underline"
+                    className="w-full text-xs font-bold text-slate-500 hover:underline"
                     onClick={() => {
                       setStudentLoginStep("password");
                       setStudentOtp("");
@@ -1077,7 +909,7 @@ const Login = () => {
                     Back to password sign-in
                   </button>
                 </div>
-              </div>
+              )
             ) : (
               <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-2">
@@ -1152,27 +984,11 @@ const Login = () => {
                 </div>
 
                 {!isReferralLoginRoute ? (
-                <div 
-                  className={`flex items-center gap-4 p-4 border rounded-xl transition-all cursor-pointer select-none bg-slate-50 shadow-inner
-                    ${captchaVerified ? "border-green-400 bg-green-50/50" : "border-slate-200 hover:border-primary/50"}
-                  `}
-                  onClick={handleVerifyCaptcha}
-                >
-                  <div className={`flex items-center justify-center size-8 rounded border transition-all ${captchaVerified ? 'bg-green-500 border-green-500' : verifyingCaptcha ? 'border-transparent' : 'bg-white border-slate-300'}`}>
-                    {verifyingCaptcha ? (
-                      <Loader2 className="size-5 text-primary animate-spin" />
-                    ) : captchaVerified ? (
-                      <svg className="size-5 text-white animate-fade-in" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    ) : null}
-                  </div>
-                  <span className={`text-sm font-bold ${captchaVerified ? "text-green-700" : "text-slate-600"}`}>
-                    {verifyingCaptcha ? "Verifying..." : captchaVerified ? "Success!" : "Verify you are human"}
-                  </span>
-                  <div className="ml-auto opacity-30 flex items-center gap-1">
-                    <img src="/logo.png" alt="Security" className="w-5 h-5 grayscale object-contain" />
-                    <span className="text-[10px] font-bold uppercase">Protected</span>
-                  </div>
-                </div>
+                  <LoginSecurityCheck
+                    verified={captchaVerified}
+                    verifying={verifyingCaptcha}
+                    onVerify={handleVerifyCaptcha}
+                  />
                 ) : null}
 
                 <Button 
@@ -1223,8 +1039,7 @@ const Login = () => {
                 </>
               )}
             </p>
-          </Card>
-        </div>
+        </LoginPremiumLayout>
       </main>
 
       {/* Forgot Password Flow Dialog */}
@@ -1266,38 +1081,33 @@ const Login = () => {
             )}
 
             {resetStep === "otp" && (
-              <div className="flex flex-col items-center justify-center space-y-6">
-                <InputOTP maxLength={6} value={resetOtp} onChange={setResetOtp} onComplete={handleVerifyResetOtp}>
-                  <InputOTPGroup className="gap-3">
-                    <InputOTPSlot index={0} className="size-14 text-2xl rounded-xl border-2 border-primary/40 font-black" />
-                    <InputOTPSlot index={1} className="size-14 text-2xl rounded-xl border-2 border-primary/40 font-black" />
-                    <InputOTPSlot index={2} className="size-14 text-2xl rounded-xl border-2 border-primary/40 font-black" />
-                    <InputOTPSlot index={3} className="size-14 text-2xl rounded-xl border-2 border-primary/40 font-black" />
-                    <InputOTPSlot index={4} className="size-14 text-2xl rounded-xl border-2 border-primary/40 font-black" />
-                    <InputOTPSlot index={5} className="size-14 text-2xl rounded-xl border-2 border-primary/40 font-black" />
-                  </InputOTPGroup>
-                </InputOTP>
-
-                <Button
-                  className="w-full font-black h-12"
-                  onClick={handleVerifyResetOtp}
-                  disabled={resetLoading || resetOtp.length !== 6}
-                >
-                  {resetLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Verify OTP & Continue
-                </Button>
-
-                <p className="text-xs text-center text-muted-foreground">
-                  Need to change your email?{" "}
-                  <button
-                    onClick={() => setResetStep("email")}
-                    className="text-primary font-bold hover:underline"
-                    disabled={resetLoading}
-                  >
-                    Go Back
-                  </button>
-                </p>
-              </div>
+              <LoginOtpVerification
+                headline="Verify your identity"
+                description={`Enter the 6-digit OTP sent to ${resetEmail}.`}
+                otp={resetOtp}
+                onOtpChange={(value) => {
+                  setResetOtp(value);
+                  setResetOtpVerified(false);
+                  setResetOtpError(false);
+                }}
+                onVerify={() => void handleVerifyResetOtp()}
+                verifyLabel="Verify OTP & continue"
+                loading={resetLoading}
+                verified={resetOtpVerified}
+                verifying={resetLoading && !resetOtpVerified}
+                error={resetOtpError}
+                captchaVerified
+                verifyingCaptcha={false}
+                onVerifyCaptcha={() => {}}
+                showCaptcha={false}
+                slotSize="lg"
+                onBack={() => {
+                  setResetStep("email");
+                  setResetOtpVerified(false);
+                  setResetOtpError(false);
+                }}
+                backLabel="Change email"
+              />
             )}
 
             {resetStep === "password" && (

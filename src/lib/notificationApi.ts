@@ -38,14 +38,42 @@ export function formatNotificationError(error: unknown): string {
   const parts = [e.message, e.details, e.hint].filter(Boolean);
   const msg = parts.join(" — ") || "Notification action failed.";
   if (
-    /admin_publish_notification|admin_notify_class_published|admin_list_notifications|notification_deliveries/i.test(
+    /admin_publish_notification|admin_notify_class_published|admin_list_notifications|admin_count_notification_targets|admin_publish_notification_draft|admin_update_notification_draft|notification_deliveries/i.test(
       msg
     ) ||
     e.code === "PGRST202"
   ) {
-    return `${msg} Run supabase/migrations/20260605120000_notification_management.sql in Supabase SQL Editor, then reload API schema.`;
+    return `${msg} Run supabase/migrations/20260605120000_notification_management.sql and supabase/hotfix_internship_mode_filtering.sql on RDS, then reload.`;
   }
   return msg;
+}
+
+function isNotificationRpcMissing(error: unknown): boolean {
+  const msg = formatNotificationError(error);
+  return /does not exist|PGRST202|Could not find the function|admin_publish_notification|admin_count_notification/i.test(
+    msg
+  );
+}
+
+async function countStudentsFallback(
+  supabase: SupabaseClient,
+  target: ReturnType<typeof buildNotificationTargetPayload>
+): Promise<number> {
+  if (target.target_type === "specific") {
+    if (!target.target_user_id) return 0;
+    const { count, error } = await supabase
+      .from("students")
+      .select("id", { count: "exact", head: true })
+      .eq("id", target.target_user_id);
+    if (error) throw error;
+    return count ?? 0;
+  }
+
+  const { count, error } = await supabase
+    .from("students")
+    .select("id", { count: "exact", head: true });
+  if (error) throw error;
+  return count ?? 0;
 }
 
 export function buildNotificationTargetPayload(
@@ -142,8 +170,11 @@ export async function countNotificationTargets(
     p_domains: target.target_domains,
     p_modes: target.target_modes,
   });
-  if (error) throw error;
-  return Number(data ?? 0);
+  if (!error) return Number(data ?? 0);
+  if (isNotificationRpcMissing(error)) {
+    return countStudentsFallback(supabase, target);
+  }
+  throw error;
 }
 
 export async function publishNotification(
@@ -171,8 +202,44 @@ export async function publishNotification(
   };
 
   const { data, error } = await supabase.rpc("admin_publish_notification", { p_row: row });
-  if (error) throw error;
-  return data as string;
+  if (!error && data) return data as string;
+
+  if (!isNotificationRpcMissing(error)) throw error;
+
+  const wantPublished = row.status === "published";
+  const { data: inserted, error: insertErr } = await supabase
+    .from("notifications")
+    .insert({
+      title: row.title,
+      message: row.message,
+      target_type: target.target_type,
+      target_user_id: target.target_user_id,
+      target_universities: target.target_universities,
+      target_colleges: target.target_colleges,
+      target_domains: target.target_domains,
+      target_modes: target.target_modes,
+      status: wantPublished ? "draft" : row.status,
+      class_id: row.class_id,
+      created_by: row.created_by,
+    })
+    .select("id")
+    .single();
+  if (insertErr) throw insertErr;
+
+  const id = String(inserted.id);
+  if (wantPublished) {
+    const { error: fanOutErr } = await supabase.rpc("admin_publish_notification_draft", {
+      p_id: id,
+    });
+    if (fanOutErr) {
+      const { error: pubErr } = await supabase
+        .from("notifications")
+        .update({ status: "published", updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (pubErr) throw pubErr;
+    }
+  }
+  return id;
 }
 
 export async function updateNotificationDraft(

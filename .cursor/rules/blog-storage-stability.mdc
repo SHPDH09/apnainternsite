@@ -1,0 +1,10 @@
+# Blog CMS storage stability
+
+When changing blog CMS or storage (`aws/server/s3-storage.ts`, `siteBlogApi.ts`, `siteBlogFallbackStorage.ts`):
+
+- **Do not remove** GET/HEAD for `object/{bucket}/{key...}` (non-`public` paths). Blog JSON lives at `logos/blog/cms-posts.json` and must stream from S3 via Lambda creds — not only `object/public/...` redirects.
+- **Do not revert** S3 JSON fallback (`blog/cms-posts.json` in logos bucket) when RDS `site_blog_posts` is missing.
+- **Do not throw** from public blog fetch paths when fallback JSON is readable — homepage `/blog` must show posts from S3 if RDS table absent.
+- **Preserve** `ensureSiteBlogStorage` trying S3 fallback **before** failing bootstrap.
+- **Do not replace** `streamS3Object` with redirect-only public URLs if that breaks private bucket reads.
+- If another task touches storage or admin blog UI, **leave blog storage routing and fallback logic unchanged** unless the user explicitly asks to modify blog storage again.

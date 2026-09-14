@@ -5,7 +5,6 @@ import { SiteNav } from "@/components/SiteNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { NoticePopup } from "@/components/NoticePopup";
 import {
   Dialog,
   DialogContent,
@@ -50,8 +49,11 @@ import { HomeTrustSection } from "@/components/home/HomeTrustSection";
 import { HomeOutcomesSection } from "@/components/home/HomeOutcomesSection";
 import { HomeUniversitiesSection } from "@/components/home/HomeUniversitiesSection";
 import { HomeFaqSection } from "@/components/home/HomeFaqSection";
+import { HomePartnerSection } from "@/components/home/HomePartnerSection";
+import { HomeBlogSection } from "@/components/home/HomeBlogSection";
 import { HomeFinalCta } from "@/components/home/HomeFinalCta";
 import { HomeCoursesSections } from "@/components/courses/HomeCoursesSections";
+import { fetchPublicBlogPosts, type SiteBlogPost } from "@/lib/siteBlogApi";
 import {
   getDomainsForUgStream,
   type UgStreamKey,
@@ -84,6 +86,7 @@ const Index = () => {
   const [mous, setMous] = useState<SiteMou[]>([]);
   const [offlinePrograms, setOfflinePrograms] = useState<SiteOfflineProgram[]>([]);
   const [testimonials, setTestimonials] = useState<SiteTestimonial[]>([]);
+  const [blogPosts, setBlogPosts] = useState<SiteBlogPost[]>([]);
   const [consentFormUrl, setConsentFormUrl] = useState<string | null>(null);
   const [consentFormName, setConsentFormName] = useState<string | null>(null);
   const [domainsStream, setDomainsStream] = useState<UgStreamKey | null>(null);
@@ -118,12 +121,14 @@ const Index = () => {
       fetchPublicMous(supabase).catch(() => [] as SiteMou[]),
       fetchPublicOfflinePrograms(supabase).catch(() => [] as SiteOfflineProgram[]),
       fetchPublicTestimonials(supabase).catch(() => [] as SiteTestimonial[]),
-    ]).then(([certs, team, mouRows, offline, reviews]) => {
+      fetchPublicBlogPosts(supabase, { limit: 3, featuredOnly: false }).catch(() => [] as SiteBlogPost[]),
+    ]).then(([certs, team, mouRows, offline, reviews, blogs]) => {
       setSampleCerts(certs);
       setExpertTeam(team);
       setMous(mouRows);
       setOfflinePrograms(offline);
       setTestimonials(reviews);
+      setBlogPosts(blogs);
     });
   }, []);
 
@@ -148,9 +153,7 @@ const Index = () => {
   ]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const trustedStripRef = useRef<HTMLDivElement>(null);
   const [isPaused, setIsPaused] = useState(false);
-  const [isTrustedPaused, setIsTrustedPaused] = useState(false);
 
   useEffect(() => {
     if (!scrollRef.current || isPaused) return;
@@ -166,22 +169,6 @@ const Index = () => {
 
     return () => clearInterval(interval);
   }, [isPaused, unis]);
-
-  useEffect(() => {
-    if (!trustedStripRef.current || isTrustedPaused || unis.length === 0) return;
-
-    const scrollContainer = trustedStripRef.current;
-    const half = scrollContainer.scrollWidth / 2;
-    const interval = setInterval(() => {
-      if (scrollContainer.scrollLeft >= half) {
-        scrollContainer.scrollLeft = 0;
-      } else {
-        scrollContainer.scrollLeft += 1;
-      }
-    }, 30);
-
-    return () => clearInterval(interval);
-  }, [isTrustedPaused, unis]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -378,36 +365,28 @@ const Index = () => {
   return (
     <div
       ref={pageRef}
-      className="min-h-screen bg-[#f8fafc] font-sans text-slate-900 selection:bg-primary selection:text-white"
+      className="home-brand-mesh min-h-screen font-sans text-slate-900 selection:bg-primary selection:text-white"
     >
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      <div className="border-b border-sky-900/10 bg-slate-900 py-2.5 px-4 text-center text-sm text-slate-200">
-        <span className="font-medium">
-          Registrations open for 2023–2027 batch —
-        </span>{" "}
+      <div className="relative overflow-hidden border-b border-[#5AA3E6]/20 bg-gradient-to-r from-[#1e3a5f] via-[#2563eb] to-[#2B7CD3] py-2.5 px-4 text-center text-sm text-sky-50">
+        <span className="font-medium">Registrations open for 2023–2027 batch —</span>{" "}
         <Link
           to="/register"
-          className="font-semibold text-sky-300 underline-offset-4 hover:text-white hover:underline"
+          className="font-bold text-white underline-offset-4 hover:text-amber-200 hover:underline"
         >
           Reserve your seat
         </Link>
       </div>
 
       <SiteNav />
-      <NoticePopup page="home" />
 
       <HomeHeroSection onRegister={goRegister} onVerify={goVerify} />
 
-      <HomeMarqueeStrip
-        universities={unis}
-        stripRef={trustedStripRef}
-        paused={isTrustedPaused}
-        onPauseChange={setIsTrustedPaused}
-      />
+      <HomeMarqueeStrip universities={unis} />
 
       <HomeStatsSection statsRef={statsRef} statCards={statCards} />
 
@@ -426,7 +405,7 @@ const Index = () => {
       {/* Consent form template */}
       <section id="consent-form" className="scroll-mt-24 py-16 md:py-20">
         <div className="mx-auto max-w-6xl px-6 lg:px-8">
-          <div className="reveal-on-scroll flex flex-col items-center gap-6 rounded-3xl border border-slate-200/80 bg-white p-8 shadow-soft sm:flex-row sm:text-left">
+          <div className="reveal-on-scroll home-card-premium flex flex-col items-center gap-6 rounded-3xl p-8 sm:flex-row sm:text-left">
             <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-sky-50">
               <FileText className="size-7 text-sky-600" />
             </div>
@@ -498,6 +477,10 @@ const Index = () => {
       />
 
       <HomeFaqSection faqs={faqs} />
+
+      <HomePartnerSection />
+
+      <HomeBlogSection posts={blogPosts} />
 
       <HomeFinalCta onRegister={goRegister} onVerify={goVerify} />
 

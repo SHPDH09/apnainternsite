@@ -1,13 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
-import { assertStudentRegistrationAvailableServer } from './lib/registrationAvailability';
-import { createStudentAuthWithChosenPassword } from './lib/registrationPassword';
-import { createSmtpTransporter, getSmtpCredentials, sesMailHeaders } from './lib/smtpTransport';
-import { getServerDb } from './lib/getServerDb';
+import { assertStudentRegistrationAvailableServer } from './lib/registrationAvailability.js';
+import { assertStudentUniqueness, formatStudentUniquenessError } from './lib/studentUniqueness.js';
+import { normalizeEmail, normalizePhone } from './lib/studentFieldNormalize.js';
+import { createStudentAuthWithChosenPassword } from './lib/registrationPassword.js';
+import { createSmtpTransporter, resolveSmtpCredentials, sesMailHeaders } from './lib/smtpTransport.js';
+import { getServerDb } from './lib/getServerDb.js';
 import {
   bumpRegistrationId,
   nextRegistrationIdFromRows,
-} from './lib/registrationId';
+} from './lib/registrationId.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Setup
@@ -59,13 +61,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ success: false, message: 'Unauthorized. Admin privileges required.' });
     }
 
-    const regPhone = String(student_data?.contact_number || student_data?.contact || '').trim();
+    const regPhone = normalizePhone(
+      String(student_data?.contact_number || student_data?.contact || '')
+    );
     try {
       await assertStudentRegistrationAvailableServer(db, normalizedEmail, regPhone);
+      await assertStudentUniqueness(db, {
+        email: normalizedEmail,
+        phone: regPhone,
+        rollNumber: student_data?.roll_number,
+        registrationNumber: student_data?.registration_id,
+        universityName: student_data?.university_name,
+        universityRollNumber:
+          student_data?.university_roll_number ||
+          student_data?.metadata?.university_roll_number,
+      });
     } catch (availErr: unknown) {
-      const msg =
-        availErr instanceof Error ? availErr.message : 'Email or mobile already registered.';
-      return res.status(400).json({ success: false, message: msg });
+      const msg = formatStudentUniquenessError(availErr);
+      return res.status(409).json({ success: false, message: msg });
     }
 
     const passwordToUse =
@@ -111,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       full_name: student_data.full_name,
       gender: student_data.gender,
       parent_name: student_data.parent_name,
-      contact_number: student_data.contact_number,
+      contact_number: regPhone || student_data.contact_number,
       university_name: student_data.university_name,
       college_name: student_data.college_name,
       course: student_data.course || student_data.internship_domain,
@@ -150,12 +163,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       insertPayload.registration_id = regId;
       const { error: insertError } = await db.from("students").insert(insertPayload);
       if (insertError) {
-        if (insertError.code === '23505' && insertError.message.includes('registration_id')) {
+        if (insertError.code === '23505' && String(insertError.message || '').includes('registration_id')) {
           regId = bumpRegistrationId(regId);
           retryCount++;
           continue;
         }
-        throw insertError;
+        return res.status(409).json({
+          success: false,
+          message: formatStudentUniquenessError(insertError),
+        });
       }
       break;
     }
@@ -186,12 +202,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // 8. Send Email (Directly using nodemailer to avoid brittle internal fetch)
     try {
-      const { user: SMTP_USER, pass: SMTP_PASS } = getSmtpCredentials();
-      if (!SMTP_USER || !SMTP_PASS) {
+      const smtpCreds = await resolveSmtpCredentials();
+      if (!smtpCreds.user || !smtpCreds.pass) {
         throw new Error("SMTP credentials missing");
       }
 
-      const transporter = await createSmtpTransporter();
+      const transporter = await createSmtpTransporter(smtpCreds);
       const mailOptions = {
         ...sesMailHeaders(),
         to: normalizedEmail,
@@ -231,10 +247,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("Failed to send welcome email:", mailErr);
     }
 
-    return res.status(200).json({ success: true, message: 'Student registered successfully' });
+    return res.status(200).json({
+      success: true,
+      message: 'Student registered successfully',
+      userId,
+      registrationId: regId,
+      paymentId: mockPaymentId,
+    });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Admin Registration Error:", error);
-    return res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
+    const msg = formatStudentUniquenessError(error);
+    const status = /already registered|duplicate|unique constraint|23505/i.test(msg) ? 409 : 500;
+    return res.status(status).json({ success: false, message: msg || 'Internal Server Error' });
   }
 }

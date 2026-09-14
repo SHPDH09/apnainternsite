@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Papa from "papaparse";
 import { SiteNav } from "@/components/SiteNav";
+import { BrandLogo } from "@/components/brand/BrandLogo";
+import { SiteLoader } from "@/components/SiteLoader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +20,7 @@ import {
   Loader2, Plus, Trash2, Award, Users, Building2, Edit, Eye, MoreHorizontal, 
   Shield, Mail, Phone, User, BookOpen, Heart, LogIn, Ban, CheckCircle2, 
   Download, Briefcase, UserPlus, Filter, Search, Calendar, ToggleLeft, 
-  ToggleRight, TrendingUp, Activity, DollarSign, Clock, GraduationCap, CheckSquare, FileText
+  ToggleRight, TrendingUp, Activity, DollarSign,   Clock, GraduationCap, CheckSquare, FileText, Bell
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
@@ -49,6 +51,7 @@ import {
   getStudentDirectoryPassword,
 } from "@/lib/studentCredentials";
 import { adminUpsertStudentProfile } from "@/lib/adminProfileUpsert";
+import { saveStudentDirectoryUpdate } from "@/lib/saveStudentDirectoryRow";
 import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
 import { siteApiUrl } from "@/lib/siteApi";
 import {
@@ -56,7 +59,9 @@ import {
   formatBulkMailEta,
   sendBulkCustomMail,
 } from "@/lib/bulkCustomMailSend";
+import { toastBulkMailResult } from "@/lib/bulkMailResultFeedback";
 import { FeesManagementPanel } from "@/components/admin/FeesManagementPanel";
+import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
 import { BulkUploadStudentBadge } from "@/components/BulkUploadStudentBadge";
 import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
 import {
@@ -172,6 +177,7 @@ const SuperAdmin = () => {
   const [attendanceSaving, setAttendanceSaving] = useState(false);
   const [attendanceOpsLoading, setAttendanceOpsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("students");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Password Reset States
   const [isResetPassOpen, setIsResetPassOpen] = useState(false);
@@ -548,7 +554,7 @@ const SuperAdmin = () => {
         return;
       }
 
-      const { data: updatedStudent, error } = await supabase.from("students").update({
+      const updatedStudent = await saveStudentDirectoryUpdate(supabase, editData.id, {
         full_name: editData.full_name,
         email: emailNorm,
         contact_number: editData.contact_number,
@@ -571,9 +577,8 @@ const SuperAdmin = () => {
         emergency_relation: editData.emergency_relation,
         emergency_contact: editData.emergency_contact,
         metadata: mergedMeta,
-      }).eq("id", editData.id).select("id").maybeSingle();
+      });
 
-      if (error) throw error;
       if (!updatedStudent?.id) {
         throw new Error(
           "Student row was not updated (0 rows). Check RLS policies allow super_admin to UPDATE students."
@@ -964,6 +969,7 @@ const SuperAdmin = () => {
       const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id);
       const isSuper = (roles || []).some((r: any) => r.role === "super_admin");
       setAllowed(isSuper);
+      setCurrentUserId(session.user.id);
       if (isSuper) {
         persistAdminAuthSession();
         await loadAll();
@@ -1657,7 +1663,7 @@ const SuperAdmin = () => {
   };
 
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="size-8 animate-spin text-primary" /></div>;
+  if (loading) return <SiteLoader />;
   if (!allowed) return <div className="p-10 text-center">Access Denied</div>;
 
   return (
@@ -1666,9 +1672,7 @@ const SuperAdmin = () => {
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="size-8 rounded-lg overflow-hidden bg-white border border-slate-100">
-              <img src="/logo.png" alt="Apna Intern" className="w-full h-full object-cover" />
-            </div>
+            <BrandLogo size="sm" />
             <span className="font-bold text-slate-900 hidden sm:block">Super Portal</span>
           </div>
 
@@ -1689,6 +1693,15 @@ const SuperAdmin = () => {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-black tracking-tight text-slate-900">Super Admin Panel</h1>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setActiveTab("popups")}
+                className={`gap-2 rounded-xl font-bold text-[10px] uppercase tracking-wider px-3 h-8 border transition-all ${activeTab === 'popups' ? 'bg-primary text-white border-primary shadow-glow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200'}`}
+              >
+                <Bell className="size-3.5" />
+                Popup Messages
+              </Button>
               <Button 
                 variant="ghost" 
                 size="sm"
@@ -1894,6 +1907,7 @@ const SuperAdmin = () => {
                 <TabsTrigger value="leads" className="gap-2"><UserPlus className="size-4" /> Leads</TabsTrigger>
                 <TabsTrigger value="old-leads" className="gap-2"><Clock className="size-4" /> Old Failed Payments</TabsTrigger>
                 <TabsTrigger value="staff" className="gap-2"><Shield className="size-4" /> Staff</TabsTrigger>
+                <TabsTrigger value="popups" className="gap-2"><Bell className="size-4" /> Popup Messages</TabsTrigger>
                 <TabsTrigger value="logs" className="gap-2"><Clock className="size-4" /> Activity Logs</TabsTrigger>
               </TabsList>
             </div>
@@ -3246,14 +3260,22 @@ const SuperAdmin = () => {
                         disabled={isSendingBulk || (!bulkEmailSubject || !bulkEmailBody) || (commsSelectedIds.length === 0 && csvEmails.length === 0)}
                         onClick={async () => {
                           const activeList = commRecipientType === 'enrolled' ? allStudentsComms : allLeadsComms;
-                          const emailField = commRecipientType === 'enrolled' ? 'email' : 'user_email';
-                          
+                          const resolveEmail = (s: { email?: string; user_email?: string }) =>
+                            String(s.email || s.user_email || "").trim().toLowerCase();
+
                           const targets = [
-                            ...activeList.filter((s: any) => commsSelectedIds.includes(s.id)).map((s: any) => s[emailField]),
-                            ...csvEmails
+                            ...activeList
+                              .filter((s: { id: string }) => commsSelectedIds.includes(s.id))
+                              .map(resolveEmail),
+                            ...csvEmails.map((e) => String(e || "").trim().toLowerCase()),
                           ];
-                          const uniqueTargets = Array.from(new Set(targets));
-                          
+                          const uniqueTargets = Array.from(new Set(targets.filter((e) => e.includes("@"))));
+
+                          if (!uniqueTargets.length) {
+                            toast.error("No valid email addresses selected.");
+                            return;
+                          }
+
                           setIsSendingBulk(true);
                           setBulkTotal(uniqueTargets.length);
                           setBulkProgress(0);
@@ -3263,29 +3285,26 @@ const SuperAdmin = () => {
                               : `Sending to ${uniqueTargets.length} recipients…`
                           );
 
-                          const result = await sendBulkCustomMail(
-                            uniqueTargets,
-                            bulkEmailSubject,
-                            bulkEmailBody,
-                            (done) => setBulkProgress(done)
-                          );
-
-                          setIsSendingBulk(false);
-
-                          if (result.rateLimited) {
-                            toast.error(
-                              result.sent > 0
-                                ? `Hostinger rate limit after ${result.sent} sent. Wait 1 hour, then send the rest in batches of 50.`
-                                : "Hostinger rate limit — wait 1 hour, then test with 1 email before bulk."
+                          try {
+                            const result = await sendBulkCustomMail(
+                              uniqueTargets,
+                              bulkEmailSubject,
+                              bulkEmailBody,
+                              (done) => setBulkProgress(done)
                             );
-                          } else if (result.failed > 0) {
-                            toast.warning(`Sent ${result.sent} of ${uniqueTargets.length}. ${result.failed} failed.`);
-                          } else {
-                            toast.success(`Sent to ${result.sent} recipients.`);
-                            setBulkEmailSubject("");
-                            setBulkEmailBody("");
-                            setCommsSelectedIds([]);
-                            setCsvEmails([]);
+
+                            toastBulkMailResult(result, uniqueTargets.length, {
+                              onFullSuccess: () => {
+                                setBulkEmailSubject("");
+                                setBulkEmailBody("");
+                                setCommsSelectedIds([]);
+                                setCsvEmails([]);
+                              },
+                            });
+                          } catch (err: unknown) {
+                            toast.error(err instanceof Error ? err.message : "Failed to send bulk email");
+                          } finally {
+                            setIsSendingBulk(false);
                           }
                         }}
                       >
@@ -3506,6 +3525,10 @@ const SuperAdmin = () => {
               </div>
             </TabsContent>
 
+            <TabsContent value="popups" className="mt-0">
+              <PopupManagementPanel client={supabase} currentUserId={currentUserId} />
+            </TabsContent>
+
             <TabsContent value="logs" className="animate-fade-in space-y-6">
               <Card className="p-6 border-none shadow-elegant bg-card/50 backdrop-blur-sm">
                 <div className="flex items-center justify-between mb-6">
@@ -3648,6 +3671,12 @@ const SuperAdmin = () => {
 
                 <Card className="p-6 border-none shadow-elegant bg-white md:col-span-2 lg:col-span-1">
                   <h3 className="font-bold mb-4 flex items-center gap-2"><Activity className="size-5 text-primary" /> Global Notice Popup</h3>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Homepage and login notices are now managed in <b>Popup Message Management</b>.
+                  </p>
+                  <Button className="w-full font-black mb-4" onClick={() => setActiveTab("popups")}>
+                    Open Popup Message Management
+                  </Button>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
                       <div>

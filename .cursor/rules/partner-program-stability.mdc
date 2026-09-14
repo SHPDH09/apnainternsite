@@ -1,0 +1,13 @@
+# Partner program stability
+
+When changing partner self-apply, applications queue, referral coupons, or homepage partner section:
+
+- **Do not remove** Admin → Partners → Partner Applications, Cyber Cafes, or Referrals tabs.
+- **Do not break** existing cyber cafe (`/cybercafe`) or referral (`?ref=`) student registration flows.
+- **Preserve** locked dashboard until admin verify for new partner applications.
+- **Preserve** referral click tracking (`referral_clicks`, `log_referral_click`) — coupon tracking is additive.
+- **Do not gate** core admin/student features behind partner application tables.
+- If another task touches partners, **leave approval + coupon logic unchanged** unless the user explicitly asks.
+- **Preserve** auto-bootstrap for `partner_applications` (`ensurePartnerApplicationsTables`, `/api/ensure-partner-applications`) — do not remove in favor of manual SQL-only errors.
+- **Preserve** admin-side partner creation via `/api/admin-partner-register` (server-side auth + approve) — do not route admin add-partner through public `submitPartnerApplication` (breaks admin session).
+- **Preserve** Vercel direct routing for `/api/admin-partner-register`, `/api/partner-application-submit`, and `/api/ensure-partner-applications` (see `vercel.json` rewrite exceptions + `.vercelignore` whitelist) — do not proxy only these routes to Lambda staging before the function is deployed there.

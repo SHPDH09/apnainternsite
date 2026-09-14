@@ -1,4 +1,4 @@
-import type { ServerDbLike } from './rdsAdapter';
+import { readRowString, type ServerDbLike } from './rdsAdapter.js';
 import crypto from 'crypto';
 
 export const REGISTRATION_PASSWORD_MIN_LENGTH = 5;
@@ -92,7 +92,7 @@ export async function createStudentAuthWithChosenPassword(
       .eq('email', normalizedEmail)
       .maybeSingle();
 
-    const userId = prof?.id;
+    const userId = readRowString(prof, 'id');
     if (!userId) {
       throw new Error('User is registered in Auth but profile was not found.');
     }

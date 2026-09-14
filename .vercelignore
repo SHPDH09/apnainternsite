@@ -1,0 +1,27 @@
+# Cloudflare Workers — not used by Vercel.
+wrangler.toml
+wrangler.jsonc
+cloudflare/
+.wranglerignore
+
+# Most API routes run on AWS Lambda (see vercel.json rewrites).
+# Whitelist OTP mail handlers + their RDS/SMTP dependencies.
+api/**
+!api/send-mail.ts
+!api/otp-deliver.ts
+!api/request-otp.ts
+!api/auth/forgot-password.ts
+!api/admin-partner-register.ts
+!api/partner-application-submit.ts
+!api/ensure-partner-applications.ts
+!api/ensure-project-report-templates.ts
+!api/rds-apply-all.ts
+!api/lib/**
+
+aws/**
+!aws/server/db.ts
+!aws/server/local-jwt.ts
+!aws/server/partner-applications-bootstrap.ts
+!aws/server/project-report-bootstrap.ts
+!aws/server/project-report-template-save.ts
+!aws/server/rds-apply-all.ts

@@ -55,6 +55,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { sendBulkCustomMail } from "@/lib/bulkCustomMailSend";
+import { toastBulkMailResult } from "@/lib/bulkMailResultFeedback";
 
 type Catalog = {
   unis: { id: string; name: string }[];
@@ -486,20 +487,13 @@ export function StaffCommsPanel({ isActive }: { isActive: boolean }) {
     setProgress(0);
     try {
       const result = await sendBulkCustomMail(targets, subject, body, (done) => setProgress(done));
-      if (result.rateLimited) {
-        toast.error(
-          result.sent > 0
-            ? `Rate limit after ${result.sent} sent. Wait, then retry remaining.`
-            : "Mail rate limit — wait before retrying."
-        );
-      } else if (result.failed > 0) {
-        toast.warning(`Sent ${result.sent} of ${targets.length}. ${result.failed} failed.`);
-      } else {
-        toast.success(`Sent to ${result.sent} recipients.`);
-        setSubject("");
-        setBody("");
-        setSelectedIds([]);
-      }
+      toastBulkMailResult(result, targets.length, {
+        onFullSuccess: () => {
+          setSubject("");
+          setBody("");
+          setSelectedIds([]);
+        },
+      });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Send failed");
     } finally {

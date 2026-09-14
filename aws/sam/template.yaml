@@ -23,6 +23,12 @@ Parameters:
   SmtpPass:
     Type: String
     NoEcho: true
+  SmtpHost:
+    Type: String
+    Default: brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com
+  MailFromAddress:
+    Type: String
+    Default: info@apnaintern.in
   GeminiApiKey:
     Type: String
     Default: ""
@@ -53,9 +59,38 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: !Ref StageName
-      # CORS is handled in Express (aws/server/app.ts) so we can reflect the
-      # request Origin. API Gateway "*" CORS overwrites Lambda headers and breaks
-      # credentialed browser calls from Vercel.
+      # Fallback CORS for OPTIONS when Lambda is cold/unavailable.
+      # Express (app.ts) still sets credentialed Origin on actual responses.
+      CorsConfiguration:
+        AllowOrigins:
+          - https://apnaintern.in
+          - https://www.apnaintern.in
+          - https://ezyintern.in
+          - https://www.ezyintern.in
+          - https://apnainternsite.apnaintern-in.workers.dev
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+          - HEAD
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+          - apikey
+          - Prefer
+          - X-Client-Info
+          - X-Supabase-Api-Version
+          - X-Requested-With
+          - Accept
+          - X-CSRF-Token
+          - x-razorpay-signature
+          - accept-profile
+          - content-profile
+        AllowCredentials: true
+        MaxAge: 86400
 
   ApiFunction:
     Type: AWS::Serverless::Function
@@ -71,6 +106,12 @@ Resources:
             BucketName: !Ref S3BucketLogos
         - S3CrudPolicy:
             BucketName: !Ref S3BucketLearningMaterials
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
       Environment:
         Variables:
           NODE_ENV: production
@@ -81,11 +122,14 @@ Resources:
           RDS_RPC_OPEN: "false"
           RAZORPAY_KEY_ID: !Ref RazorpayKeyId
           RAZORPAY_KEY_SECRET: !Ref RazorpayKeySecret
-          SMTP_HOST: email-smtp.ap-south-1.amazonaws.com
+          SMTP_HOST: !Ref SmtpHost
           SMTP_PORT: "587"
           SMTP_USER: !Ref SmtpUser
           SMTP_PASS: !Ref SmtpPass
-          MAIL_FROM: EzyIntern <admin@ezyintern.in>
+          MAIL_FROM: !Sub "Apna Intern <${MailFromAddress}>"
+          MAIL_FROM_ADDRESS: !Ref MailFromAddress
+          SES_REGION: ap-south-1
+          USE_SES_API: "false"
           GEMINI_API_KEY: !Ref GeminiApiKey
           S3_BUCKET_CONSENT_FORMS: !Ref S3BucketConsentForms
           S3_BUCKET_LOGOS: !Ref S3BucketLogos

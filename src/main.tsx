@@ -3,6 +3,10 @@ import App from "./App.tsx";
 import "./index.css";
 import ReactGA from "react-ga4";
 import * as Sentry from "@sentry/react";
+import { unregisterLegacyApiProxyServiceWorker } from "@/lib/registerApiProxyServiceWorker";
+import { redirectLegacyDomainsToCanonical } from "@/lib/legacyDomainRedirect";
+
+redirectLegacyDomainsToCanonical();
 
 ReactGA.initialize("G-8RN6D7SN2S");
 
@@ -11,4 +15,9 @@ Sentry.init({
   sendDefaultPii: true
 });
 
-createRoot(document.getElementById("root")!).render(<App />);
+async function bootstrap() {
+  await unregisterLegacyApiProxyServiceWorker();
+  createRoot(document.getElementById("root")!).render(<App />);
+}
+
+void bootstrap();

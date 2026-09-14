@@ -4,13 +4,23 @@
  */
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { callRpcAuto, query } from "../../aws/server/db";
-import { verifyToken } from "../../aws/server/local-jwt";
+import { callRpcAuto, query } from "../../aws/server/db.js";
+import { verifyToken } from "../../aws/server/local-jwt.js";
 
 const IDENT = /^[a-z_][a-z0-9_]*$/i;
 
+/** Coerce a selected row field to string for strict TypeScript + RDS adapters. */
+export function readRowString(
+  row: Record<string, unknown> | null | undefined,
+  key: string
+): string | undefined {
+  const value = row?.[key];
+  if (value == null || value === "") return undefined;
+  return String(value);
+}
+
 type DbError = { message?: string; code?: string };
-type DbResult<T> = { data: T; error: DbError | null };
+type DbResult<T> = { data: T | null; error: DbError | null };
 
 type Filter =
   | { kind: "eq"; col: string; val: unknown }

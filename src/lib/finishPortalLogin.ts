@@ -8,6 +8,7 @@ import {
   STUDENT_POST_UNPAID_LOGIN_PATH,
 } from "@/lib/studentPaymentAccess";
 import { fetchCybercafeExists, fetchRolesForUser } from "@/lib/portalAuth";
+import { isOwnerAdminEmail } from "@/lib/supabaseEnv";
 
 export type PortalLoginRouteContext = {
   isCollegeLoginRoute: boolean;
@@ -62,6 +63,9 @@ export async function finishPortalLoginAfterAuth(
     }
   } else if (ctx.isAdminLoginRoute) {
     if (!isAdminPortalAccount) {
+      if (isOwnerAdminEmail(user.email)) {
+        return { ok: true, destination: "/admin" };
+      }
       await client.auth.signOut();
       return {
         ok: false,

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getPublicSiteOrigin } from "@/lib/publicSiteOrigin";
 
 export const REFERRAL_SESSION_KEY = "registration_referral_code";
 export const REFERRAL_CLICK_SESSION_KEY = "referral_click_session_id";
@@ -114,18 +115,11 @@ export function peekStoredReferralCode(): string | null {
   }
 }
 
+
 export function getPublicRegisterUrlWithRef(referralCode: string): string {
   const code = encodeURIComponent(referralCode.trim());
-  const fromEnv = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim().replace(/\/$/, "");
-  if (fromEnv) return `${fromEnv}/register?ref=${code}`;
-  if (typeof window !== "undefined") {
-    const h = window.location.hostname;
-    if (h === "localhost" || h === "127.0.0.1") {
-      return `https://www.ezyintern.in/register?ref=${code}`;
-    }
-    return `${window.location.origin}/register?ref=${code}`;
-  }
-  return `https://www.ezyintern.in/register?ref=${code}`;
+  const origin = getPublicSiteOrigin();
+  return `${origin}/register?ref=${code}`;
 }
 
 export function buildWhatsAppShareUrl(message: string): string {

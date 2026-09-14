@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
-import { fulfillPaidOrder } from '../lib/paymentEnrollment';
-import { getServerDb } from '../lib/getServerDb';
+import { fulfillPaidOrder } from '../lib/paymentEnrollment.js';
+import { getServerDb } from '../lib/getServerDb.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {

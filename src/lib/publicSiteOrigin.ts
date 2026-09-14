@@ -6,8 +6,8 @@ export function getPublicSiteOrigin(): string {
   if (fromEnv?.trim()) return fromEnv.trim().replace(/\/$/, "");
   if (typeof window !== "undefined") {
     const h = window.location.hostname;
-    if (h === "localhost" || h === "127.0.0.1") return "https://www.ezyintern.in";
+    if (h === "localhost" || h === "127.0.0.1") return "https://apnaintern.in";
     return window.location.origin.replace(/\/$/, "");
   }
-  return "https://www.ezyintern.in";
+  return "https://apnaintern.in";
 }

@@ -51,6 +51,28 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
   return getPool().query<T>(text, params);
 }
 
+/** Run SQL with JWT session claims set (required for RLS policies using auth.uid()). */
+export async function queryAsUser<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params: unknown[] | undefined,
+  jwt: JwtClaims | null
+) {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await applyJwtClaims(client, jwt);
+    const result = await client.query<T>(text, params);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export type JwtClaims = { sub: string; email?: string; role?: string };
 
 async function applyJwtClaims(client: import("pg").PoolClient, jwt: JwtClaims | null) {

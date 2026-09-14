@@ -37,6 +37,7 @@ import {
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  applyStudentDataUploadContext,
   beginStudentDataUploadSheet,
   deleteAllStudentDataUploadImports,
   deleteImportedStudentRecord,
@@ -47,14 +48,16 @@ import {
   downloadStudentDataUploadSheetXlsx,
   downloadStudentDataUploadXlsxTemplate,
   emptyStudentDataUploadAddForm,
+  emptyStudentDataUploadContext,
   fetchImportedStudentsFromUpload,
   fetchStudentDataUploadHistory,
   fetchStudentsForUploadSheet,
   getStudentDataUploadPaymentTag,
+  isStudentDataUploadContextComplete,
   parseStudentDataUploadFile,
   processStudentDataUploadRows,
   saveStudentDataUploadHistory,
-  STUDENT_DATA_UPLOAD_REQUIRED_HEADERS,
+  STUDENT_DATA_UPLOAD_FILE_HEADERS,
   studentDataUploadAddFormToRow,
   type StudentDataUploadHistoryRow,
   type StudentDataUploadImportedStudent,
@@ -65,6 +68,7 @@ import {
   updateImportedStudentRecord,
   validateStudentDataUploadRows,
 } from "@/lib/studentDataUpload";
+import { StudentDataUploadContextForm } from "@/components/admin/StudentDataUploadContextForm";
 
 const PAGE_SIZE = 20;
 
@@ -160,6 +164,8 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
   const [historyPage, setHistoryPage] = useState(0);
   const [importedPage, setImportedPage] = useState(0);
   const [importedSearch, setImportedSearch] = useState("");
+  const [uploadContext, setUploadContext] = useState(emptyStudentDataUploadContext());
+  const contextReady = isStudentDataUploadContextComplete(uploadContext);
 
   const reloadMeta = useCallback(async () => {
     setLoadingMeta(true);
@@ -205,6 +211,12 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (!contextReady) {
+      toast.error("Select university, college, domain, session, course, and branch first.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
     setValidating(true);
     setValidationErrors([]);
     setPreviewRows(null);
@@ -212,8 +224,9 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
     setFileName(file.name);
 
     try {
-      const rows = await parseStudentDataUploadFile(file);
-      const errors = validateStudentDataUploadRows(rows);
+      const parsed = await parseStudentDataUploadFile(file);
+      const rows = applyStudentDataUploadContext(parsed, uploadContext);
+      const errors = validateStudentDataUploadRows(rows, uploadContext);
       if (errors.length > 0) {
         setValidationErrors(errors);
         toast.error(`Found ${errors.length} validation issue(s). Fix the file and upload again.`);
@@ -395,8 +408,14 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
   };
 
   const handleAddSingleStudent = async () => {
-    const row = studentDataUploadAddFormToRow(addForm, 1);
-    const errors = validateStudentDataUploadRows([row]);
+    const raw = studentDataUploadAddFormToRow(addForm, 1);
+    const row = contextReady
+      ? applyStudentDataUploadContext([raw], uploadContext)[0]!
+      : raw;
+    const errors = validateStudentDataUploadRows(
+      [row],
+      contextReady ? uploadContext : undefined
+    );
     if (errors.length > 0) {
       toast.error(errors[0]?.message || "Please fill all required fields.");
       return;
@@ -622,10 +641,23 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
         <div>
           <h2 className="text-xl font-black text-slate-900">Student Data Upload</h2>
           <p className="text-sm text-slate-600 mt-1">
-            Admin / Super Admin only. Import paid or unpaid students from Excel/CSV. Registration
-            Number must be unique; contact number and email duplicates are allowed.
+            Admin / Super Admin only. First select university, college, domain, session, course, and
+            branch for the batch, then upload CSV/Excel with student details. Registration Number
+            must be unique; contact number and email duplicates are allowed.
           </p>
         </div>
+
+        <StudentDataUploadContextForm
+          client={client}
+          value={uploadContext}
+          onChange={(next) => {
+            setUploadContext(next);
+            if (previewRows) {
+              resetUploadState();
+            }
+          }}
+          disabled={uploading || validating}
+        />
 
         <div className="flex flex-wrap gap-2">
           <Button
@@ -653,9 +685,13 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
 
         <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-700">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
-            Template columns
+            Step 2 — File columns (CSV / Excel)
           </p>
-          <p>{STUDENT_DATA_UPLOAD_REQUIRED_HEADERS.join(" · ")}</p>
+          <p>{STUDENT_DATA_UPLOAD_FILE_HEADERS.join(" · ")}</p>
+          <p className="text-xs text-slate-500 mt-2">
+            University, college, domain, session, course, and branch come from Step 1 — do not repeat
+            them in every row.
+          </p>
         </div>
 
         {!showPreview && !results ? (
@@ -665,7 +701,7 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
               variant="outline"
               className="gap-2"
               onClick={downloadStudentDataUploadCsvTemplate}
-              disabled={validating || uploading}
+              disabled={validating || uploading || !contextReady}
             >
               <Download className="size-4" />
               Sample CSV
@@ -675,7 +711,7 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
               variant="outline"
               className="gap-2"
               onClick={downloadStudentDataUploadXlsxTemplate}
-              disabled={validating || uploading}
+              disabled={validating || uploading || !contextReady}
             >
               <FileSpreadsheet className="size-4" />
               Sample Excel
@@ -684,7 +720,7 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
               type="button"
               className="gap-2 bg-primary font-bold ml-auto"
               onClick={() => fileInputRef.current?.click()}
-              disabled={validating || uploading}
+              disabled={validating || uploading || !contextReady}
             >
               {validating ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
               Choose file (.csv / .xlsx)
@@ -978,7 +1014,17 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
               variant="outline"
               className="gap-1"
               onClick={() => {
-                setAddForm(emptyStudentDataUploadAddForm());
+                const base = emptyStudentDataUploadAddForm();
+                if (contextReady) {
+                  base.university = uploadContext.university;
+                  base.college = uploadContext.college;
+                  base.session = uploadContext.session;
+                  base.internshipDomain = uploadContext.internshipDomain;
+                  base.degree = uploadContext.course;
+                  base.department = uploadContext.branch;
+                  base.subject = uploadContext.branch;
+                }
+                setAddForm(base);
                 setAddOpen(true);
               }}
             >
@@ -1191,8 +1237,11 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
           </DialogHeader>
           <p className="text-sm text-slate-600">
             Uses current mode:{" "}
-            <span className="font-semibold">{mode === "paid" ? "Paid" : "Unpaid"}</span>. Email and
-            phone duplicates are allowed; registration number must be unique.
+            <span className="font-semibold">{mode === "paid" ? "Paid" : "Unpaid"}</span>.
+            {contextReady
+              ? " Batch details are taken from Step 1 above."
+              : " Complete Step 1 first, or fill university/college/course fields below."}{" "}
+            Email and phone duplicates are allowed; registration number must be unique.
           </p>
           <div className="grid gap-3 py-2">
             {(
@@ -1202,16 +1251,20 @@ export function StudentDataUploadPanel({ client, onLogAction, onSuccess }: Props
                 ["parentName", "Parent Name"],
                 ["contactNumber", "Contact Number"],
                 ["email", "Email Address"],
-                ["university", "University"],
-                ["college", "College"],
-                ["degree", "Degree (UG/PG)"],
-                ["department", "Department"],
-                ["subject", "Subject"],
-                ["session", "Session"],
+                ...(contextReady
+                  ? ([] as const)
+                  : ([
+                      ["university", "University"],
+                      ["college", "College"],
+                      ["degree", "Course / Degree"],
+                      ["department", "Branch / Department"],
+                      ["subject", "Subject"],
+                      ["session", "Session"],
+                      ["internshipDomain", "Internship Domain"],
+                    ] as const)),
                 ["semester", "Semester"],
                 ["registrationNumber", "Registration Number"],
                 ["rollNumber", "Roll Number"],
-                ["internshipDomain", "Internship Domain"],
                 ["mode", "Mode (Online/Offline)"],
                 ["password", "Password"],
               ] as const

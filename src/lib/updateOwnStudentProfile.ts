@@ -5,6 +5,10 @@ import {
 } from "@/lib/studentProfileDisplay";
 import { syncStudentAcademicInfo } from "@/lib/syncStudentAcademicInfo";
 import { isStudentSelfProfileEditBlocked } from "@/lib/studentPolicy";
+import {
+  assertStudentUniqueness,
+  formatStudentUniquenessError,
+} from "@/lib/studentUniqueness";
 
 export type SavedStudentRow = { id: string; email: string };
 
@@ -369,6 +373,25 @@ export async function updateOwnStudentProfile(
 
   const previousEmail = String(existing?.email || "").trim().toLowerCase();
   const emailChanged = Boolean(patch.email) && patch.email !== previousEmail;
+
+  const meta =
+    patch.metadata && typeof patch.metadata === "object" && !Array.isArray(patch.metadata)
+      ? (patch.metadata as Record<string, unknown>)
+      : {};
+  try {
+    await assertStudentUniqueness(client, {
+      email: String(patch.email || ""),
+      phone: String(patch.contact_number || ""),
+      rollNumber: String(patch.roll_number || ""),
+      universityName: String(patch.university_name || existing?.university_name || ""),
+      universityRollNumber: String(
+        meta.university_roll_number || meta.universityRollNumber || ""
+      ),
+      excludeUserId: userId,
+    });
+  } catch (uniqErr) {
+    throw new Error(formatStudentUniquenessError(uniqErr));
+  }
 
   await trySyncOwnAuthEmail(client, userId, String(patch.email), {
     required: emailChanged,

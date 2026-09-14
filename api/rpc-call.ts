@@ -8,9 +8,10 @@
  * Auth/admin-named functions still require a Bearer token.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { callRpc, callRpcAuto, type JwtClaims } from "../aws/server/db";
-import { getRpcDef, type RpcAuth } from "../aws/server/rpc-registry";
-import { verifyToken } from "../aws/server/local-jwt";
+import { callRpc, callRpcAuto, type JwtClaims } from "../aws/server/db.js";
+import { getRpcDef, type RpcAuth } from "../aws/server/rpc-registry.js";
+import { isTsRpc, runTsRpc } from "../aws/server/ts-rpc-handlers.js";
+import { verifyToken } from "../aws/server/local-jwt.js";
 
 function jwtFromRequest(req: VercelRequest): JwtClaims | null {
   const h = req.headers.authorization || req.headers.Authorization;
@@ -112,7 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authLevel: RpcAuth = def?.auth ?? inferAuth(name);
   if (authLevel === "auth" || authLevel === "admin") {
     const gate = requireAuth(req);
-    if (!gate.ok) {
+    if (gate.ok === false) {
       res.status(gate.status).json({ error: gate.message });
       return;
     }
@@ -125,6 +126,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const jwt = jwtFromRequest(req);
+    if (isTsRpc(name)) {
+      const data = await runTsRpc(name);
+      res.status(200).json({ data, error: null });
+      return;
+    }
     const data = def
       ? await callRpc(name, def.args, body, jwt)
       : await callRpcAuto(name, body, jwt);

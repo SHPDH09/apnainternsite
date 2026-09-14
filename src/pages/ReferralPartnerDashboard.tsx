@@ -7,6 +7,7 @@ import {
   buildWhatsAppShareUrl,
   getPublicRegisterUrlWithRef,
 } from "@/lib/referral";
+import { loadReferralPartnerSelf } from "@/lib/referralPartnerPortal";
 import {
   fetchReferralPartnerStats,
   fetchReferralPartnerStudents,
@@ -40,7 +41,17 @@ import {
   MousePointerClick,
   User,
   Shield,
+  Ticket,
+  Lock,
 } from "lucide-react";
+import { ReferralPartnerCouponsPanel } from "@/components/referral/ReferralPartnerCouponsPanel";
+import {
+  canAccessCouponSection,
+  canAccessReferralSection,
+  normalizePartnerAccessMode,
+  partnerAccessModeLabel,
+  type PartnerAccessMode,
+} from "@/lib/partnerAccessMode";
 import { SharedProfilePanel } from "@/components/SharedProfilePanel";
 import { StaffSecurityPanel } from "@/components/staff/StaffAccountPanels";
 import { toast } from "sonner";
@@ -96,7 +107,7 @@ function chartHeight(rows: number) {
   return Math.min(320, Math.max(160, 36 + rows * 36));
 }
 
-type Section = "dashboard" | "referrals" | "profile" | "security";
+type Section = "dashboard" | "referrals" | "coupons" | "profile" | "security";
 
 type PartnerSelf = {
   id: string;
@@ -106,7 +117,18 @@ type PartnerSelf = {
   email: string | null;
   active: boolean | null;
   profile_image_url: string | null;
+  access_mode: PartnerAccessMode;
 };
+
+function LockedSectionPanel({ title, hint }: { title: string; hint: string }) {
+  return (
+    <Card className="max-w-lg mx-auto p-8 text-center border-dashed">
+      <Lock className="size-10 mx-auto text-slate-400 mb-3" />
+      <p className="font-bold text-slate-900">{title} locked</p>
+      <p className="text-sm text-slate-600 mt-2">{hint}</p>
+    </Card>
+  );
+}
 
 function HorizontalBreakdown({
   title,
@@ -119,7 +141,7 @@ function HorizontalBreakdown({
 }) {
   const h = chartHeight(data.length || 1);
   return (
-    <Card className="p-4 md:p-5 border border-slate-200/80 shadow-elegant bg-white">
+    <Card className="p-4 md:p-5 portal-dash-card">
       <h2 className="text-sm font-semibold text-slate-800 mb-3">{title}</h2>
       <BreakdownChart h={h} data={data} emptyHint={emptyHint} />
     </Card>
@@ -227,19 +249,14 @@ export default function ReferralPartnerDashboard() {
         return;
       }
       setSessionUser(session.user);
-      const { data: me, error: meErr } = await supabase
-        .from("referral_partners")
-        .select("id, auth_user_id, referral_code, full_name, email, active, profile_image_url")
-        .eq("auth_user_id", session.user.id)
-        .maybeSingle();
+      const me = await loadReferralPartnerSelf(supabase, session.user.id, session.user.email);
       if (cancelled) return;
-      if (meErr || !me?.referral_code) {
-        console.error(meErr);
+      if (!me?.referral_code) {
         setPartner(null);
         setLoading(false);
         return;
       }
-      setPartner(me as PartnerSelf);
+      setPartner(me);
       const st = await fetchReferralPartnerStats(supabase);
       if (!cancelled) setStats(st);
       if (!cancelled) setLoading(false);
@@ -282,6 +299,21 @@ export default function ReferralPartnerDashboard() {
   const pageCount = Math.max(1, Math.ceil(studentTotal / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
 
+  const accessMode = normalizePartnerAccessMode(partner?.access_mode);
+  const referralsUnlocked = canAccessReferralSection(accessMode);
+  const couponsUnlocked = canAccessCouponSection(accessMode);
+
+  useEffect(() => {
+    if (!partner) return;
+    if (section === "referrals" && !referralsUnlocked) {
+      setSection(couponsUnlocked ? "coupons" : "dashboard");
+    } else if (section === "coupons" && !couponsUnlocked) {
+      setSection(referralsUnlocked ? "referrals" : "dashboard");
+    } else if (section === "dashboard" && !referralsUnlocked && couponsUnlocked) {
+      setSection("coupons");
+    }
+  }, [partner, section, referralsUnlocked, couponsUnlocked]);
+
   const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
     <nav className={cn("flex flex-col gap-1", mobile ? "p-4" : "p-3")}>
       <button
@@ -301,16 +333,36 @@ export default function ReferralPartnerDashboard() {
       <button
         type="button"
         onClick={() => {
+          if (!referralsUnlocked) return;
           setSection("referrals");
           setNavOpen(false);
         }}
+        disabled={!referralsUnlocked}
         className={cn(
           "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors text-left",
-          section === "referrals" ? "bg-primary text-primary-foreground shadow-sm" : "text-slate-600 hover:bg-slate-100"
+          section === "referrals" ? "bg-primary text-primary-foreground shadow-sm" : "text-slate-600 hover:bg-slate-100",
+          !referralsUnlocked && "opacity-50 cursor-not-allowed hover:bg-transparent"
         )}
       >
-        <Users className="size-4 shrink-0" />
+        {referralsUnlocked ? <Users className="size-4 shrink-0" /> : <Lock className="size-4 shrink-0" />}
         Referrals
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (!couponsUnlocked) return;
+          setSection("coupons");
+          setNavOpen(false);
+        }}
+        disabled={!couponsUnlocked}
+        className={cn(
+          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors text-left",
+          section === "coupons" ? "bg-primary text-primary-foreground shadow-sm" : "text-slate-600 hover:bg-slate-100",
+          !couponsUnlocked && "opacity-50 cursor-not-allowed hover:bg-transparent"
+        )}
+      >
+        {couponsUnlocked ? <Ticket className="size-4 shrink-0" /> : <Lock className="size-4 shrink-0" />}
+        Coupons
       </button>
       <button
         type="button"
@@ -366,11 +418,12 @@ export default function ReferralPartnerDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex text-slate-900">
+    <div className="portal-dashboard-bg flex min-h-screen text-slate-900">
       <aside className="hidden md:flex w-52 flex-col border-r border-slate-200 bg-white shrink-0">
         <div className="p-4 border-b border-slate-100">
           <p className="text-xs font-semibold text-primary">Referral</p>
           <p className="text-sm font-bold text-slate-900 mt-0.5">Apna Intern</p>
+          <p className="text-[10px] text-slate-500 mt-1">{partnerAccessModeLabel(accessMode)}</p>
         </div>
         <NavLinks />
         <div className="mt-auto p-3 border-t border-slate-100">
@@ -419,7 +472,16 @@ export default function ReferralPartnerDashboard() {
         <main className="flex-1 overflow-auto p-4 md:p-6">
           {section === "dashboard" && (
             <div className="space-y-5 max-w-5xl mx-auto">
-              <Card className="p-4 md:p-5 border border-slate-200/80 shadow-elegant bg-white">
+              {!referralsUnlocked && couponsUnlocked ? (
+                <Card className="p-4 md:p-5 portal-dash-card border-amber-200 bg-amber-50/40">
+                  <p className="text-sm text-amber-900 font-medium">
+                    Your account has <strong>coupon-only</strong> access. Open the Coupons section to manage codes and track redemptions.
+                  </p>
+                </Card>
+              ) : null}
+              {referralsUnlocked ? (
+              <>
+              <Card className="p-4 md:p-5 portal-dash-card">
                 <p className="text-xs font-medium text-slate-500 mb-1">Your referral code</p>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                   <code className="text-sm font-mono font-semibold bg-slate-100 text-slate-900 px-3 py-2 rounded-lg border border-slate-200">
@@ -461,21 +523,21 @@ export default function ReferralPartnerDashboard() {
               </Card>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <Card className="p-4 border border-slate-200/80 shadow-elegant bg-white">
+                <Card className="p-4 portal-dash-card">
                   <p className="text-xs font-medium text-slate-500 flex items-center gap-1">
                     <MousePointerClick className="size-3.5" /> Link clicks
                   </p>
                   <p className="text-2xl font-bold text-slate-800 mt-1">{stats?.total_clicks ?? 0}</p>
                 </Card>
-                <Card className="p-4 border border-slate-200/80 shadow-elegant bg-white">
+                <Card className="p-4 portal-dash-card">
                   <p className="text-xs font-medium text-slate-500">Students referred</p>
                   <p className="text-2xl font-bold text-primary mt-1">{stats?.total_students ?? 0}</p>
                 </Card>
-                <Card className="p-4 border border-slate-200/80 shadow-elegant bg-white">
+                <Card className="p-4 portal-dash-card">
                   <p className="text-xs font-medium text-slate-500">Approved</p>
                   <p className="text-2xl font-bold text-emerald-600 mt-1">{stats?.approved_students ?? 0}</p>
                 </Card>
-                <Card className="p-4 border border-slate-200/80 shadow-elegant bg-white">
+                <Card className="p-4 portal-dash-card">
                   <p className="text-xs font-medium text-slate-500">Pending</p>
                   <p className="text-2xl font-bold text-amber-600 mt-1">
                     {Math.max(0, (stats?.total_students ?? 0) - (stats?.approved_students ?? 0))}
@@ -488,12 +550,15 @@ export default function ReferralPartnerDashboard() {
                 <HorizontalBreakdown title="By university" data={universityChart} emptyHint="No signups yet." />
                 <HorizontalBreakdown title="By department" data={departmentChart} emptyHint="No signups yet." />
               </div>
+              </>
+              ) : null}
             </div>
           )}
 
           {section === "referrals" && (
+            referralsUnlocked ? (
             <div className="max-w-5xl mx-auto space-y-4">
-              <Card className="p-4 md:p-5 border border-slate-200/80 shadow-elegant bg-white">
+              <Card className="p-4 md:p-5 portal-dash-card">
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mb-4">
                   <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
@@ -599,6 +664,28 @@ export default function ReferralPartnerDashboard() {
                 </div>
               </Card>
             </div>
+            ) : (
+              <LockedSectionPanel
+                title="Referrals"
+                hint="Referral link tracking is not enabled for your account. Contact Apna Intern if you need referral access."
+              />
+            )
+          )}
+
+          {section === "coupons" && partner && (
+            couponsUnlocked ? (
+            <ReferralPartnerCouponsPanel
+              partnerId={partner.id}
+              referralCode={partner.referral_code}
+              partnerName={partner.full_name || partner.email || ""}
+              isActive={section === "coupons"}
+            />
+            ) : (
+              <LockedSectionPanel
+                title="Coupons"
+                hint="Coupon tools are not enabled for your account. Contact Apna Intern if you need coupon access."
+              />
+            )
           )}
 
           {section === "profile" && (

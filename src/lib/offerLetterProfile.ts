@@ -21,6 +21,10 @@ import {
   resolveSelectedInternshipDuration,
 } from "@/lib/studentProfileDisplay";
 import { resolveBnmuUniversityRollNumber } from "@/lib/certificateFormat";
+import {
+  applyStudentOfferLetterOverrides,
+  getCachedDocumentTemplates,
+} from "@/lib/documentTemplates";
 
 export {
   LNMU_INTERNSHIP_START,
@@ -67,9 +71,12 @@ export function resolveOfferLetterIssueDate(
   const m = metaOf(p);
   const uni = String(p.university_name || p.university || p.universityName || m.university || "");
 
+  const defaultIssue =
+    getCachedDocumentTemplates().offer_letter.defaultIssueDate?.trim() ||
+    ACCEPTANCE_LETTER_ISSUE_DATE;
   if (isBnmuStudent(uni)) return BNMU_OFFER_LETTER_ISSUE_DATE;
   if (isBrabuStudent(uni)) return BRABU_OFFER_LETTER_ISSUE_DATE;
-  return ACCEPTANCE_LETTER_ISSUE_DATE;
+  return defaultIssue;
 }
 
 export type OfferLetterResolved = {
@@ -197,6 +204,16 @@ export function resolveOfferLetterFields(
   profile: Record<string, unknown> | null | undefined,
   payment?: Record<string, unknown> | null
 ): OfferLetterResolved {
+  return applyStudentOfferLetterOverrides(
+    resolveOfferLetterFieldsInternal(profile, payment),
+    profile
+  );
+}
+
+function resolveOfferLetterFieldsInternal(
+  profile: Record<string, unknown> | null | undefined,
+  payment?: Record<string, unknown> | null
+): OfferLetterResolved {
   const p = enrichStudentProfileForDisplay(profile || {}) || {};
   const m = metaOf(p);
   const uni = String(p.university_name || p.university || p.universityName || "");
@@ -308,7 +325,7 @@ export function resolveOfferLetterFields(
       String(p.completion_date || ""),
       "As per academic internship completion norms."
     ),
-    stipend: "Not Applicable — Academic Programme",
+    stipend: getCachedDocumentTemplates().offer_letter.defaultStipend?.trim() || "Not Applicable — Academic Programme",
   };
 }
 

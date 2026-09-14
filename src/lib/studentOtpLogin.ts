@@ -1,12 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
+import { deliverOtpEmail } from "@/lib/requestOtpDelivery";
 import { resolveLoginIdentifier } from "@/lib/resolveLoginIdentifier";
 import {
   isInvalidLoginCredentials,
   signInStudentWithPassword,
   type StudentSignInResult,
 } from "@/lib/studentAuthLogin";
-import { PASSWORD_RESETS_SCHEMA_HINT, passwordResetInsertRow } from "@/lib/passwordResetRow";
 
 export function normalizeStudentLoginEmail(raw: string): string | null {
   const v = raw.trim().toLowerCase();
@@ -92,42 +91,17 @@ export async function requestStudentLoginOtp(
     };
   }
 
-  const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+  const sent = await deliverOtpEmail(client, email, "login", {
+    devSessionKey: "student_login_otp",
+  });
 
-  const { error: insertError } = await client
-    .from("password_resets")
-    .insert(passwordResetInsertRow(email, generatedOtp));
-
-  if (insertError) {
-    return {
-      ok: false,
-      error: new Error(
-        [String(insertError.message || ""), PASSWORD_RESETS_SCHEMA_HINT].filter(Boolean).join(" ")
-      ),
-    };
+  if (!sent.ok) {
+    return sent;
   }
 
-  try {
-    const response = await fetch(getSendMailApiUrl(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "login_otp",
-        otp: generatedOtp,
-        to: email,
-        email,
-      }),
-    });
-    await assertSendMailOk(response);
-  } catch (mailErr: unknown) {
-    if (typeof window !== "undefined" && window.location.hostname === "localhost") {
-      sessionStorage.setItem("student_login_otp", generatedOtp);
-      sessionStorage.setItem("student_login_otp_email", email);
-      markStudentLoginOtpSent(email);
-      return { ok: true, email };
-    }
-    const detail = mailErr instanceof Error ? mailErr.message : "Failed to send login code";
-    return { ok: false, error: new Error(detail) };
+  if (sent.devOtp && typeof window !== "undefined") {
+    sessionStorage.setItem("student_login_otp", sent.devOtp);
+    sessionStorage.setItem("student_login_otp_email", email);
   }
 
   markStudentLoginOtpSent(email);

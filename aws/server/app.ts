@@ -6,6 +6,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import adminRegister from "../../api/admin-register";
 import adminTasks from "../../api/admin-tasks";
 import forgotPassword from "../../api/auth/forgot-password";
+import otpDeliver from "../../api/otp-deliver";
 import debugEnv from "../../api/debug-env";
 import geminiGenerate from "../../api/gemini-generate";
 import createOrder from "../../api/payment/create-order";
@@ -17,7 +18,19 @@ import sendBulkMail from "../../api/send-bulk-mail";
 import sendMail from "../../api/send-mail";
 import rpcByName from "../../api/rpc-call";
 import dataSelect from "../../api/data-select";
+import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
+import ensureBlogCms from "../../api/ensure-blog-cms";
+import ensureDashboardServiceKeys from "../../api/ensure-dashboard-service-keys";
+import ensureProjectReportTemplates from "../../api/ensure-project-report-templates";
+import ensurePartnerApplications from "../../api/ensure-partner-applications";
+import partnerApplicationSubmit from "../../api/partner-application-submit";
+import adminPartnerRegister from "../../api/admin-partner-register";
+import rdsApplyAll from "./rds-apply-all-route.js";
 import { loadRootEnv } from "./load-env";
+import { ensureAllCmsTables } from "./cms-bootstrap";
+import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
+import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
+import { ensureProjectReportSchema } from "./project-report-bootstrap";
 import {
   authLogout,
   authSettings,
@@ -63,12 +76,22 @@ async function buildApp(): Promise<Express> {
   app.use(express.json({ limit: "2mb" }));
 
   const stagePrefix = process.env.AWS_STAGE ? `/${process.env.AWS_STAGE}` : "";
-  if (stagePrefix) {
+  const stagePrefixes = [
+    stagePrefix,
+    "/staging",
+    "/production",
+  ].filter((p, i, arr) => p && arr.indexOf(p) === i);
+  if (stagePrefixes.length > 0) {
     app.use((req, _res, next) => {
-      if (req.url === stagePrefix) {
-        req.url = "/";
-      } else if (req.url.startsWith(`${stagePrefix}/`)) {
-        req.url = req.url.slice(stagePrefix.length) || "/";
+      for (const prefix of stagePrefixes) {
+        if (req.url === prefix) {
+          req.url = "/";
+          break;
+        }
+        if (req.url.startsWith(`${prefix}/`)) {
+          req.url = req.url.slice(prefix.length) || "/";
+          break;
+        }
       }
       next();
     });
@@ -111,6 +134,53 @@ async function buildApp(): Promise<Express> {
     Boolean(process.env.DATABASE_URL) &&
     String(process.env.LOCAL_SUPABASE || "true").toLowerCase() !== "false";
 
+  if (localSupabase && process.env.DATABASE_URL) {
+    try {
+      await ensureAllCmsTables();
+      console.log("[cms-bootstrap] site CMS tables ready");
+    } catch (err) {
+      console.warn("[cms-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const reg = await ensureAdminRegistrationRpc();
+      if (reg.applied) {
+        console.log("[registration-bootstrap] applied admin Add Registration RPC");
+      }
+    } catch (err) {
+      console.warn("[registration-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const upload = await ensureStudentDataUploadSchema();
+      if (upload.applied) {
+        console.log("[student-upload-bootstrap] applied student data upload schema");
+      }
+    } catch (err) {
+      console.warn("[student-upload-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const projectReport = await ensureProjectReportSchema();
+      if (projectReport.applied) {
+        console.log("[project-report-bootstrap] applied project report templates schema");
+      }
+    } catch (err) {
+      console.warn("[project-report-bootstrap] startup ensure failed:", err);
+    }
+    if (process.env.AWS_LAMBDA_FUNCTION_NAME && process.env.RDS_APPLY_ON_START !== "false") {
+      void (async () => {
+        try {
+          const { applyAllRdsSql } = await import("./rds-apply-all.js");
+          const applied = await applyAllRdsSql();
+          console.log("[rds-apply-all] Lambda cold-start apply:", {
+            applied: applied.applied,
+            warnings: applied.warnings,
+          });
+        } catch (err) {
+          console.warn("[rds-apply-all] Lambda cold-start apply failed:", err);
+        }
+      })();
+    }
+  }
+
   app.get("/api/health", (_req, res) => {
     res.json({
       ok: true,
@@ -152,7 +222,17 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/gemini-generate", handler: geminiGenerate },
     { method: "post", path: "/api/gemini/generate", handler: geminiGenerate },
     { method: "post", path: "/api/auth/forgot-password", handler: forgotPassword },
+    { method: "post", path: "/api/otp-deliver", handler: otpDeliver },
+    { method: "post", path: "/api/request-otp", handler: otpDeliver },
     { method: "post", path: "/api/admin-register", handler: adminRegister },
+    { method: "post", path: "/api/bootstrap-grant-admin", handler: bootstrapGrantAdmin },
+    { method: "post", path: "/api/ensure-blog-cms", handler: ensureBlogCms },
+    { method: "post", path: "/api/ensure-dashboard-service-keys", handler: ensureDashboardServiceKeys },
+    { method: "post", path: "/api/ensure-project-report-templates", handler: ensureProjectReportTemplates },
+    { method: "post", path: "/api/ensure-partner-applications", handler: ensurePartnerApplications },
+    { method: "post", path: "/api/partner-application-submit", handler: partnerApplicationSubmit },
+    { method: "post", path: "/api/admin-partner-register", handler: adminPartnerRegister },
+    { method: "post", path: "/api/rds-apply-all", handler: rdsApplyAll },
     { method: "all", path: "/api/admin-tasks", handler: adminTasks },
     { method: "post", path: "/api/razorpay-recovery", handler: razorpayRecovery },
     { method: "post", path: "/api/payment/create-order", handler: createOrder },

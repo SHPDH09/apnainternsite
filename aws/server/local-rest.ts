@@ -4,10 +4,22 @@
  * POST /rest/v1/rpc/:name
  */
 import type { Request, Response } from "express";
-import { callRpcAuto, query } from "./db";
+import { callRpcAuto, queryAsUser } from "./db";
 import { getRpcDef } from "./rpc-registry";
 import { callRpc } from "./db";
 import { verifyToken } from "./local-jwt";
+import { ensureCmsTable, isCmsTable, isMissingRelationError } from "./cms-bootstrap";
+import {
+  ensurePartnerApplicationsTables,
+  isPartnerApplicationsTable,
+} from "./partner-applications-bootstrap";
+import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
+import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
+import {
+  ensureProjectReportSchema,
+  isProjectReportTable,
+} from "./project-report-bootstrap";
+import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
 
 function jwtFromRequest(req: Request) {
   const h = String(req.headers.authorization || "");
@@ -20,6 +32,32 @@ function jwtFromRequest(req: Request) {
     email: payload.email ? String(payload.email) : undefined,
     role: payload.role ? String(payload.role) : "authenticated",
   };
+}
+
+async function dbQuery(req: Request, text: string, params?: unknown[]) {
+  return queryAsUser(text, params, jwtFromRequest(req));
+}
+
+async function withCmsRetry<T>(table: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (isMissingRelationError(err, table)) {
+      if (isCmsTable(table)) {
+        await ensureCmsTable(table);
+        return await run();
+      }
+      if (isPartnerApplicationsTable(table)) {
+        await ensurePartnerApplicationsTables();
+        return await run();
+      }
+      if (isProjectReportTable(table)) {
+        await ensureProjectReportSchema();
+        return await run();
+      }
+    }
+    throw err;
+  }
 }
 
 const IDENT = /^[a-z_][a-z0-9_]*$/i;
@@ -344,7 +382,7 @@ export async function restGet(req: Request, res: Response) {
     if (req.method === "HEAD") {
       let countSql = `SELECT count(*)::int AS c FROM public."${table}"`;
       if (where) countSql += ` WHERE ${where}`;
-      const { rows: countRows } = await query(countSql, params);
+      const { rows: countRows } = await withCmsRetry(table, () => dbQuery(req, countSql, params));
       const total = Number(countRows[0]?.c ?? 0);
       res.setHeader("Content-Range", `0-0/${total}`);
       res.status(200).end();
@@ -362,7 +400,7 @@ export async function restGet(req: Request, res: Response) {
     if (wantCount) {
       let countSql = `SELECT count(*)::int AS c FROM public."${table}"`;
       if (where) countSql += ` WHERE ${where}`;
-      const { rows: countRows } = await query(countSql, params);
+      const { rows: countRows } = await withCmsRetry(table, () => dbQuery(req, countSql, params));
       total = Number(countRows[0]?.c ?? 0);
     }
 
@@ -371,7 +409,7 @@ export async function restGet(req: Request, res: Response) {
     sql += order;
     sql += ` LIMIT ${limit} OFFSET ${offset}`;
 
-    const { rows } = await query(sql, params);
+    const { rows } = await withCmsRetry(table, () => dbQuery(req, sql, params));
 
     // PostgREST: Accept headers / Prefer count — skip for now
     // single object when Accept prefers or limit=1 with maybeSingle client — client handles arrays
@@ -461,7 +499,7 @@ export async function restPost(req: Request, res: Response) {
       sql += ` RETURNING *`;
     }
 
-    const result = await query(sql, values);
+    const result = await withCmsRetry(table, () => dbQuery(req, sql, values));
     if (preferReturn(req)) {
       const accept = String(req.headers.accept || "");
       if (/vnd\.pgrst\.object/.test(accept) || !Array.isArray(body)) {
@@ -502,7 +540,7 @@ export async function restPatch(req: Request, res: Response) {
     const whereShifted = where.replace(/\$(\d+)/g, (_, n) => `$${Number(n) + values.length}`);
     let sql = `UPDATE public."${table}" SET ${sets.join(", ")} WHERE ${whereShifted}`;
     if (preferReturn(req)) sql += ` RETURNING *`;
-    const result = await query(sql, [...values, ...params]);
+    const result = await withCmsRetry(table, () => dbQuery(req, sql, [...values, ...params]));
     if (preferReturn(req)) {
       const accept = String(req.headers.accept || "");
       if (/vnd\.pgrst\.object/.test(accept)) {
@@ -529,7 +567,7 @@ export async function restDelete(req: Request, res: Response) {
     }
     let sql = `DELETE FROM public."${table}" WHERE ${where}`;
     if (preferReturn(req)) sql += ` RETURNING *`;
-    const result = await query(sql, params);
+    const result = await withCmsRetry(table, () => dbQuery(req, sql, params));
     if (preferReturn(req)) {
       res.json(result.rows);
       return;
@@ -553,20 +591,77 @@ export async function restRpc(req: Request, res: Response) {
       unknown
     >;
     const jwt = jwtFromRequest(req);
+    if (isTsRpc(name)) {
+      if (name.startsWith("admin_") && !jwt) {
+        res.status(401).json({ message: "JWT required" });
+        return;
+      }
+      const data = await runTsRpc(name);
+      res.json(data);
+      return;
+    }
     const def = getRpcDef(name);
-    // Admin/student RPCs require a valid session JWT (sets auth.uid() on RDS).
-    if (name.startsWith("admin_") || name.startsWith("student_")) {
+    // Session RPCs require JWT so auth.uid() is set on RDS (RLS + SECURITY DEFINER lookups).
+    const requiresJwt =
+      def?.auth === "auth" ||
+      def?.auth === "admin" ||
+      name.startsWith("admin_") ||
+      name.startsWith("student_") ||
+      name.startsWith("sync_") ||
+      name.startsWith("get_referral_partner_");
+    if (requiresJwt) {
       if (def?.auth === "public") {
-        // registry-public student_* (e.g. repair) — allow without token
+        // registry-public RPCs (e.g. repair) — allow without token
       } else if (!jwt) {
         res.status(401).json({ message: "JWT required" });
         return;
       }
     }
-    const data = def
-      ? await callRpc(name, def.args, body, jwt)
-      : await callRpcAuto(name, body, jwt);
-    res.json(data);
+
+    const invokeRpc = async () =>
+      def
+        ? await callRpc(name, def.args, body, jwt)
+        : await callRpcAuto(name, body, jwt);
+
+    try {
+      const data = await invokeRpc();
+      res.json(data);
+      return;
+    } catch (firstErr) {
+      const code = String((firstErr as { code?: string })?.code || "");
+      const msg = String((firstErr as { message?: string })?.message || firstErr || "");
+      const isRegistrationRpc = name === "admin_create_minimal_student_registration";
+      const isUploadRpc = name.startsWith("admin_student_data_upload_");
+      const shouldBootstrapRegistration =
+        isRegistrationRpc &&
+        (code === "42883" ||
+          /btrim\(uuid\)/i.test(msg) ||
+          /could not find the function/i.test(msg) ||
+          /function public\.admin_create_minimal_student_registration does not exist/i.test(msg));
+      const shouldBootstrapUpload =
+        isUploadRpc &&
+        (code === "42804" ||
+          code === "42883" ||
+          /could not find the function/i.test(msg) ||
+          /column "id" is of type uuid but expression is of type text/i.test(msg) ||
+          /function public\.admin_student_data_upload/i.test(msg));
+
+      if (!shouldBootstrapRegistration && !shouldBootstrapUpload) {
+        throw firstErr;
+      }
+
+      if (shouldBootstrapRegistration) {
+        console.warn("[rest/rpc] registration RPC failed, applying bootstrap and retrying:", msg);
+        await ensureAdminRegistrationRpc();
+      }
+      if (shouldBootstrapUpload) {
+        console.warn("[rest/rpc] student data upload RPC failed, applying bootstrap and retrying:", msg);
+        await ensureStudentDataUploadSchema();
+      }
+      const data = await invokeRpc();
+      res.json(data);
+      return;
+    }
   } catch (err) {
     console.error("[rest/rpc]", err);
     res.status(400).json(pgErrorPayload(err));

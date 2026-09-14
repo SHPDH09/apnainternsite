@@ -1,9 +1,36 @@
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { siteApiUrl } from "@/lib/siteApi";
+import {
+  normalizeEmail,
+  normalizePhone,
+  normalizeRegistrationNumber,
+  normalizeRollNumber,
+  normalizeUniversityKey,
+  universityRollCompositeKey,
+} from "@/lib/studentFieldNormalize";
+import { formatStudentUniquenessError } from "@/lib/studentUniqueness";
+import { saveStudentDirectoryUpdate } from "@/lib/saveStudentDirectoryRow";
 
 export type StudentDataUploadMode = "paid" | "unpaid";
 
+/** Columns filled in CSV/Excel — university/college/domain/session/course/branch are set in the UI. */
+export const STUDENT_DATA_UPLOAD_FILE_HEADERS = [
+  "Full Name",
+  "Gender",
+  "Parent Name",
+  "Contact Number",
+  "Email Address",
+  "Subject",
+  "Semester",
+  "Registration Number",
+  "Roll Number",
+  "Mode (Online/Offline)",
+  "Password",
+] as const;
+
+/** @deprecated Use STUDENT_DATA_UPLOAD_FILE_HEADERS — kept for legacy sheet exports. */
 export const STUDENT_DATA_UPLOAD_REQUIRED_HEADERS = [
   "Full Name",
   "Gender",
@@ -23,6 +50,57 @@ export const STUDENT_DATA_UPLOAD_REQUIRED_HEADERS = [
   "Mode (Online/Offline)",
   "Password",
 ] as const;
+
+export type StudentDataUploadContext = {
+  university: string;
+  college: string;
+  internshipDomain: string;
+  session: string;
+  course: string;
+  branch: string;
+};
+
+export function emptyStudentDataUploadContext(): StudentDataUploadContext {
+  return {
+    university: "",
+    college: "",
+    internshipDomain: "",
+    session: "",
+    course: "",
+    branch: "",
+  };
+}
+
+export function isStudentDataUploadContextComplete(
+  context: StudentDataUploadContext
+): boolean {
+  return Boolean(
+    context.university.trim() &&
+      context.college.trim() &&
+      context.internshipDomain.trim() &&
+      context.session.trim() &&
+      context.course.trim() &&
+      (context.branch.trim() || context.course.trim())
+  );
+}
+
+/** Apply admin-selected batch fields to every parsed file row. */
+export function applyStudentDataUploadContext(
+  rows: StudentDataUploadRow[],
+  context: StudentDataUploadContext
+): StudentDataUploadRow[] {
+  const branch = context.branch.trim() || "General";
+  return rows.map((row) => ({
+    ...row,
+    university: context.university.trim(),
+    college: context.college.trim(),
+    internshipDomain: context.internshipDomain.trim(),
+    session: context.session.trim(),
+    degree: context.course.trim(),
+    department: branch,
+    subject: row.subject.trim() || branch,
+  }));
+}
 
 export type StudentDataUploadRow = {
   rowNumber: number;
@@ -257,7 +335,7 @@ export function parseStudentDataUploadSheetRows(rawRows: unknown[][]): StudentDa
   );
   if (headerIndex < 0) {
     throw new Error(
-      `Could not find a header row. Expected columns: ${STUDENT_DATA_UPLOAD_REQUIRED_HEADERS.join(", ")}.`
+      `Could not find a header row. Expected columns such as: ${STUDENT_DATA_UPLOAD_FILE_HEADERS.join(", ")}.`
     );
   }
 
@@ -265,9 +343,14 @@ export function parseStudentDataUploadSheetRows(rawRows: unknown[][]): StudentDa
   const mapped = new Set(Object.values(columnMap));
   for (const required of [
     "fullName",
+    "gender",
+    "parentName",
     "contactNumber",
     "email",
+    "semester",
     "registrationNumber",
+    "rollNumber",
+    "mode",
     "password",
   ] as RowField[]) {
     if (!mapped.has(required)) {
@@ -317,24 +400,39 @@ function validateSingleRow(row: StudentDataUploadRow): string | null {
   if (phone.length < 10) return "Contact Number must have at least 10 digits.";
   const email = row.email.trim().toLowerCase();
   if (!email.includes("@")) return "Email Address is required.";
-  if (!row.university.trim()) return "University is required.";
-  if (!row.college.trim()) return "College is required.";
-  if (!row.degree.trim()) return "Degree (UG/PG) is required.";
-  if (!row.department.trim()) return "Department is required.";
-  if (!row.subject.trim()) return "Subject is required.";
-  if (!row.session.trim()) return "Session is required.";
   if (!row.semester.trim()) return "Semester is required.";
   if (!row.registrationNumber.trim()) return "Registration Number is required.";
   if (!row.rollNumber.trim()) return "Roll Number is required.";
-  if (!row.internshipDomain.trim()) return "Internship Domain is required.";
   if (!row.mode.trim()) return "Mode (Online/Offline) is required.";
   if (row.password.trim().length < 5) return "Password must be at least 5 characters.";
   return null;
 }
 
-/** Mandatory-field validation only. Contact/email duplicates are allowed. */
+function validateRowWithContext(
+  row: StudentDataUploadRow,
+  context: StudentDataUploadContext
+): string | null {
+  const base = validateSingleRow(row);
+  if (base) return base;
+  if (!context.university.trim()) return "Select university before import.";
+  if (!context.college.trim()) return "Select college before import.";
+  if (!context.internshipDomain.trim()) return "Select internship domain before import.";
+  if (!context.session.trim()) return "Select session before import.";
+  if (!context.course.trim()) return "Select course before import.";
+  if (!context.branch.trim() && !context.course.trim()) return "Select branch before import.";
+  if (!row.university.trim()) return "University is missing after batch apply.";
+  if (!row.college.trim()) return "College is missing after batch apply.";
+  if (!row.degree.trim()) return "Course is missing after batch apply.";
+  if (!row.department.trim()) return "Branch is missing after batch apply.";
+  if (!row.internshipDomain.trim()) return "Internship domain is missing after batch apply.";
+  if (!row.session.trim()) return "Session is missing after batch apply.";
+  return null;
+}
+
+/** Mandatory fields + duplicate detection within the uploaded file. */
 export function validateStudentDataUploadRows(
-  rows: StudentDataUploadRow[]
+  rows: StudentDataUploadRow[],
+  context?: StudentDataUploadContext
 ): StudentDataUploadValidationError[] {
   const errors: StudentDataUploadValidationError[] = [];
   if (rows.length === 0) {
@@ -342,9 +440,80 @@ export function validateStudentDataUploadRows(
     return errors;
   }
 
+  if (context && !isStudentDataUploadContextComplete(context)) {
+    errors.push({
+      rowNumber: 0,
+      message: "Complete university, college, domain, session, course, and branch before import.",
+    });
+    return errors;
+  }
+
+  const seenEmails = new Map<string, number>();
+  const seenPhones = new Map<string, number>();
+  const seenRegs = new Map<string, number>();
+  const seenRolls = new Map<string, number>();
+  const uniKey = normalizeUniversityKey(context?.university || rows[0]?.university || "");
+
   for (const row of rows) {
-    const message = validateSingleRow(row);
-    if (message) errors.push({ rowNumber: row.rowNumber, message });
+    const message = context
+      ? validateRowWithContext(row, context)
+      : validateSingleRow(row);
+    if (message) {
+      errors.push({ rowNumber: row.rowNumber, message });
+      continue;
+    }
+
+    const emailKey = normalizeEmail(row.email);
+    if (emailKey) {
+      const first = seenEmails.get(emailKey);
+      if (first != null) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          message: `Duplicate email in file (also on row ${first}).`,
+        });
+      } else {
+        seenEmails.set(emailKey, row.rowNumber);
+      }
+    }
+
+    const phoneKey = normalizePhone(row.contactNumber);
+    if (phoneKey.length === 10) {
+      const first = seenPhones.get(phoneKey);
+      if (first != null) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          message: `Duplicate phone number in file (also on row ${first}).`,
+        });
+      } else {
+        seenPhones.set(phoneKey, row.rowNumber);
+      }
+    }
+
+    const regKey = normalizeRegistrationNumber(row.registrationNumber);
+    if (regKey) {
+      const first = seenRegs.get(regKey);
+      if (first != null) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          message: `Duplicate university registration number in file (also on row ${first}).`,
+        });
+      } else {
+        seenRegs.set(regKey, row.rowNumber);
+      }
+    }
+
+    const rollKey = universityRollCompositeKey(uniKey || row.university, row.rollNumber);
+    if (rollKey) {
+      const first = seenRolls.get(rollKey);
+      if (first != null) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          message: `Duplicate university roll number in file (also on row ${first}).`,
+        });
+      } else {
+        seenRolls.set(rollKey, row.rowNumber);
+      }
+    }
   }
   return errors;
 }
@@ -388,6 +557,209 @@ export async function fetchExistingRegistrationNumbers(
   return found;
 }
 
+async function fetchExistingEmails(
+  client: SupabaseClient,
+  emails: string[]
+): Promise<Set<string>> {
+  const normalized = [...new Set(emails.map((e) => normalizeEmail(e)).filter(Boolean))];
+  const found = new Set<string>();
+  const chunkSize = 100;
+
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize);
+    const { data, error } = await client.from("students").select("email").in("email", chunk);
+    if (error) {
+      for (const email of chunk) {
+        const { data: rows } = await client
+          .from("students")
+          .select("email")
+          .ilike("email", email)
+          .limit(1);
+        if (rows?.[0]?.email) found.add(normalizeEmail(rows[0].email));
+      }
+      continue;
+    }
+    for (const row of data || []) {
+      if (row.email) found.add(normalizeEmail(row.email));
+    }
+  }
+  return found;
+}
+
+async function fetchExistingPhones(
+  client: SupabaseClient,
+  phones: string[]
+): Promise<Set<string>> {
+  const normalized = [
+    ...new Set(phones.map((p) => normalizePhone(p)).filter((p) => p.length === 10)),
+  ];
+  const found = new Set<string>();
+  const chunkSize = 100;
+
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize);
+    const { data, error } = await client
+      .from("students")
+      .select("contact_number")
+      .in("contact_number", chunk);
+    if (error) {
+      for (const phone of chunk) {
+        const { data: rows } = await client
+          .from("students")
+          .select("contact_number")
+          .eq("contact_number", phone)
+          .limit(1);
+        if (rows?.[0]?.contact_number) found.add(normalizePhone(rows[0].contact_number));
+      }
+      continue;
+    }
+    for (const row of data || []) {
+      if (row.contact_number) found.add(normalizePhone(row.contact_number));
+    }
+  }
+  return found;
+}
+
+async function fetchExistingUniversityRolls(
+  client: SupabaseClient,
+  universityName: string,
+  rollNumbers: string[]
+): Promise<Set<string>> {
+  const uni = normalizeUniversityKey(universityName);
+  const normalized = [
+    ...new Set(rollNumbers.map((r) => normalizeRollNumber(r)).filter(Boolean)),
+  ];
+  const found = new Set<string>();
+  if (!uni || normalized.length === 0) return found;
+
+  const chunkSize = 100;
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize);
+    const { data, error } = await client
+      .from("students")
+      .select("roll_number, university_name")
+      .eq("university_name", universityName)
+      .in("roll_number", chunk);
+    if (error) {
+      continue;
+    }
+    for (const row of data || []) {
+      const key = universityRollCompositeKey(row.university_name, row.roll_number);
+      if (key) found.add(key);
+    }
+  }
+  return found;
+}
+
+function isUploadRpcSchemaError(message: string): boolean {
+  return (
+    /42804/i.test(message) ||
+    /uuid but expression is of type text/i.test(message) ||
+    /btrim\(uuid\)/i.test(message) ||
+    /could not find the function.*admin_student_data_upload_import/i.test(message)
+  );
+}
+
+async function importStudentRowViaAdminRegisterApi(
+  client: SupabaseClient,
+  adminId: string,
+  row: StudentDataUploadRow,
+  mode: StudentDataUploadMode,
+  uploadId: string | null | undefined
+): Promise<{ userId: string; registrationId: string }> {
+  const email = row.email.trim().toLowerCase();
+  const phone = row.contactNumber.replace(/\D/g, "").slice(-10);
+  const reg = row.registrationNumber.trim();
+  const ts = Date.now();
+
+  const res = await fetch(siteApiUrl("/api/admin-register"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      admin_id: adminId,
+      student_data: {
+        email,
+        password: row.password.trim(),
+        full_name: row.fullName.trim(),
+        gender: row.gender.trim() || "Other",
+        parent_name: row.parentName.trim() || null,
+        contact_number: phone,
+        university_name: row.university.trim(),
+        college_name: row.college.trim(),
+        degree: row.degree.trim(),
+        department: row.department.trim(),
+        subject: row.subject.trim(),
+        internship_domain: row.internshipDomain.trim() || row.degree.trim() || "Internship",
+        course: row.internshipDomain.trim() || "Internship",
+        class_semester: row.semester.trim(),
+        academic_session: row.session.trim(),
+        roll_number: row.rollNumber.trim(),
+      },
+      payment_amount: mode === "paid" ? "500" : "0",
+      transaction_id:
+        mode === "paid" ? `pay_admin_data_upload_${ts}` : `pay_admin_data_upload_unpaid_${ts}`,
+    }),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok || body.success !== true) {
+    const msg = String(body.message || body.error || "Admin register API failed.");
+    if (/already registered|duplicate|already linked/i.test(msg)) {
+      throw new Error(msg);
+    }
+    throw new Error(msg);
+  }
+
+  let userId = String(body.userId || body.user_id || "");
+  if (!userId) {
+    const { data: studentRow, error: lookupErr } = await client
+      .from("students")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    if (lookupErr) throw new Error(lookupErr.message);
+    userId = String((studentRow as { id?: string } | null)?.id || "");
+  }
+  if (!userId) throw new Error("Registration succeeded but student id was not found.");
+
+  const meta = {
+    source: "admin_student_data_upload",
+    password: row.password.trim(),
+    sheet_email: email,
+    auth_email: email,
+    internship_mode: row.mode.trim(),
+    subject: row.subject.trim(),
+    department: row.department.trim(),
+    bulk_upload_paid: mode === "paid",
+    payment_required: mode !== "paid",
+    ...(uploadId ? { upload_id: uploadId } : {}),
+    ...(mode === "paid"
+      ? { razorpay_payment_id: String(body.paymentId || `pay_admin_data_upload_${ts}`) }
+      : {}),
+  };
+
+  const { error: patchErr } = await client
+    .from("students")
+    .update({
+      registration_id: reg,
+      parent_name: row.parentName.trim() || null,
+      metadata: meta,
+    })
+    .eq("id", userId);
+
+  if (patchErr) throw new Error(patchErr.message);
+
+  const { error: roleErr } = await client.from("user_roles").insert({
+    user_id: userId,
+    role: "student",
+  });
+  if (roleErr && !/duplicate key|already exists/i.test(roleErr.message)) {
+    console.warn("[student-data-upload] user_roles insert:", roleErr.message);
+  }
+
+  return { userId, registrationId: reg };
+}
+
 export async function processStudentDataUploadRows(
   client: SupabaseClient,
   rows: StudentDataUploadRow[],
@@ -397,42 +769,92 @@ export async function processStudentDataUploadRows(
 ): Promise<StudentDataUploadProcessResult[]> {
   const results: StudentDataUploadProcessResult[] = [];
   const seenRegs = new Map<string, number>();
+  const seenEmails = new Map<string, number>();
+  const seenPhones = new Map<string, number>();
+  const seenRolls = new Map<string, number>();
+  const batchUniversity = normalizeUniversityKey(rows[0]?.university || "");
   const existingRegs = await fetchExistingRegistrationNumbers(
     client,
     rows.map((r) => r.registrationNumber)
   );
+  const existingEmails = await fetchExistingEmails(client, rows.map((r) => r.email));
+  const existingPhones = await fetchExistingPhones(
+    client,
+    rows.map((r) => r.contactNumber)
+  );
+  const existingRolls = await fetchExistingUniversityRolls(
+    client,
+    rows[0]?.university || "",
+    rows.map((r) => r.rollNumber)
+  );
+
+  const {
+    data: { user: adminUser },
+  } = await client.auth.getUser();
+  const adminId = adminUser?.id || "";
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const email = row.email.trim().toLowerCase();
+    const email = normalizeEmail(row.email);
+    const phone = normalizePhone(row.contactNumber);
     const reg = row.registrationNumber.trim();
-    const regKey = reg.toLowerCase();
+    const regKey = normalizeRegistrationNumber(reg);
+    const rollKey = universityRollCompositeKey(batchUniversity || row.university, row.rollNumber);
 
-    const firstRow = seenRegs.get(regKey);
-    if (firstRow != null) {
+    const rejectRow = (message: string) => {
       results.push({
         rowNumber: row.rowNumber,
         email,
         registrationNumber: reg,
         success: false,
         skipped: true,
-        message: `Duplicate Registration Number in file (also on row ${firstRow}).`,
+        message,
       });
       onProgress?.(i + 1, rows.length);
+    };
+
+    const firstRegRow = seenRegs.get(regKey);
+    if (regKey && firstRegRow != null) {
+      rejectRow(`Duplicate university registration number in file (also on row ${firstRegRow}).`);
       continue;
     }
-    seenRegs.set(regKey, row.rowNumber);
+    if (regKey) seenRegs.set(regKey, row.rowNumber);
 
-    if (existingRegs.has(regKey)) {
-      results.push({
-        rowNumber: row.rowNumber,
-        email,
-        registrationNumber: reg,
-        success: false,
-        skipped: true,
-        message: "Duplicate Registration Number — skipped.",
-      });
-      onProgress?.(i + 1, rows.length);
+    const firstEmailRow = seenEmails.get(email);
+    if (email && firstEmailRow != null) {
+      rejectRow(`Duplicate email in file (also on row ${firstEmailRow}).`);
+      continue;
+    }
+    if (email) seenEmails.set(email, row.rowNumber);
+
+    const firstPhoneRow = seenPhones.get(phone);
+    if (phone.length === 10 && firstPhoneRow != null) {
+      rejectRow(`Duplicate phone number in file (also on row ${firstPhoneRow}).`);
+      continue;
+    }
+    if (phone.length === 10) seenPhones.set(phone, row.rowNumber);
+
+    const firstRollRow = seenRolls.get(rollKey);
+    if (rollKey && firstRollRow != null) {
+      rejectRow(`Duplicate university roll number in file (also on row ${firstRollRow}).`);
+      continue;
+    }
+    if (rollKey) seenRolls.set(rollKey, row.rowNumber);
+
+    if (regKey && existingRegs.has(regKey)) {
+      rejectRow("This university registration number is already registered.");
+      continue;
+    }
+    if (email && existingEmails.has(email)) {
+      rejectRow("This email address is already registered.");
+      continue;
+    }
+    if (phone.length === 10 && existingPhones.has(phone)) {
+      rejectRow("This phone number is already registered.");
+      continue;
+    }
+    if (rollKey && existingRolls.has(rollKey)) {
+      rejectRow("This university roll number is already registered.");
       continue;
     }
 
@@ -476,7 +898,47 @@ export async function processStudentDataUploadRows(
       });
       existingRegs.add(regKey);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to import student.";
+      const message = formatStudentUniquenessError(err);
+      const code = String((err as { code?: string })?.code || "");
+
+      if (adminId && isUploadRpcSchemaError(`${code} ${message}`)) {
+        try {
+          const viaApi = await importStudentRowViaAdminRegisterApi(
+            client,
+            adminId,
+            row,
+            mode,
+            uploadId
+          );
+          results.push({
+            rowNumber: row.rowNumber,
+            email,
+            registrationNumber: viaApi.registrationId,
+            success: true,
+            userId: viaApi.userId,
+          });
+          existingRegs.add(regKey);
+          onProgress?.(i + 1, rows.length);
+          continue;
+        } catch (fallbackErr) {
+          const fbMsg =
+            fallbackErr instanceof Error ? fallbackErr.message : "API fallback failed.";
+          const isSkip =
+            /duplicate registration number/i.test(fbMsg) ||
+            /already registered|already linked/i.test(fbMsg);
+          results.push({
+            rowNumber: row.rowNumber,
+            email,
+            registrationNumber: reg,
+            success: false,
+            skipped: isSkip,
+            message: fbMsg,
+          });
+          onProgress?.(i + 1, rows.length);
+          continue;
+        }
+      }
+
       const isSkip =
         /duplicate registration number/i.test(message) || /skipped/i.test(message);
       results.push({
@@ -958,8 +1420,7 @@ export async function updateImportedStudentRecord(
     status: string;
   }>
 ): Promise<void> {
-  const { error } = await client.from("students").update(patch).eq("id", id);
-  if (error) throw error;
+  await saveStudentDirectoryUpdate(client, id, patch);
 }
 
 export async function deleteImportedStudentRecord(
@@ -1068,30 +1529,26 @@ export function downloadFailedStudentDataUploadRows(
   URL.revokeObjectURL(link.href);
 }
 
+function sampleFileRow(): string[] {
+  return [
+    "Priya Sharma",
+    "Female",
+    "Ramesh Sharma",
+    "9876543210",
+    "priya.sharma@example.com",
+    "History",
+    "Semester 4",
+    "REG2024001",
+    "ROLL101",
+    "Online",
+    "pass123",
+  ];
+}
+
 export function downloadStudentDataUploadCsvTemplate(): void {
   const csv = Papa.unparse({
-    fields: [...STUDENT_DATA_UPLOAD_REQUIRED_HEADERS],
-    data: [
-      [
-        "Priya Sharma",
-        "Female",
-        "Ramesh Sharma",
-        "9876543210",
-        "priya.sharma@example.com",
-        "Example University",
-        "Example College",
-        "UG",
-        "Arts",
-        "History",
-        "2024-28",
-        "4",
-        "REG2024001",
-        "ROLL101",
-        "Digital Marketing",
-        "Online",
-        "pass123",
-      ],
-    ],
+    fields: [...STUDENT_DATA_UPLOAD_FILE_HEADERS],
+    data: [sampleFileRow()],
   });
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
@@ -1103,26 +1560,8 @@ export function downloadStudentDataUploadCsvTemplate(): void {
 
 export function downloadStudentDataUploadXlsxTemplate(): void {
   const sheet = XLSX.utils.aoa_to_sheet([
-    [...STUDENT_DATA_UPLOAD_REQUIRED_HEADERS],
-    [
-      "Priya Sharma",
-      "Female",
-      "Ramesh Sharma",
-      "9876543210",
-      "priya.sharma@example.com",
-      "Example University",
-      "Example College",
-      "UG",
-      "Arts",
-      "History",
-      "2024-28",
-      "4",
-      "REG2024001",
-      "ROLL101",
-      "Digital Marketing",
-      "Online",
-      "pass123",
-    ],
+    [...STUDENT_DATA_UPLOAD_FILE_HEADERS],
+    sampleFileRow(),
   ]);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, "Students");

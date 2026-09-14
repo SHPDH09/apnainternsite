@@ -6,7 +6,7 @@
  * body: { table, columns?, filters?, order?, limit?, single? }
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { query } from "../aws/server/db";
+import { query } from "../aws/server/db.js";
 
 const ALLOWED_TABLES = new Set([
   "user_roles",
@@ -18,13 +18,20 @@ const ALLOWED_TABLES = new Set([
   "universities",
   "colleges",
   "internship_domains",
+  "engineering_university_configs",
+  "non_engineering_university_configs",
+  "course_categories",
+  "courses",
   "academic_info",
   "certificates",
   "system_settings",
   "site_settings",
+  "site_popups",
+  "site_blog_posts",
   "attendance",
   "classes",
   "learning_materials",
+  "project_report_domain_templates",
   "admin_staff",
   "admin_permissions",
   "notifications",
@@ -35,6 +42,9 @@ const ALLOWED_TABLES = new Set([
   "prefilled_students",
   "referral_partners",
   "referral_partner_assignments",
+  "partner_applications",
+  "referral_coupons",
+  "referral_coupon_clicks",
   "college_admin_assignments",
   "employee_attendance",
   "staff_auth_sessions",

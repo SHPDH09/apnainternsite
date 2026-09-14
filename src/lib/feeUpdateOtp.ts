@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
+import { deliverOtpEmail } from "@/lib/requestOtpDelivery";
 import { isLocalDevEnvironment } from "@/lib/isLocalDev";
-import { PASSWORD_RESETS_SCHEMA_HINT, passwordResetInsertRow } from "@/lib/passwordResetRow";
 
 const OTP_SEND_COOLDOWN_MS = 60_000;
 const OTP_SEND_LAST_KEY = "ezyintern_fee_update_otp_last_send";
@@ -65,44 +64,16 @@ export async function requestFeeUpdateOtp(
   const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
   const localDev = isLocalDevEnvironment();
 
-  if (localDev && typeof window !== "undefined") {
-    window.sessionStorage.setItem("fee_update_otp", generatedOtp);
-  }
+  const sent = await deliverOtpEmail(client, email, "security", {
+    devSessionKey: "fee_update_otp",
+  });
 
-  const { error: insertError } = await client
-    .from("password_resets")
-    .insert(passwordResetInsertRow(email, generatedOtp));
-
-  if (insertError) {
-    return {
-      ok: false,
-      error: new Error([insertError.message, PASSWORD_RESETS_SCHEMA_HINT].filter(Boolean).join(" ")),
-    };
-  }
-
-  try {
-    const response = await fetch(getSendMailApiUrl(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "login_otp",
-        otp: generatedOtp,
-        to: email,
-        email,
-      }),
-    });
-    await assertSendMailOk(response);
-  } catch (mailErr: unknown) {
-    if (localDev) {
-      markFeeOtpSent(email);
-      return { ok: true, email, devOtp: generatedOtp };
-    }
-    const detail = mailErr instanceof Error ? mailErr.message : "Failed to send verification code";
-    return { ok: false, error: new Error(detail) };
+  if (!sent.ok) {
+    return sent;
   }
 
   markFeeOtpSent(email);
-  return { ok: true, email, devOtp: localDev ? generatedOtp : undefined };
+  return { ok: true, email, devOtp: sent.devOtp ?? (localDev ? generatedOtp : undefined) };
 }
 
 export type CollegeFeeUpdateInput = {

@@ -1,0 +1,11 @@
+node_modules
+.git
+.aws-sam
+aws/lambda/dist
+scratch
+captures
+*.csv
+*.xlsx
+.env*
+!.env.example
+!.env.*.example

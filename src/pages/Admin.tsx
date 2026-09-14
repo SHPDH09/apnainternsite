@@ -22,7 +22,7 @@ import {
   isAdminIntentionalLogout,
 } from "@/lib/adminAuthSession";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Award, Users, Building2, Edit, Eye, MoreHorizontal, Shield, Mail, Phone, User, BookOpen, Heart, LogIn, Ban, CheckCircle2, Download, Briefcase, UserPlus, Filter, Search, Calendar, ToggleLeft, ToggleRight, DollarSign, GraduationCap, Bell, FileText, Clock, Activity, TrendingUp, CheckSquare, XCircle } from "lucide-react";
+import { Loader2, Plus, Trash2, Award, Users, Building2, Edit, Eye, MoreHorizontal, Shield, Mail, Phone, User, BookOpen, Heart, LogIn, Ban, CheckCircle2, Download, Briefcase, UserPlus, Filter, Search, Calendar, ToggleLeft, ToggleRight, DollarSign, GraduationCap, Bell, FileText, Clock, CheckSquare, XCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -37,12 +37,12 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { 
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, LineChart, Line
-} from 'recharts';
 import AIAssignmentBuilder from "@/components/AIAssignmentBuilder";
+import { AdminDashboardPanel } from "@/components/admin/AdminDashboardPanel";
+import { CheckPaymentPanel } from "@/components/admin/CheckPaymentPanel";
+import { UnpaidStudentsDirectoryPanel } from "@/components/admin/UnpaidStudentsDirectoryPanel";
 import { AdminMobileNav, AdminSidebar, AdminTopBar } from "@/components/admin/AdminShell";
+import { adminPageClass } from "@/components/admin/ui";
 import { ChangePinModal } from "@/components/ChangePinModal";
 import { Sparkles, KeyRound, Store, Share2, FileSpreadsheet, IndianRupee, Settings, Wrench, Cog } from "lucide-react";
 import { OfferLetter } from "@/components/OfferLetter";
@@ -59,8 +59,15 @@ import { resolveLeadStoredPassword } from "@/lib/leadTransferPayload";
 import { AdminAddRegistrationPanel } from "@/components/AdminAddRegistrationPanel";
 import { StudentDataUploadPanel } from "@/components/admin/StudentDataUploadPanel";
 import { GalleryManagementPanel } from "@/components/admin/GalleryManagementPanel";
+import { BlogManagementPanel } from "@/components/admin/BlogManagementPanel";
 import { HomeCmsManagementPanel } from "@/components/admin/HomeCmsManagementPanel";
 import { ConsultLetterManagementPanel } from "@/components/admin/ConsultLetterManagementPanel";
+import { DocumentCustomizationPanel } from "@/components/admin/DocumentCustomizationPanel";
+import { StudentServiceKeysPanel } from "@/components/admin/StudentServiceKeysPanel";
+import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
+import { ContactDetailsManagementPanel } from "@/components/admin/ContactDetailsManagementPanel";
+import { WhatsAppLinksManagementPanel } from "@/components/admin/WhatsAppLinksManagementPanel";
+import { SiteLoader } from "@/components/SiteLoader";
 import { LeadAssignmentPanel } from "@/components/admin/LeadAssignmentPanel";
 import { BulkUploadStudentBadge } from "@/components/BulkUploadStudentBadge";
 import { ADMIN_LOGIN_PATH, buildCollegeLoginLink, buildStudentCredentialLoginLink } from "@/lib/authRoutes";
@@ -85,6 +92,7 @@ import { CollegeAdminCollegePicker } from "@/components/admin/CollegeAdminColleg
 import { displayCollegeName } from "@/lib/collegeDisplay";
 import { collegesForUniversity, fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
 import { adminUpsertStudentProfile } from "@/lib/adminProfileUpsert";
+import { saveStudentDirectoryUpdate } from "@/lib/saveStudentDirectoryRow";
 import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
 import { DatabaseBackup, ArrowUpRight, UploadCloud, AlertTriangle, Check } from "lucide-react";
 import {
@@ -92,6 +100,7 @@ import {
   formatBulkMailEta,
   sendBulkCustomMail,
 } from "@/lib/bulkCustomMailSend";
+import { toastBulkMailResult } from "@/lib/bulkMailResultFeedback";
 import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
 import {
   fetchAdminSiteVisitStats,
@@ -118,6 +127,7 @@ import {
   isEngineeringUniversityName,
   resolveEngineeringUniversityNames,
 } from "@/lib/studentTrack";
+import { PartnerApplicationsPanel } from "@/components/admin/PartnerApplicationsPanel";
 import { ReferralsPanel } from "@/components/admin/ReferralsPanel";
 import { CollegeRostersPanel } from "@/components/admin/CollegeRostersPanel";
 import { FeesManagementPanel } from "@/components/admin/FeesManagementPanel";
@@ -126,6 +136,7 @@ import { ClassLinkManagementPanel } from "@/components/admin/ClassLinkManagement
 import { NotificationManagementPanel } from "@/components/admin/NotificationManagementPanel";
 import { AssignmentManagementPanel } from "@/components/admin/AssignmentManagementPanel";
 import { LearningMaterialsPanel } from "@/components/admin/LearningMaterialsPanel";
+import { AutoGenerateProjectReportPanel } from "@/components/admin/AutoGenerateProjectReportPanel";
 import { CertificateManagementPanel } from "@/components/admin/CertificateManagementPanel";
 import { EngineeringDirectoryPanel } from "@/components/admin/EngineeringDirectoryPanel";
 import { StaffManagementPanel } from "@/components/admin/StaffManagementPanel";
@@ -140,6 +151,7 @@ import {
   StudentDirectoryActionsMenu,
   type StudentDirectoryStudent,
 } from "@/components/admin/StudentDirectoryActionsMenu";
+import { StudentDirectoryDetailDialog } from "@/components/admin/StudentDirectoryDetailDialog";
 import { StudentAttendancePanel } from "@/components/admin/StudentAttendancePanel";
 import { StudentLogbookDialog } from "@/components/admin/StudentLogbookDialog";
 import { InternshipModeFilterSelect } from "@/components/admin/InternshipModeFilterSelect";
@@ -220,7 +232,32 @@ export default function Admin() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  const [activeTab, setActiveTab] = useState(queryParams.get("tab") || "dashboard");
+  const tabFromUrl =
+    location.pathname.replace(/\/+$/, "") === "/admin/popups"
+      ? "popups"
+      : location.pathname.replace(/\/+$/, "") === "/admin/contact-details"
+        ? "contact-details"
+        : location.pathname.replace(/\/+$/, "") === "/admin/whatsapp-links"
+          ? "whatsapp-links"
+          : queryParams.get("tab") || "dashboard";
+  const [activeTab, setActiveTab] = useState(tabFromUrl);
+  useEffect(() => {
+    setActiveTab(tabFromUrl);
+  }, [tabFromUrl]);
+  // Legacy bookmark: /admin?tab=popups → dedicated route (avoids blank tab pane).
+  useEffect(() => {
+    const path = location.pathname.replace(/\/+$/, "");
+    const tab = new URLSearchParams(location.search).get("tab");
+    if (path === "/admin" && tab === "popups") {
+      navigate("/admin/popups", { replace: true });
+    }
+    if (path === "/admin" && tab === "contact-details") {
+      navigate("/admin/contact-details", { replace: true });
+    }
+    if (path === "/admin" && tab === "whatsapp-links") {
+      navigate("/admin/whatsapp-links", { replace: true });
+    }
+  }, [location.pathname, location.search, navigate]);
   const [showSidebar, setShowSidebar] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -246,6 +283,7 @@ export default function Admin() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [cyberCafes, setCyberCafes] = useState<any[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
   const consentUploadInputRef = useRef<HTMLInputElement>(null);
   const consentUploadStudentRef = useRef<StudentDirectoryStudent | null>(null);
   const [isAIBuilderOpen, setIsAIBuilderOpen] = useState(false);
@@ -302,6 +340,7 @@ export default function Admin() {
   // Dialog States
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [viewDialogVariant, setViewDialogVariant] = useState<StudentEditFormVariant>("directory");
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [editData, setEditData] = useState<any>(null);
@@ -872,71 +911,6 @@ export default function Admin() {
     setAllLeadsComms(leads);
   };
 
-  // Dashboard Visual Logic
-  const getRevenueData = () => {
-    const daily: any = {};
-    payments.forEach(p => {
-      const date = new Date(p.created_at).toLocaleDateString();
-      daily[date] = (daily[date] || 0) + (p.amount_paise / 100);
-    });
-    return Object.entries(daily).map(([date, amount]) => ({ date, amount })).slice(-7);
-  };
-
-  const [dashStartDate, setDashStartDate] = useState("");
-  const [dashEndDate, setDashEndDate] = useState("");
-  const [livePulse, setLivePulse] = useState<{name: string, value: number}[]>(
-    Array.from({length: 12}, (_, i) => ({name: i.toString(), value: 40 + Math.random() * 20}))
-  );
-  const [liveTraffic, setLiveTraffic] = useState(86);
-  const [monitoringStatus, setMonitoringStatus] = useState("SCANNING...");
-
-  useEffect(() => {
-    if (activeTab !== "dashboard") return;
-    const interval = setInterval(() => {
-      setLivePulse(prev => {
-        const newVal = 35 + Math.random() * 35;
-        return [...prev.slice(1), {name: Date.now().toString(), value: newVal}];
-      });
-      setLiveTraffic(prev => prev + (Math.random() > 0.5 ? 1 : -1));
-      
-      const statuses = ["MONITORING...", "NODE ACTIVE", "TRAFFIC STABLE", "SYSTEM OPTIMIZED"];
-      setMonitoringStatus(statuses[Math.floor(Math.random() * statuses.length)]);
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [activeTab]);
-
-  const getFilteredRevenueData = () => {
-    let filtered = payments;
-    if (dashStartDate) filtered = filtered.filter(p => p.created_at >= `${dashStartDate}T00:00:00`);
-    if (dashEndDate) filtered = filtered.filter(p => p.created_at <= `${dashEndDate}T23:59:59`);
-    
-    const daily: any = {};
-    filtered.forEach(p => {
-      const date = new Date(p.created_at).toLocaleDateString();
-      daily[date] = (daily[date] || 0) + (p.amount_paise / 100);
-    });
-    return Object.entries(daily).map(([date, amount]) => ({ date, amount }));
-  };
-
-  const getDashboardStats = () => {
-    const today = new Date().toLocaleDateString();
-    const yesterday = new Date(Date.now() - 86400000).toLocaleDateString();
-    
-    const todayRevenue = payments.filter(p => new Date(p.created_at).toLocaleDateString() === today)
-      .reduce((acc, curr) => acc + (curr.amount_paise / 100), 0);
-    const yesterdayRevenue = payments.filter(p => new Date(p.created_at).toLocaleDateString() === yesterday)
-      .reduce((acc, curr) => acc + (curr.amount_paise / 100), 0);
-    
-    const todayEnrolledCount = payments.filter(p => new Date(p.created_at).toLocaleDateString() === today).length;
-    const todayLeadsCount = cancelledPayments.filter(p => new Date(p.created_at).toLocaleDateString() === today).length;
-    
-    const growth = yesterdayRevenue === 0 ? 100 : ((todayRevenue - yesterdayRevenue) / yesterdayRevenue * 100);
-
-    return { todayRevenue, yesterdayRevenue, growth, todayEnrolledCount, todayLeadsCount, today };
-  };
-
-  const stats = getDashboardStats();
-
   const logAdminAction = async (action_type: string, entity_type: string, description: string, metadata: any = {}) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -1175,7 +1149,7 @@ export default function Admin() {
         return;
       }
 
-      const { data: updatedStudent, error } = await supabase.from("students").update({
+      const updatedStudent = await saveStudentDirectoryUpdate(supabase, editData.id, {
         full_name: editData.full_name,
         email: emailNorm,
         contact_number: editData.contact_number,
@@ -1198,9 +1172,8 @@ export default function Admin() {
         emergency_relation: editData.emergency_relation,
         emergency_contact: editData.emergency_contact,
         metadata: mergedMeta,
-      }).eq("id", editData.id).select("id").maybeSingle();
+      });
 
-      if (error) throw error;
       if (!updatedStudent?.id) {
         throw new Error(
           "Student row was not updated (0 rows). Your role may lack UPDATE on students, or RLS is blocking — apply fix_staff_rls.sql / admin policies."
@@ -1325,10 +1298,23 @@ export default function Admin() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return false;
     setCurrentUserId(session.user.id);
+    setCurrentUserEmail(session.user.email || "");
 
     const [u, c, ce, dm, cl, ss, ap, notifs, asgnResult, cyber, customStaff] =
       await Promise.all([
-        safeQuery(supabase.from("universities").select("*").order("name"), "universities"),
+        (async () => {
+          try {
+            const rows = await fetchAllSupabaseRows(supabase, "universities", {
+              orderBy: "name",
+              ascending: true,
+            });
+            return { data: rows, error: null };
+          } catch (err: any) {
+            console.error("Error loading universities:", err);
+            toast.error(`Database error loading universities: ${err?.message || String(err)}`);
+            return { data: [], error: err };
+          }
+        })(),
         (async () => {
           try {
             const rows = await fetchAllCollegesCatalog(supabase);
@@ -1347,7 +1333,19 @@ export default function Admin() {
             .limit(100),
           "certificates"
         ),
-        safeQuery(supabase.from("internship_domains").select("*").order("name"), "internship_domains"),
+        (async () => {
+          try {
+            const rows = await fetchAllSupabaseRows(supabase, "internship_domains", {
+              orderBy: "name",
+              ascending: true,
+            });
+            return { data: rows, error: null };
+          } catch (err: any) {
+            console.error("Error loading internship domains:", err);
+            toast.error(`Database error loading domains: ${err?.message || String(err)}`);
+            return { data: [], error: err };
+          }
+        })(),
         safeQuery(
           supabase
             .from("classes")
@@ -2063,7 +2061,12 @@ export default function Admin() {
   useEffect(() => {
     if (!allowed) return;
 
-    if (activeTab === "dashboard" || activeTab === "payments") {
+    if (
+      activeTab === "dashboard" ||
+      activeTab === "payments" ||
+      activeTab === "check-payment" ||
+      activeTab === "unpaid-students"
+    ) {
       void loadPaymentsData();
       return;
     }
@@ -2676,6 +2679,13 @@ export default function Admin() {
       if (key === "course-management" && denied("can_manage_courses")) return false;
       if (key === "cybercafe" && denied("can_manage_cybercafe")) return false;
       if (key === "referrals" && denied("can_manage_referrals")) return false;
+      if (
+        key === "partner-applications" &&
+        denied("can_manage_referrals") &&
+        denied("can_manage_cybercafe")
+      ) {
+        return false;
+      }
       if (key === "college-rosters" && denied("can_manage_college_rosters")) return false;
       if (key === "settings" && denied("can_manage_settings") && denied("can_manage_institutions")) {
         return true; // keep settings reachable for other admin tasks
@@ -2708,7 +2718,11 @@ export default function Admin() {
     }, 800);
   };
 
-  const openStudentViewDialog = async (student: StudentDirectoryStudent | Record<string, unknown>) => {
+  const openStudentViewDialog = async (
+    student: StudentDirectoryStudent | Record<string, unknown>,
+    variant: StudentEditFormVariant = "directory"
+  ) => {
+    setViewDialogVariant(variant);
     let row: Record<string, unknown> = student as Record<string, unknown>;
     const id = String(row.id || "");
     const isDraftLead = id.startsWith("reg-draft-");
@@ -2734,21 +2748,26 @@ export default function Admin() {
 
   const studentDirectoryActions = {
     onViewDetails: (student: StudentDirectoryStudent) => {
-      void openStudentViewDialog(student);
+      void openStudentViewDialog(student, "directory");
     },
-    onEditDetails: (student: StudentDirectoryStudent) => {
-      void openStudentEditDialog(student, "directory");
+  };
+
+  const engineeringDirectoryActions = {
+    onViewDetails: (student: StudentDirectoryStudent) => {
+      void openStudentViewDialog(student, "engineering");
+    },
+  };
+
+  const studentDirectoryDetailHandlers = {
+    onEdit: (student: StudentDirectoryStudent) => {
+      setIsViewDialogOpen(false);
+      void openStudentEditDialog(student, viewDialogVariant);
     },
     onResetPassword: (student: StudentDirectoryStudent) => {
       setResetPassUser(student);
       setIsResetPassOpen(true);
     },
     onResendCredentials: handleResendCredentials,
-    onViewConsentLetter: (student: StudentDirectoryStudent) => {
-      const url = getStudentConsentLetterUrl(student);
-      if (url) window.open(url, "_blank", "noopener,noreferrer");
-      else toast.error("No consent letter on file for this student.");
-    },
     onUploadConsentLetter: (student: StudentDirectoryStudent) => {
       consentUploadStudentRef.current = student;
       if (consentUploadInputRef.current) {
@@ -2760,30 +2779,12 @@ export default function Admin() {
       setLogbookStudent(student);
       setIsLogbookOpen(true);
     },
-    onDownloadAttendanceReport: (student: StudentDirectoryStudent) => {
-      void (async () => {
-        try {
-          toast.message("Generating attendance report…");
-          await downloadStudentAttendanceReportPdf(supabase, student as Record<string, unknown>);
-          toast.success("Attendance report downloaded.");
-        } catch (e: unknown) {
-          toast.error(e instanceof Error ? e.message : "Could not generate attendance report.");
-        }
-      })();
-    },
     onDownloadOfferLetter: (student: StudentDirectoryStudent) => {
       setProcessing(true);
       runOfferLetterPdfFromStudent(student);
     },
     onToggleBlock: toggleBlock,
     onDelete: (student: StudentDirectoryStudent) => handleDelete(student.id, student.full_name || undefined),
-  };
-
-  const engineeringDirectoryActions = {
-    ...studentDirectoryActions,
-    onEditDetails: (student: StudentDirectoryStudent) => {
-      void openStudentEditDialog(student, "engineering");
-    },
   };
 
   const handleDirectoryConsentUpload = async (file: File | null | undefined) => {
@@ -3183,33 +3184,19 @@ Apna Intern Team`;
     navigate(ADMIN_LOGIN_PATH);
   };
 
-  const dashboardToolbar =
-    activeTab === "dashboard" ? (
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          type="date"
-          value={dashStartDate}
-          onChange={(e) => setDashStartDate(e.target.value)}
-          className="h-8 w-[8.5rem] rounded-lg border-slate-200 text-[11px] font-bold"
-        />
-        <Input
-          type="date"
-          value={dashEndDate}
-          onChange={(e) => setDashEndDate(e.target.value)}
-          className="h-8 w-[8.5rem] rounded-lg border-slate-200 text-[11px] font-bold"
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2 rounded-xl border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
-          onClick={exportToCSV}
-        >
-          <Download className="size-3.5" /> Export
-        </Button>
-      </div>
-    ) : null;
+  const navigateAdminTab = useCallback(
+    (value: string) => {
+      setActiveTab(value);
+      setMobileNavOpen(false);
+      if (value === "popups") navigate("/admin/popups", { replace: true });
+      else if (value === "contact-details") navigate("/admin/contact-details", { replace: true });
+      else if (value === "whatsapp-links") navigate("/admin/whatsapp-links", { replace: true });
+      else navigate(`/admin?tab=${encodeURIComponent(value)}`, { replace: true });
+    },
+    [navigate]
+  );
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="size-8 animate-spin text-primary" /></div>;
+  if (loading) return <SiteLoader />;
   if (!allowed) return <div className="p-10 text-center">Access Denied</div>;
 
   return (
@@ -3226,26 +3213,34 @@ Apna Intern Team`;
       onValueChange={(value) => {
         setActiveTab(value);
         setMobileNavOpen(false);
+        if (value === "popups") navigate("/admin/popups", { replace: true });
+        else if (value === "contact-details") navigate("/admin/contact-details", { replace: true });
+        else if (value === "whatsapp-links") navigate("/admin/whatsapp-links", { replace: true });
+        else navigate(`/admin?tab=${encodeURIComponent(value)}`, { replace: true });
       }}
-      className="flex min-h-screen bg-slate-50"
+      className="admin-shell flex min-h-screen bg-[#eef2f7]"
     >
       {showSidebar && (
         <AdminSidebar
+          activeTab={activeTab}
           isServiceEnabled={isServiceEnabled}
           onNavigateEngineering={() => navigate("/admin/engineering-management")}
           onNavigateNonEngineering={() => navigate("/admin/non-engineering-management")}
           onCollapse={() => setShowSidebar(false)}
           onLogout={() => void handleAdminLogout()}
+          userEmail={currentUserEmail}
         />
       )}
 
       <AdminMobileNav
         open={mobileNavOpen}
         onOpenChange={setMobileNavOpen}
+        activeTab={activeTab}
         isServiceEnabled={isServiceEnabled}
         onNavigateEngineering={() => navigate("/admin/engineering-management")}
         onNavigateNonEngineering={() => navigate("/admin/non-engineering-management")}
         onLogout={() => void handleAdminLogout()}
+        userEmail={currentUserEmail}
       />
 
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
@@ -3254,147 +3249,41 @@ Apna Intern Team`;
           showSidebar={showSidebar}
           onOpenMenu={() => setMobileNavOpen(true)}
           onShowSidebar={() => setShowSidebar(true)}
+          onOpenPopups={() => navigateAdminTab("popups")}
+          onNavigateTab={navigateAdminTab}
+          onOpenNotifications={() => navigateAdminTab("notifications")}
+          isServiceEnabled={isServiceEnabled}
+          onNavigateEngineering={() => navigate("/admin/engineering-management")}
+          onNavigateNonEngineering={() => navigate("/admin/non-engineering-management")}
           visitorCount={visitorCount}
           uniqueVisitorCount={uniqueVisitorCount}
-          toolbar={dashboardToolbar}
+          notificationCount={notifications.length}
+          userEmail={currentUserEmail}
+          onLogout={() => void handleAdminLogout()}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          <div className="mx-auto w-full max-w-[1400px] rounded-[1.75rem] border border-white bg-white/70 p-5 shadow-xl backdrop-blur-3xl md:p-8">
-              <TabsContent value="dashboard" className="animate-fade-in space-y-8 mt-0">
-              {/* Visual Analytics Hub */}
-              <div className="grid lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-2 p-6 border-none shadow-soft bg-white group overflow-hidden relative">
-                  <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <TrendingUp className="size-32 text-primary -mr-8 -mt-8" />
-                  </div>
-                  <div className="flex items-center justify-between mb-8 relative z-10">
-                    <div>
-                      <h2 className="text-xl font-bold flex items-center gap-2">
-                        <DollarSign className="size-5 text-emerald-600" /> 
-                        Revenue Statistics
-                        {isPaymentsLoading && payments.length === 0 && (
-                          <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                        )}
-                      </h2>
-                      <div className="flex gap-4 mt-2">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase">Start Date</span>
-                          <Input type="date" value={dashStartDate} onChange={e => setDashStartDate(e.target.value)} className="h-7 w-28 text-[10px] border-none bg-slate-50 font-bold" />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase">End Date</span>
-                          <Input type="date" value={dashEndDate} onChange={e => setDashEndDate(e.target.value)} className="h-7 w-28 text-[10px] border-none bg-slate-50 font-bold" />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <div className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">Students</div>
-                        <div className="text-xl font-black text-blue-600">{stats.todayEnrolledCount}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">Leads</div>
-                        <div className="text-xl font-black text-orange-500">{stats.todayLeadsCount}</div>
-                      </div>
-                      <div className="text-right pl-4 border-l border-slate-100">
-                        <div className="text-2xl font-black text-emerald-600">₹{stats.todayRevenue.toLocaleString()}</div>
-                        <div className="text-[10px] text-muted-foreground mb-1 font-bold">Today's Revenue</div>
-                        <Badge variant="outline" className={`${stats.growth >= 0 ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-red-50 text-red-600 border-red-100"} text-[8px] font-black`}>
-                          {stats.growth >= 0 ? "+" : ""}{stats.growth.toFixed(1)}% vs Yesterday
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="h-[220px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={getFilteredRevenueData()}>
-                        <defs>
-                          <linearGradient id="adminRev" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
-                        <YAxis hide />
-                        <Tooltip 
-                          contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
-                        />
-                        <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={3} fill="url(#adminRev)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-
-                <Card className="p-6 border-none shadow-soft bg-slate-900 text-white relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-4">
-                    <div className="flex items-center gap-1.5 bg-primary/20 px-2 py-1 rounded-full border border-primary/30">
-                      <div className="size-1 bg-primary rounded-full animate-pulse" />
-                      <span className="text-[7px] font-black text-primary tracking-widest">{monitoringStatus}</span>
-                    </div>
-                  </div>
-                  <div className="relative z-10">
-                    <div className="size-12 rounded-xl bg-primary/20 flex items-center justify-center text-primary mb-6 shadow-glow">
-                      <Activity className="size-6" />
-                    </div>
-                    <h3 className="text-lg font-bold mb-1">Infrastructure</h3>
-                    <p className="text-xs text-slate-400 font-medium mb-4">Traffic: {liveTraffic} pkts/s</p>
-                    
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">API Speed</span>
-                        <span className="text-lg font-bold text-emerald-400">Stable</span>
-                      </div>
-                      <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 w-[92%] rounded-full shadow-glow" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="h-[100px] w-full mt-6">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={livePulse}>
-                        <defs>
-                          <linearGradient id="pulseGradientAdmin" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
-                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <Area 
-                          type="monotone" 
-                          dataKey="value" 
-                          stroke="#3b82f6" 
-                          strokeWidth={2} 
-                          fill="url(#pulseGradientAdmin)" 
-                          isAnimationActive={true}
-                          animationDuration={800}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <Card className="p-6 border-none shadow-soft bg-white border-l-4 border-l-primary">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Enrolled Students</div>
-                  <div className="text-3xl font-black">{studentTotalCount}</div>
-                  <p className="text-[10px] text-muted-foreground mt-2">Active internship period</p>
-                </Card>
-                <Card className="p-6 border-none shadow-soft bg-white border-l-4 border-l-orange-500">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Abandoned Carts</div>
-                  <div className="text-3xl font-black text-orange-600">{cancelledPayments.length}</div>
-                  <p className="text-[10px] text-muted-foreground mt-2">Requires follow-up</p>
-                </Card>
-                <Card className="p-6 border-none shadow-soft bg-white border-l-4 border-l-blue-500">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Today's Revenue</div>
-                  <div className="text-3xl font-black text-blue-600">₹{stats.todayRevenue.toLocaleString()}</div>
-                  <Badge variant="hero" className="mt-2 text-[8px] bg-blue-50 text-blue-700 border-blue-100">
-                    {stats.growth >= 0 ? "+" : ""}{stats.growth.toFixed(1)}% vs Yesterday
-                  </Badge>
-                </Card>
-              </div>
-            </TabsContent>
+        <main className={adminPageClass}>
+          <div className="mx-auto w-full max-w-[1440px]">
+              {activeTab === "popups" ? (
+                <PopupManagementPanel client={supabase} currentUserId={currentUserId} />
+              ) : activeTab === "contact-details" ? (
+                <ContactDetailsManagementPanel client={supabase} />
+              ) : activeTab === "whatsapp-links" ? (
+                <WhatsAppLinksManagementPanel client={supabase} />
+              ) : (
+              <>
+              <TabsContent value="dashboard" className="mt-0">
+                <AdminDashboardPanel
+                  payments={payments}
+                  cancelledPayments={cancelledPayments}
+                  studentTotalCount={studentTotalCount}
+                  visitorCount={visitorCount}
+                  uniqueVisitorCount={uniqueVisitorCount}
+                  isPaymentsLoading={isPaymentsLoading}
+                  onExportCsv={exportToCSV}
+                  onNavigateTab={navigateAdminTab}
+                />
+              </TabsContent>
 
             <TabsContent value="id-cards">
               <IdCardManagementPanel />
@@ -3546,7 +3435,7 @@ Apna Intern Team`;
                             <TableCell className="text-right">
                               <StudentDirectoryActionsMenu
                                 student={s}
-                                {...studentDirectoryActions}
+                                onViewDetails={studentDirectoryActions.onViewDetails}
                               />
                             </TableCell>
                           </TableRow>
@@ -3646,6 +3535,15 @@ Apna Intern Team`;
                 currentUserId={currentUserId}
                 isActive={activeTab === "uploads"}
                 studentsForTargeting={allStudentsComms}
+              />
+            </TabsContent>
+
+            <TabsContent value="project-report-generate">
+              <AutoGenerateProjectReportPanel
+                unis={unis}
+                domains={domains}
+                currentUserId={currentUserId}
+                isActive={activeTab === "project-report-generate"}
               />
             </TabsContent>
 
@@ -3817,6 +3715,14 @@ Apna Intern Team`;
                   </div>
                 </Card>
               </div>
+            </TabsContent>
+
+            <TabsContent value="check-payment" className="mt-0">
+              <CheckPaymentPanel />
+            </TabsContent>
+
+            <TabsContent value="unpaid-students" className="mt-0">
+              <UnpaidStudentsDirectoryPanel client={supabase} />
             </TabsContent>
 
             <TabsContent value="leads">
@@ -4110,14 +4016,22 @@ Apna Intern Team`;
                         disabled={isSendingBulk || (!bulkEmailSubject || !bulkEmailBody) || (commsSelectedIds.length === 0 && csvEmails.length === 0)}
                         onClick={async () => {
                           const activeList = commRecipientType === 'enrolled' ? allStudentsComms : allLeadsComms;
-                          const emailField = commRecipientType === 'enrolled' ? 'email' : 'user_email';
-                          
+                          const resolveEmail = (s: { email?: string; user_email?: string }) =>
+                            String(s.email || s.user_email || "").trim().toLowerCase();
+
                           const targets = [
-                            ...activeList.filter((s: any) => commsSelectedIds.includes(s.id)).map((s: any) => s[emailField]),
-                            ...csvEmails
+                            ...activeList
+                              .filter((s: { id: string }) => commsSelectedIds.includes(s.id))
+                              .map(resolveEmail),
+                            ...csvEmails.map((e) => String(e || "").trim().toLowerCase()),
                           ];
-                          const uniqueTargets = Array.from(new Set(targets));
-                          
+                          const uniqueTargets = Array.from(new Set(targets.filter((e) => e.includes("@"))));
+
+                          if (!uniqueTargets.length) {
+                            toast.error("No valid email addresses selected.");
+                            return;
+                          }
+
                           setIsSendingBulk(true);
                           setBulkTotal(uniqueTargets.length);
                           setBulkProgress(0);
@@ -4127,31 +4041,26 @@ Apna Intern Team`;
                               : `Sending to ${uniqueTargets.length} recipients…`
                           );
 
-                          const result = await sendBulkCustomMail(
-                            uniqueTargets,
-                            bulkEmailSubject,
-                            bulkEmailBody,
-                            (done, total) => setBulkProgress(done)
-                          );
-
-                          setIsSendingBulk(false);
-
-                          if (result.rateLimited) {
-                            toast.error(
-                              result.sent > 0
-                                ? `Hostinger rate limit after ${result.sent} sent. Wait 1 hour, then send remaining ${uniqueTargets.length - result.sent - result.failed} recipients in smaller batches.`
-                                : "Hostinger rate limit — wait 1 hour before sending. Send to 1 test address first, then batches of 50."
+                          try {
+                            const result = await sendBulkCustomMail(
+                              uniqueTargets,
+                              bulkEmailSubject,
+                              bulkEmailBody,
+                              (done, total) => setBulkProgress(done)
                             );
-                          } else if (result.failed > 0) {
-                            toast.warning(
-                              `Sent ${result.sent} of ${uniqueTargets.length}. ${result.failed} failed.`
-                            );
-                          } else {
-                            toast.success(`Sent to ${result.sent} recipients.`);
-                            setBulkEmailSubject("");
-                            setBulkEmailBody("");
-                            setCommsSelectedIds([]);
-                            setCsvEmails([]);
+
+                            toastBulkMailResult(result, uniqueTargets.length, {
+                              onFullSuccess: () => {
+                                setBulkEmailSubject("");
+                                setBulkEmailBody("");
+                                setCommsSelectedIds([]);
+                                setCsvEmails([]);
+                              },
+                            });
+                          } catch (err: unknown) {
+                            toast.error(err instanceof Error ? err.message : "Failed to send bulk email");
+                          } finally {
+                            setIsSendingBulk(false);
                           }
                         }}
                       >
@@ -4532,7 +4441,20 @@ Apna Intern Team`;
               />
             </TabsContent>
 
+            <TabsContent value="keys" className="space-y-6 animate-fade-in">
+              <StudentServiceKeysPanel
+                client={supabase}
+                currentUserId={currentUserId}
+                isActive={activeTab === "keys"}
+              />
+            </TabsContent>
+
             <TabsContent value="settings" className="space-y-6">
+              <DocumentCustomizationPanel
+                client={supabase}
+                currentUserId={currentUserId}
+                isActive={activeTab === "settings"}
+              />
               <div className="grid md:grid-cols-3 gap-6">
                 <div className="md:col-span-1 space-y-6">
                   <Card className="p-6 border-none shadow-elegant bg-gradient-to-br from-indigo-50 to-white">
@@ -4851,6 +4773,10 @@ Apna Intern Team`;
               </div>
             </TabsContent>
 
+            <TabsContent value="partner-applications">
+              <PartnerApplicationsPanel />
+            </TabsContent>
+
             <TabsContent value="referrals">
               <ReferralsPanel />
             </TabsContent>
@@ -4894,6 +4820,10 @@ Apna Intern Team`;
               <GalleryManagementPanel client={supabase} currentUserId={currentUserId} />
             </TabsContent>
 
+            <TabsContent value="blog" className="mt-0">
+              <BlogManagementPanel client={supabase} currentUserId={currentUserId} />
+            </TabsContent>
+
             <TabsContent value="home-cms" className="mt-0">
               <HomeCmsManagementPanel client={supabase} currentUserId={currentUserId} />
             </TabsContent>
@@ -4901,6 +4831,8 @@ Apna Intern Team`;
             <TabsContent value="consult-letter" className="mt-0">
               <ConsultLetterManagementPanel client={supabase} currentUserId={currentUserId} />
             </TabsContent>
+              </>
+              )}
           </div>
         </main>
       </div>
@@ -5246,158 +5178,14 @@ Apna Intern Team`;
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}><DialogContent className="max-w-2xl p-0 overflow-hidden rounded-3xl border-none shadow-elegant">
-        <DialogDescription className="sr-only">
-          Student profile including personal, academic, emergency contacts, and stored metadata.
-        </DialogDescription>
-        <div className="bg-primary p-6 text-white">
-          <DialogTitle className="text-2xl font-black flex items-center gap-2 flex-wrap">
-            {selectedUser?.full_name || selectedUser?.metadata?.fullName || "Profile Details"}
-          </DialogTitle>
-          <p className="text-primary-foreground/80 text-xs mt-1">
-            {selectedUser?.registration_id ? `Reg ID: ${selectedUser.registration_id}` : "Lead / Pending Registration"}
-          </p>
-        </div>
-        {selectedUser && (
-          <ScrollArea className="max-h-[70vh]">
-            <div className="p-8 space-y-8">
-              {/* Personal Section */}
-              <div className="space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary flex items-center gap-2">
-                  <User className="size-3" /> Personal Information
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Gender</Label><p className="text-sm font-bold">{selectedUser.gender || selectedUser.metadata?.gender || "—"}</p></div>
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Email</Label><p className="text-sm font-bold truncate">{selectedUser.email || selectedUser.user_email || "—"}</p></div>
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Contact</Label><p className="text-sm font-bold">{selectedUser.contact_number || selectedUser.user_phone || selectedUser.metadata?.contact_number || selectedUser.metadata?.contact || "—"}</p></div>
-                  <div className="md:col-span-2"><Label className="text-[9px] uppercase text-muted-foreground font-bold">Parent / Guardian</Label><p className="text-sm font-bold">{selectedUser.parent_name || selectedUser.metadata?.parentName || "—"}</p></div>
-                </div>
-              </div>
-
-              <Separator className="bg-slate-100" />
-
-              {/* Academic Section */}
-              <div className="space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary flex items-center gap-2">
-                  <GraduationCap className="size-3" /> Academic Details
-                </h4>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                  <div className="col-span-2"><Label className="text-[9px] uppercase text-muted-foreground font-bold">University</Label><p className="text-sm font-bold">{selectedUser.university_name || selectedUser.metadata?.university_name || selectedUser.metadata?.university || "—"}</p></div>
-                  <div className="col-span-2"><Label className="text-[9px] uppercase text-muted-foreground font-bold">College</Label><p className="text-sm font-bold">{selectedUser.college_name || selectedUser.metadata?.college_name || selectedUser.metadata?.college || "—"}</p></div>
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Degree</Label><p className="text-sm font-bold">{selectedUser.degree || selectedUser.metadata?.degree || "—"}</p></div>
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Department</Label><p className="text-sm font-bold">{selectedUser.department || selectedUser.metadata?.department || "—"}</p></div>
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Subject</Label><p className="text-sm font-bold">{selectedUser.metadata?.subject || "—"}</p></div>
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Session</Label><p className="text-sm font-bold">{selectedUser.academic_session || selectedUser.metadata?.session || "—"}</p></div>
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Semester</Label><p className="text-sm font-bold">{selectedUser.class_semester || selectedUser.metadata?.semester || selectedUser.metadata?.classSem || "—"}</p></div>
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Registration No.</Label><p className="text-sm font-bold">{selectedUser.roll_number || selectedUser.metadata?.rollNo || "—"}</p></div>
-                  {isBnmuStudent(
-                    selectedUser.university_name || selectedUser.metadata?.university_name
-                  ) ? (
-                    <div>
-                      <Label className="text-[9px] uppercase text-muted-foreground font-bold">Roll No.</Label>
-                      <p className="text-sm font-bold">
-                        {selectedUser.university_roll_number ||
-                          selectedUser.metadata?.university_roll_number ||
-                          selectedUser.metadata?.universityRollNumber ||
-                          resolveBnmuUniversityRollNumber(selectedUser) ||
-                          "—"}
-                      </p>
-                    </div>
-                  ) : null}
-                  <div className="col-span-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <Label className="text-[9px] uppercase text-primary font-bold">Internship Domain</Label>
-                    <p className="text-base font-black text-slate-900">{selectedUser.internship_domain || selectedUser.metadata?.course || selectedUser.metadata?.internship_domain || "—"}</p>
-                  </div>
-                </div>
-              </div>
-
-              <Separator className="bg-slate-100" />
-
-              {/* Emergency Section */}
-              <div className="space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary flex items-center gap-2">
-                  <Phone className="size-3" /> Emergency Contacts
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Contact Name</Label><p className="text-sm font-bold">{selectedUser.emergency_name || selectedUser.metadata?.emName || "—"}</p></div>
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Relationship</Label><p className="text-sm font-bold">{selectedUser.emergency_relation || selectedUser.metadata?.emRel || "—"}</p></div>
-                  <div><Label className="text-[9px] uppercase text-muted-foreground font-bold">Contact Phone</Label><p className="text-sm font-bold">{selectedUser.emergency_contact || selectedUser.metadata?.emPhone || "—"}</p></div>
-                </div>
-              </div>
-
-              {typeof selectedUser.metadata?.consent_form_url === "string" &&
-                selectedUser.metadata.consent_form_url.trim() !== "" && (
-                  <>
-                    <Separator className="bg-slate-100" />
-                    <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4 space-y-2">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary flex items-center gap-2">
-                        <FileText className="size-3" /> Consent letter
-                      </h4>
-                      <p className="text-[11px] text-muted-foreground">
-                        File uploaded at registration — opens in a new tab.
-                      </p>
-                      <Button variant="outline" size="sm" className="font-bold" asChild>
-                        <a
-                          href={selectedUser.metadata.consent_form_url.trim()}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Open consent letter
-                        </a>
-                      </Button>
-                    </div>
-                  </>
-                )}
-
-              {selectedUser.reason && (
-                <>
-                  <Separator className="bg-slate-100" />
-                  <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
-                    <Label className="text-[9px] uppercase text-red-600 font-bold">Lead Status / Payment Issue</Label>
-                    <p className="text-sm font-bold text-red-700">{selectedUser.reason}</p>
-                  </div>
-                </>
-              )}
-
-              {/* Technical / A2Z Section */}
-              <div className="space-y-4 pt-6 border-t border-slate-100 bg-slate-50 p-6 rounded-2xl">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-600 flex items-center gap-2">
-                  <Shield className="size-3" /> Technical Metadata (A2Z Details)
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <Label className="text-[9px] uppercase text-orange-400 font-bold">Account Password (directory)</Label>
-                    <p className="text-sm font-mono font-bold text-orange-700 bg-orange-100 px-2 py-1 rounded inline-block">
-                      {getStudentDirectoryPassword(selectedUser) || "Not stored — use Reset Password or Resend Credentials"}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-[9px] uppercase text-muted-foreground font-bold">Address</Label>
-                    <p className="text-sm font-bold">{selectedUser.metadata?.address || "—"}</p>
-                  </div>
-                </div>
-                
-                {/* JSON Raw Dump for A2Z Check */}
-                <div className="mt-4">
-                  <Label className="text-[9px] uppercase text-slate-400 font-bold">Raw JSON Metadata</Label>
-                  <pre className="text-[9px] bg-slate-900 text-slate-300 p-4 rounded-xl mt-2 overflow-x-auto max-h-48">
-                    {JSON.stringify(studentMetadataOf(selectedUser), null, 2)}
-                  </pre>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-4 mt-8">
-                <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>Close View</Button>
-                {!selectedUser.registration_id && (
-                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" onClick={() => { setIsViewDialogOpen(false); handleTransferLead(selectedUser); }}>
-                    Transfer to Student
-                  </Button>
-                )}
-              </div>
-            </div>
-          </ScrollArea>
-        )}
-      </DialogContent></Dialog>
+      <StudentDirectoryDetailDialog
+        open={isViewDialogOpen}
+        onOpenChange={setIsViewDialogOpen}
+        selectedUser={selectedUser}
+        client={supabase}
+        onTransferLead={handleTransferLead}
+        {...studentDirectoryDetailHandlers}
+      />
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-3xl p-0 overflow-hidden rounded-3xl border-none shadow-elegant">

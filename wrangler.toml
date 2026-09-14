@@ -1,0 +1,32 @@
+# Cloudflare Workers — Workers Builds (Git) settings:
+#
+#   Build command:  npm run build
+#   Deploy command: node scripts/wrangler-deploy-ci.mjs
+#   Root directory:  /
+#   Node.js:        22
+#
+# No [build] in wrangler.toml — Workers Builds already runs npm run build;
+# a wrangler [build] step would run vite twice and often fail the deploy step.
+
+name = "apnainternsite"
+main = "cloudflare/worker.ts"
+compatibility_date = "2024-09-23"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[vars]
+LAMBDA_ORIGIN = "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com"
+LAMBDA_STAGE = "staging"
+SMTP_HOST = "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com"
+SMTP_PORT = "587"
+SMTP_USER = "inp-3u5sedrqj7kqwjazxwmph2th"
+SMTP_PASS = "Raunak@12583"
+MAIL_FROM_ADDRESS = "info@apnaintern.in"
+# Vercel SMTP fallback when Worker secret SMTP_PASS is not set (OTP still delivers).
+VERCEL_MAIL_ORIGIN = "https://apnainternsite.vercel.app"
+# Set SMTP_PASS as a Worker SECRET (not here): Cloudflare dashboard → Workers → apnainternsite
+# → Settings → Variables → Encrypt → SMTP_PASS = your mail app password
+# Optional Hostinger: SMTP_HOST=smtp.hostinger.com SMTP_USER=info@apnaintern.in

@@ -28,6 +28,17 @@ const files = [
   "aws/scripts/09-rds-admin-data-fixes.sql",
   "supabase/hotfix_internship_mode_filtering.sql",
   "supabase/migrations/20260605120000_notification_management.sql",
+  "aws/scripts/50-rds-site-popups.sql",
+  "aws/scripts/51-rds-site-contacts.sql",
+  "aws/scripts/12-rds-safe-metadata-json.sql",
+  "aws/scripts/18-rds-fix-payment-enrollment.sql",
+  "aws/scripts/19-rds-fix-password-text-id.sql",
+  "aws/scripts/20-rds-fix-admin-create-registration-text-meta.sql",
+  "aws/scripts/28-rds-student-data-upload.sql",
+  "aws/scripts/33-rds-student-data-upload-dup-delete.sql",
+  "aws/scripts/34-rds-student-data-upload-delete-harden.sql",
+  "aws/scripts/35-rds-student-data-upload-history-recover.sql",
+  "aws/scripts/36-rds-student-data-upload-id-type-fix.sql",
 ];
 
 async function main() {

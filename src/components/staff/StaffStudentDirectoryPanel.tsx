@@ -630,7 +630,10 @@ export function StaffStudentDirectoryPanel({
                         {s.created_at ? new Date(String(s.created_at)).toLocaleDateString() : "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        <StudentDirectoryActionsMenu student={student} {...actions} />
+                        <StudentDirectoryActionsMenu
+                          student={student}
+                          onViewDetails={actions.onViewDetails}
+                        />
                       </TableCell>
                     </TableRow>
                   );

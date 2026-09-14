@@ -1,6 +1,14 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      (function () {
+        var h = location.hostname.toLowerCase();
+        if (h === "www.ezyintern.in" || h === "ezyintern.in" || h === "www.apnaintern.in") {
+          location.replace("https://apnaintern.in" + location.pathname + location.search + location.hash);
+        }
+      })();
+    </script>
     <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -9,14 +17,16 @@
     })(window,document,'script','dataLayer','GTM-K3994MWB');</script>
     <!-- End Google Tag Manager -->
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Apna Intern — UGC Internship Registration Portal</title>
     <meta name="google-site-verification" content="jVIpcIwIECuFo9Df1BKbUyWDRbunqu0qX59Z6q3Njw8" />
     <meta name="facebook-domain-verification" content="zjkoihiqh64709egd665489iuk0vk8" />
     <meta name="description" content="Register for UGC-mandated internships and verify certificates with Apna Intern, Bihar's trusted internship partner for students and universities." />
     <meta name="author" content="Apna Intern" />
-    <link rel="canonical" href="https://www.ezyintern.in/" />
+    <link rel="canonical" href="https://apnaintern.in/" />
 
     <meta property="og:title" content="Apna Intern — UGC Internship Registration Portal" />
     <meta property="og:description" content="Bihar's trusted UGC internship registration and certificate verification portal." />
@@ -39,5 +49,12 @@
     <!-- End Google Tag Manager (noscript) -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- AI Chatbot Provider - QuantronSoft -->
+    <!-- Permanent embed: only chatbot ID. Settings sync live — never replace this code. -->
+    <script
+      src="https://www.quantronsoft.com/chatbot-widget.js?v=10"
+      data-chatbot-id="18cba9b4-2d67-4142-b131-be86df88b7d7"
+      async
+    ></script>
   </body>
 </html>

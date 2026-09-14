@@ -28,13 +28,18 @@ import AssignmentResult from "./pages/AssignmentResult.tsx";
 import PaymentStatus from "./pages/PaymentStatus.tsx";
 import CyberCafeRegister from "./pages/CyberCafeRegister.tsx";
 import CyberCafeDashboard from "./pages/CyberCafeDashboard.tsx";
+import PartnerRegister from "./pages/PartnerRegister.tsx";
+import PartnerApplicationDashboard from "./pages/PartnerApplicationDashboard.tsx";
 import { VisitorTracker } from "./components/VisitorTracker";
+import { SitePopupsHost } from "./components/NoticePopup";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { StudentDashboardGate } from "./components/StudentDashboardGate";
 import CollegeDashboard from "./pages/CollegeDashboard.tsx";
 import ReferralPartnerDashboard from "./pages/ReferralPartnerDashboard.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import AuthConfirm from "./pages/AuthConfirm.tsx";
+import Blog from "./pages/Blog.tsx";
+import BlogPost from "./pages/BlogPost.tsx";
 import Terms from "./pages/Terms.tsx";
 import Privacy from "./pages/Privacy.tsx";
 import { AuthRedirectGuard } from "./components/AuthRedirectGuard";
@@ -79,6 +84,7 @@ const App = () => (
         <AdminSessionRefresh />
         <StudentSessionRefresh />
         <VisitorTracker />
+        <SitePopupsHost />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
@@ -103,6 +109,30 @@ const App = () => (
           />
           <Route
             path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
+                <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/popups"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
+                <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/contact-details"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
+                <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/whatsapp-links"
             element={
               <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
                 <Admin />
@@ -167,9 +197,13 @@ const App = () => (
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/blog" element={<Blog />} />
+          <Route path="/blog/:slug" element={<BlogPost />} />
           <Route path="/assignment/:id" element={<AssignmentTest />} />
           <Route path="/assignment/:id/result" element={<AssignmentResult />} />
           <Route path="/payment-status" element={<PaymentStatus />} />
+          <Route path="/partner/register" element={<PartnerRegister />} />
+          <Route path="/partner/dashboard" element={<PartnerApplicationDashboard />} />
           <Route path="/cybercafe" element={<CyberCafeRegister />} />
           <Route
             path="/cybercafe/dashboard"

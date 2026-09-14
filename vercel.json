@@ -1,26 +1,110 @@
 {
-  "functions": {
-    "api/send-bulk-mail.ts": {
-      "maxDuration": 60
-    },
-    "api/send-mail.ts": {
-      "maxDuration": 60
-    },
-    "api/gemini-generate.ts": {
-      "maxDuration": 60
-    },
-    "api/razorpay-recovery.ts": {
-      "maxDuration": 30
-    }
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "env": {
+    "SMTP_HOST": "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com",
+    "SMTP_USER": "inp-3u5sedrqj7kqwjazxwmph2th",
+    "SMTP_PORT": "587",
+    "USE_SES_API": "false",
+    "MAIL_FROM": "Apna Intern <info@apnaintern.in>",
+    "MAIL_FROM_ADDRESS": "info@apnaintern.in",
+    "SMTP_PASS": "Raunak@12583",
+    "AWS_ACCESS_KEY_ID": "AKIAUP3VMJBI563S3RNY",
+    "AWS_SECRET_ACCESS_KEY": "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",
+    "AWS_DEFAULT_REGION": "ap-south-1",
+    "SES_REGION": "ap-south-1"
   },
   "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.ezyintern.in" }],
+      "destination": "https://apnaintern.in/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "ezyintern.in" }],
+      "destination": "https://apnaintern.in/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.apnaintern.in" }],
+      "destination": "https://apnaintern.in/:path*",
+      "permanent": true
+    },
     {
       "source": "/cyber-cafe/login",
       "destination": "/cybercafe/login",
       "permanent": true
+    },
+    {
+      "source": "/admin",
+      "has": [
+        {
+          "type": "query",
+          "key": "tab",
+          "value": "popups"
+        }
+      ],
+      "destination": "/admin/popups",
+      "permanent": false
     }
   ],
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|admin-partner-register$|partner-application-submit$|ensure-partner-applications$|ensure-project-report-templates$|rds-apply-all$).*)",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/$1"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/:path*"
+    },
+    {
+      "source": "/rest/:path*",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/:path*"
+    },
+    {
+      "source": "/storage/:path*",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/storage/:path*"
+    },
+    {
+      "source": "/functions/:path*",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/functions/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, must-revalidate"
+        }
+      ]
+    }
   ]
 }

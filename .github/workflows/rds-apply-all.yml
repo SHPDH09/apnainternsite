@@ -1,0 +1,76 @@
+# Apply all aws/scripts/*.sql to AWS RDS + redeploy Lambda (when GitHub secrets set).
+
+name: RDS Apply All SQL
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "aws/scripts/**"
+      - "aws/server/**"
+      - "api/**"
+      - ".github/workflows/rds-apply-all.yml"
+
+concurrency:
+  group: rds-apply-all
+  cancel-in-progress: false
+
+jobs:
+  apply-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[rds-apply]') || contains(github.event.head_commit.message, '[seed-smtp]')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply all RDS SQL (when DATABASE_URL secret set)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AWS_RDS_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -n "${DATABASE_URL:-}" ]; then
+            npm run aws:rds:apply-all
+          else
+            echo "::warning::DATABASE_URL GitHub secret is empty — skipping direct RDS apply"
+          fi
+
+      - name: Seed site SMTP config for Vercel/Lambda mail
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || 'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com' }}
+          SMTP_USER: ${{ secrets.SMTP_USER || 'inp-3u5sedrqj7kqwjazxwmph2th' }}
+          MAIL_FROM_ADDRESS: ${{ secrets.MAIL_FROM_ADDRESS || 'info@apnaintern.in' }}
+        run: |
+          if [ -n "${DATABASE_URL:-}" ] && [ -n "${SMTP_PASS:-}" ]; then
+            node scripts/seed-site-smtp-config.mjs
+          else
+            echo "::warning::DATABASE_URL or SMTP_PASS missing — skipped site_smtp_config seed"
+          fi
+
+      - name: Bundle Lambda and update (skip if AWS secrets missing)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-1' }}
+        run: |
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "::warning::AWS GitHub secrets not set — skipped Lambda deploy"
+            exit 0
+          fi
+          node aws/scripts/bundle-lambda.mjs
+          cd aws/lambda/dist && zip -r /tmp/lambda.zip . && cd -
+          aws lambda update-function-code \
+            --function-name ezyintern-api-staging \
+            --zip-file fileb:///tmp/lambda.zip \
+            --region "${AWS_DEFAULT_REGION}"
+          aws lambda wait function-updated --function-name ezyintern-api-staging --region "${AWS_DEFAULT_REGION}"

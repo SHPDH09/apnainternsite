@@ -1,4 +1,4 @@
-import type { ServerDbLike } from './rdsAdapter';
+import type { ServerDbLike } from './rdsAdapter.js';
 
 export type RegistrationAvailabilityResult = {
   available: boolean;

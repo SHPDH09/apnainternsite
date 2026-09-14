@@ -34,8 +34,8 @@ export type SharedProfilePanelProps = {
 function ReadOnlyField({ label, value }: { label: string; value?: string | null }) {
   return (
     <div className="space-y-1">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-      <p className="text-sm font-semibold text-slate-800 break-all">{value?.trim() || "—"}</p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="break-all text-sm font-medium text-slate-900">{value?.trim() || "—"}</p>
     </div>
   );
 }
@@ -104,7 +104,7 @@ export function SharedProfilePanel({
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <Card className="p-6 border-none shadow-elegant">
+      <Card className="portal-dash-card p-6">
         <div className="flex flex-col sm:flex-row items-start gap-6">
           <div className="relative">
             {imageUrl ? (
@@ -133,7 +133,7 @@ export function SharedProfilePanel({
             </label>
           </div>
           <div className="flex-1 space-y-1">
-            <h2 className="text-xl font-black text-slate-900">{profileName || "Profile"}</h2>
+            <h2 className="text-xl font-semibold text-slate-900">{profileName || "Profile"}</h2>
             <p className="text-sm text-muted-foreground">{profileEmail || "—"}</p>
             <Badge className="mt-2" variant="secondary">
               {roleLabel}
@@ -152,7 +152,7 @@ export function SharedProfilePanel({
       </Card>
 
       {activityFetcher && (
-        <Card className="p-6 border-none shadow-elegant space-y-4">
+        <Card className="portal-dash-card space-y-4 p-6">
           <h3 className="font-bold flex items-center gap-2">
             <Activity className="size-4 text-primary" /> Activity
           </h3>

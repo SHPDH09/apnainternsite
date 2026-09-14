@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
+import { SiteLoader } from "@/components/SiteLoader";
 import { SiteNav } from "@/components/SiteNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Card } from "@/components/ui/card";
@@ -86,12 +87,7 @@ const AuthConfirm = () => {
       <main className="flex-1 gradient-soft py-12 md:py-20">
         <div className="container mx-auto px-4">
           <Card className="max-w-md mx-auto p-8 md:p-10 shadow-elegant text-center space-y-4">
-            {status === "loading" && (
-              <>
-                <Loader2 className="size-10 text-primary animate-spin mx-auto" />
-                <p className="text-slate-600 font-medium">Confirming your email…</p>
-              </>
-            )}
+            {status === "loading" && <SiteLoader variant="inline" message="Loading..." />}
             {status === "ok" && (
               <>
                 <CheckCircle2 className="size-10 text-emerald-600 mx-auto" />
