@@ -92,10 +92,12 @@ async function deliverOtpViaServer(
   const messageId = String(body.messageId || "").trim();
   const trustedId = isTrustedOtpMessageId(messageId, body);
   if (!res.ok || body.success !== true || body.emailSent !== true || !trustedId) {
-    const sandboxHint =
-      body.message?.includes("sandbox") || body.error?.includes("not verified")
-        ? " Request AWS SES Production Access once (AWS Console → SES) so OTP reaches all inboxes."
-        : "";
+    const smtpHint =
+      body.message?.includes("outbound") || body.message?.includes("SMTP")
+        ? ""
+        : body.message?.includes("sandbox") || body.error?.includes("not verified")
+          ? " Check SMTP_USER/SMTP_PASS in Vercel (use Hostinger or Gmail app password)."
+          : "";
     const missingIdHint =
       res.ok && body.success === true && body.emailSent === true && !trustedId
         ? " Email server did not confirm delivery — OTP was not sent from info@apnaintern.in."
@@ -103,7 +105,7 @@ async function deliverOtpViaServer(
     return {
       ok: false,
       error: new Error(
-        (detail || missingIdHint || `OTP request failed (${res.status})`) + sandboxHint
+        (detail || missingIdHint || `OTP request failed (${res.status})`) + smtpHint
       ),
     };
   }

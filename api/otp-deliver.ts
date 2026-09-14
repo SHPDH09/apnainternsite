@@ -183,8 +183,40 @@ async function loadHostingerSmtpFromDatabase(): Promise<SmtpCreds | null> {
   }
 }
 
+function isMailboxSmtpUser(user: string): boolean {
+  const u = user.trim().toLowerCase();
+  return u.includes('@') && !u.startsWith('akia');
+}
+
+function defaultSmtpHostForUser(user: string): string {
+  const u = user.toLowerCase();
+  if (u.includes('gmail')) return 'smtp.gmail.com';
+  if (u.endsWith('@apnaintern.in')) return HOSTINGER_SMTP_HOST;
+  return HOSTINGER_SMTP_HOST;
+}
+
+function appMailboxSmtpCreds(): SmtpCreds | null {
+  const user = (process.env.SMTP_USER || HOSTINGER_SMTP_USER).trim();
+  const pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
+  if (!user || !pass || !isMailboxSmtpUser(user)) return null;
+
+  const host = (process.env.SMTP_HOST || defaultSmtpHostForUser(user)).trim();
+  if (isBrokenApnamailEnv(user, host, pass)) return hostingerSmtpCreds();
+
+  return {
+    user,
+    pass,
+    host,
+    port: Number.parseInt(process.env.SMTP_PORT || '587', 10) || 587,
+    fromAddress: resolveMailFromAddress(),
+  };
+}
+
 function canUseSesApi(): boolean {
   if (process.env.USE_SES_API === 'false') return false;
+  // OTP uses mailbox app-password SMTP by default — SES sandbox blocks most users.
+  if (process.env.USE_SES_API !== 'true') return false;
+  if (isMailboxSmtpUser(process.env.SMTP_USER || HOSTINGER_SMTP_USER)) return false;
   return Boolean(
     process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
   );
@@ -361,24 +393,18 @@ async function sendOtpViaSmtpWithCreds(
   return messageId;
 }
 
-function isHostingerAligned(creds: SmtpCreds): boolean {
-  const host = creds.host.toLowerCase();
-  const user = creds.user.toLowerCase();
-  return host.includes('hostinger') || user.endsWith('@apnaintern.in');
-}
-
 async function collectSmtpCandidatesForOtp(): Promise<SmtpCreds[]> {
   const smtpCandidates: SmtpCreds[] = [];
   const seen = new Set<string>();
   const push = (creds: SmtpCreds | null | undefined) => {
     if (!creds?.pass?.trim()) return;
-    if (!isHostingerAligned(creds)) return;
     const key = `${creds.host}|${creds.user}|${creds.fromAddress}`;
     if (seen.has(key)) return;
     seen.add(key);
     smtpCandidates.push(creds);
   };
 
+  push(appMailboxSmtpCreds());
   push(hostingerSmtpCreds());
   push(resolveSmtpFromEnv());
   push(await loadHostingerSmtpFromDatabase());
@@ -403,16 +429,28 @@ async function trySmtpCandidates(
   return null;
 }
 
-const SES_SANDBOX_USER_MESSAGE =
-  'OTP email could not be sent — Amazon SES is in sandbox mode and can only deliver to verified addresses. ' +
-  'In AWS Console → SES (ap-south-1) → Account dashboard, click "Request production access". ' +
-  'Until approved, contact support to verify your email in SES.';
+const HOSTINGER_OUTBOUND_MESSAGE =
+  'OTP could not be sent — Hostinger has outbound SMTP disabled for info@apnaintern.in. ' +
+  'In Hostinger → Emails → Manage → enable outbound/SMTP sending for this mailbox.';
 
 async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<OtpSendResult> {
   const mail = buildOtpMail(otp, purpose);
   const errors: string[] = [];
 
-  // Amazon SES SMTP — actually delivers (Mail Manager accepts but drops mail silently).
+  // Primary: mailbox app-password SMTP (Hostinger info@apnaintern.in or Gmail from env).
+  const mailboxResult = await trySmtpCandidates(
+    await collectSmtpCandidatesForOtp(),
+    email,
+    mail,
+    errors
+  );
+  if (mailboxResult) return mailboxResult;
+
+  if (errors.some((e) => isHostingerOutboundDisabled(new Error(e)))) {
+    throw new Error(HOSTINGER_OUTBOUND_MESSAGE);
+  }
+
+  // Optional fallback: Amazon SES (only when USE_SES_API=true and no mailbox user configured).
   const sesSmtp = sesSmtpCreds();
   if (sesSmtp) {
     const sesResult = await trySmtpCandidates([sesSmtp], email, mail, errors);
@@ -426,27 +464,18 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
     } catch (sesErr) {
       const msg = sesErr instanceof Error ? sesErr.message : String(sesErr);
       errors.push(`SES-API: ${msg}`);
-      if (isSesSandboxError(sesErr)) {
-        throw new Error(SES_SANDBOX_USER_MESSAGE);
-      }
     }
   }
 
-  const hostingerResult = await trySmtpCandidates(
-    await collectSmtpCandidatesForOtp(),
-    email,
-    mail,
-    errors
-  );
-  if (hostingerResult) return hostingerResult;
-
   if (errors.some((e) => isSesSandboxError(new Error(e)))) {
-    throw new Error(SES_SANDBOX_USER_MESSAGE);
+    throw new Error(
+      'OTP could not be sent via SMTP. Check SMTP_USER/SMTP_PASS on Vercel, or enable Hostinger outbound email for info@apnaintern.in.'
+    );
   }
 
   throw new Error(
     errors.join(' | ') ||
-      'Failed to send verification email. Request AWS SES production access or enable Hostinger outbound SMTP.'
+      'Failed to send verification email via SMTP. Check SMTP_USER and SMTP_PASS in Vercel project settings.'
   );
 }
 

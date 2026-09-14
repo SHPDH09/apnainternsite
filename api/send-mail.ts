@@ -3,8 +3,9 @@ import { createHmac, randomUUID } from 'node:crypto';
 
 /** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
-const DEFAULT_SMTP_HOST = 'email-smtp.ap-south-1.amazonaws.com';
-const DEFAULT_SMTP_USER = 'AKIAUP3VMJBI563S3RNY';
+const DEFAULT_SMTP_HOST = 'smtp.hostinger.com';
+const DEFAULT_SMTP_USER = 'info@apnaintern.in';
+const DEFAULT_SMTP_PASS = 'Raunak@12583';
 const HOSTINGER_SMTP_HOST = 'smtp.hostinger.com';
 const HOSTINGER_SMTP_USER = 'info@apnaintern.in';
 
@@ -26,9 +27,10 @@ function readSmtpPassFromEnv(): string {
 
 function defaultHostForUser(user: string): string {
   const u = user.toLowerCase();
-  if (u.startsWith('akia')) return DEFAULT_SMTP_HOST;
+  if (u.includes('gmail')) return 'smtp.gmail.com';
+  if (u.startsWith('akia')) return 'email-smtp.ap-south-1.amazonaws.com';
   if (u.endsWith('@apnaintern.in')) return HOSTINGER_SMTP_HOST;
-  return DEFAULT_SMTP_HOST;
+  return HOSTINGER_SMTP_HOST;
 }
 
 function deriveSesSmtpPassword(secretAccessKey: string, region = 'ap-south-1'): string {
@@ -64,7 +66,7 @@ function resolveSmtpFromEnv(): {
   fromAddress: string;
 } {
   let user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim();
-  let pass = readSmtpPassFromEnv();
+  let pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
   let host = resolveSmtpHostFromEnv(user);
   const port = resolveSmtpPort();
   const fromAddress = resolveMailFromAddress();
@@ -75,9 +77,9 @@ function resolveSmtpFromEnv(): {
     pass === 'wuh4ovfk38aiuboa';
 
   if (apnamailBroken) {
-    user = DEFAULT_SMTP_USER;
-    host = DEFAULT_SMTP_HOST;
-    pass = resolveSesSmtpPassword(user);
+    user = HOSTINGER_SMTP_USER;
+    host = HOSTINGER_SMTP_HOST;
+    pass = DEFAULT_SMTP_PASS;
   }
 
   if (!pass && user.startsWith('AKIA')) {
@@ -149,6 +151,9 @@ function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_re
 
 function canUseSesApiForOtp(): boolean {
   if (process.env.USE_SES_API === 'false') return false;
+  if (process.env.USE_SES_API !== 'true') return false;
+  const user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim().toLowerCase();
+  if (user.includes('@') && !user.startsWith('akia')) return false;
   return Boolean(
     process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
   );

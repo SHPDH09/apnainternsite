@@ -20,6 +20,10 @@ not_found_handling = "single-page-application"
 [vars]
 LAMBDA_ORIGIN = "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com"
 LAMBDA_STAGE = "staging"
+SMTP_HOST = "smtp.hostinger.com"
+SMTP_PORT = "587"
+SMTP_USER = "info@apnaintern.in"
+SMTP_PASS = "Raunak@12583"
 MAIL_FROM_ADDRESS = "info@apnaintern.in"
-# OTP is relayed to Vercel (Amazon SES SMTP). Do not send from the Worker — Mail Manager dropped mail.
+# OTP is relayed to Vercel (Hostinger/Gmail app-password SMTP).
 VERCEL_MAIL_ORIGIN = "https://apnainternsite.vercel.app"
