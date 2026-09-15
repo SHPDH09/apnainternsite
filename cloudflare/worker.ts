@@ -5,6 +5,7 @@
 
 import { tryHandleOtpDeliver } from "./otpDeliver";
 import { resolveOtpPurpose } from "./otpMail";
+import { tryProxyEnsureApiToVercel } from "./ensureVercelProxy";
 import { proxyOtpDeliverToVercel } from "./otpVercelFallback";
 
 export interface Env {
@@ -150,6 +151,8 @@ export default {
     }
 
     if (shouldProxy(url.pathname)) {
+      const ensureResponse = await tryProxyEnsureApiToVercel(request, env);
+      if (ensureResponse) return ensureResponse;
       const otpDeliverResponse = await tryHandleOtpDeliver(request, env);
       if (otpDeliverResponse) return otpDeliverResponse;
       const otpResponse = await tryHandleOtpSendMail(request, env);

@@ -4,8 +4,8 @@ export function vercelMailOrigin(env: { VERCEL_MAIL_ORIGIN?: string }): string {
   return String(env.VERCEL_MAIL_ORIGIN || DEFAULT_VERCEL_MAIL_ORIGIN).replace(/\/$/, "");
 }
 
-/** When Worker SMTP is unconfigured or fails, relay OTP to Vercel (SMTP already works there). */
-export async function proxyOtpDeliverToVercel(
+/** Relay a request to Vercel (same path + query), preserving method/body/headers when provided. */
+export async function proxyRequestToVercel(
   request: Request,
   env: { VERCEL_MAIL_ORIGIN?: string },
   jsonBody?: Record<string, unknown>,
@@ -14,12 +14,16 @@ export async function proxyOtpDeliverToVercel(
   const url = new URL(request.url);
   const target = `${origin}${url.pathname}${url.search}`;
 
+  const headers = new Headers();
+  const auth = request.headers.get("Authorization");
+  if (auth) headers.set("Authorization", auth);
+  const contentType = request.headers.get("Content-Type");
+  if (contentType) headers.set("Content-Type", contentType);
+  headers.set("Accept", "application/json");
+
   const init: RequestInit = {
     method: request.method,
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
+    headers,
     redirect: "manual",
   };
 
@@ -33,7 +37,19 @@ export async function proxyOtpDeliverToVercel(
 
   const res = await fetch(target, init);
   const body = await res.text();
+  const outHeaders = new Headers(res.headers);
+  outHeaders.set("X-Apna-Proxy", "vercel");
+  return new Response(body, { status: res.status, headers: outHeaders });
+}
+
+/** When Worker SMTP is unconfigured or fails, relay OTP to Vercel (SMTP already works there). */
+export async function proxyOtpDeliverToVercel(
+  request: Request,
+  env: { VERCEL_MAIL_ORIGIN?: string },
+  jsonBody?: Record<string, unknown>,
+): Promise<Response> {
+  const res = await proxyRequestToVercel(request, env, jsonBody);
   const headers = new Headers(res.headers);
   headers.set("X-Otp-Delivery", "vercel-fallback");
-  return new Response(body, { status: res.status, headers });
+  return new Response(await res.text(), { status: res.status, headers });
 }
