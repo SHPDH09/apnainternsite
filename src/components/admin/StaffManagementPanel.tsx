@@ -57,6 +57,7 @@ import {
   type StaffProfileFormFields,
 } from "@/lib/staffProfile";
 import { EmployeeAttendancePanel } from "@/components/admin/EmployeeAttendancePanel";
+import { StaffSalaryAccountPanel } from "@/components/admin/StaffSalaryAccountPanel";
 import {
   AdminStaffLeaveRequestsPanel,
   AdminStaffRequirementsPanel,
@@ -283,6 +284,7 @@ export function StaffManagementPanel({
           <TabsTrigger value="attendance">Staff Attendance</TabsTrigger>
           <TabsTrigger value="leave-requests">Leave Requests</TabsTrigger>
           <TabsTrigger value="requirements">Requirements</TabsTrigger>
+          <TabsTrigger value="account">Account</TabsTrigger>
         </TabsList>
 
         <TabsContent value="create" className="mt-4">
@@ -495,6 +497,14 @@ export function StaffManagementPanel({
             employees={employees}
             currentUserId={currentUserId}
             isActive={isActive && subTab === "requirements"}
+          />
+        </TabsContent>
+
+        <TabsContent value="account" className="mt-4">
+          <StaffSalaryAccountPanel
+            staff={staff}
+            currentUserId={currentUserId}
+            isActive={isActive && subTab === "account"}
           />
         </TabsContent>
       </Tabs>

@@ -47,6 +47,8 @@ const ALLOWED_TABLES = new Set([
   "referral_coupon_clicks",
   "college_admin_assignments",
   "employee_attendance",
+  "staff_salary_setup",
+  "staff_salary_slips",
   "staff_auth_sessions",
   "staff_activity_log",
 ]);

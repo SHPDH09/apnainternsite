@@ -277,6 +277,14 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["p_latitude", "p_longitude", "p_face_score"],
     auth: "auth",
   },
+  admin_generate_staff_salary: {
+    args: ["p_employee_id", "p_salary_month"],
+    auth: "admin",
+  },
+  admin_mark_staff_salary_paid: {
+    args: ["p_slip_id", "p_payment_reference"],
+    auth: "admin",
+  },
   admin_student_data_upload_save_history: {
     args: [
       "p_upload_id",
