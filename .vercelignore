@@ -19,6 +19,8 @@ api/**
 !api/staff-office-rpc.ts
 !api/staffOfficeSqlChunks.ts
 !api/staffOfficeApply.ts
+!api/staffSalaryApply.ts
+!api/staffSalarySqlChunks.ts
 !api/rds-apply-all.ts
 !api/lib/**
 
@@ -29,7 +31,10 @@ aws/**
 !aws/server/project-report-bootstrap.ts
 !aws/server/project-report-template-save.ts
 !aws/server/staff-attendance-offices-bootstrap.ts
+!aws/server/staff-salary-bootstrap.ts
 !aws/server/rds-apply-all.ts
+!aws/scripts/81-rds-staff-salary-account.sql
+!aws/scripts/86-rds-staff-salary-advanced.sql
 !aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql
 !aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql
 !aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql

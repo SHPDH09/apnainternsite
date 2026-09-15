@@ -63,6 +63,21 @@ const STAFF_OFFICE_ADMIN_RPC_FILES = [
 
 const STAFF_OFFICE_HOTFIX = "aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql";
 
+export const STAFF_SALARY_REQUIRED_RPCS = [
+  "admin_list_staff_salary_holidays",
+  "admin_upsert_staff_salary_holiday",
+  "admin_delete_staff_salary_holiday",
+  "admin_list_staff_paid_leave_grants",
+  "admin_upsert_staff_paid_leave_grant",
+  "admin_generate_staff_salary",
+  "admin_mark_staff_salary_paid",
+] as const;
+
+const STAFF_SALARY_SQL_FILES = [
+  "aws/scripts/81-rds-staff-salary-account.sql",
+  "aws/scripts/86-rds-staff-salary-advanced.sql",
+] as const;
+
 function listAwsSqlFiles(): string[] {
   const scriptsDir = path.join(repoRoot(), "aws/scripts");
   return fs
@@ -100,6 +115,32 @@ async function ensureStaffOfficeAdminRpcs(
   if (staffOfficeRpcsReady(await staffOfficeRpcStatus(client))) return;
 
   await applyFile(STAFF_OFFICE_HOTFIX);
+}
+
+async function staffSalaryRpcStatus(client: import("pg").PoolClient): Promise<Record<string, boolean>> {
+  const checks = STAFF_SALARY_REQUIRED_RPCS.map(
+    (name) => `EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = '${name}'
+    ) AS "${name}"`
+  );
+  const { rows } = await client.query<Record<string, boolean>>(`SELECT ${checks.join(", ")}`);
+  return rows[0] || {};
+}
+
+function staffSalaryRpcsReady(status: Record<string, boolean>): boolean {
+  return STAFF_SALARY_REQUIRED_RPCS.every((name) => Boolean(status[name]));
+}
+
+async function ensureStaffSalaryRpcs(
+  client: import("pg").PoolClient,
+  applyFile: (rel: string) => Promise<"ok" | "warn" | "skip">
+): Promise<void> {
+  if (staffSalaryRpcsReady(await staffSalaryRpcStatus(client))) return;
+
+  for (const rel of STAFF_SALARY_SQL_FILES) {
+    await applyFile(rel);
+  }
 }
 
 const warnPattern = /already exists|duplicate key|does not exist|cannot drop|multiple primary keys|cannot change return type|42P13|42710|42701|operator does not exist|25P02/i;
@@ -155,8 +196,10 @@ export async function applyAllRdsSql(): Promise<RdsApplyAllResult> {
     }
 
     await ensureStaffOfficeAdminRpcs(client, applyFile);
+    await ensureStaffSalaryRpcs(client, applyFile);
 
     const staffRpcs = await staffOfficeRpcStatus(client);
+    const salaryRpcs = await staffSalaryRpcStatus(client);
     const { rows } = await client.query(`
       SELECT
         to_regclass('public.student_data_uploads') AS student_data_uploads,
@@ -175,7 +218,7 @@ export async function applyAllRdsSql(): Promise<RdsApplyAllResult> {
       applied,
       warnings,
       skipped,
-      checks: { ...(rows[0] || {}), staff_office_rpcs: staffRpcs },
+      checks: { ...(rows[0] || {}), staff_office_rpcs: staffRpcs, staff_salary_rpcs: salaryRpcs },
       files: results,
     };
   } finally {

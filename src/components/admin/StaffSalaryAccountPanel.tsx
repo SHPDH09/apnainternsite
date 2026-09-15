@@ -48,6 +48,7 @@ import type { AdminStaffProfile } from "@/lib/staffProfile";
 import {
   calcGrossFromSetup,
   deleteStaffSalaryHoliday,
+  ensureStaffSalarySchema,
   formatSalaryMonth,
   generateStaffSalary,
   listStaffPaidLeaveGrants,
@@ -142,6 +143,7 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      await ensureStaffSalarySchema();
       const [setupRows, slipRows, holidayRows, grantRows] = await Promise.all([
         listStaffSalarySetups(),
         listStaffSalarySlips({ salaryMonth }),
