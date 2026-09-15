@@ -32,8 +32,11 @@ async function readAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
-/** Vercel direct RDS RPC — applies missing functions then executes (production fix). */
-async function staffOfficeRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+/** Production path: send-mail action on Vercel applies SQL + runs RPC on RDS directly. */
+async function staffOfficeRpcViaSendMail<T>(
+  name: string,
+  args: Record<string, unknown> = {}
+): Promise<T> {
   if (typeof window === "undefined") {
     throw new Error("Staff office RPC requires browser session");
   }
@@ -42,31 +45,34 @@ async function staffOfficeRpc<T>(name: string, args: Record<string, unknown> = {
   if (!token) throw new Error("Not signed in");
 
   const origin = window.location.origin.replace(/\/$/, "");
-  const res = await fetch(`${origin}/api/staff-office-rpc`, {
+  const res = await fetch(`${origin}/api/send-mail`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ name, args }),
+    body: JSON.stringify({
+      action: "staff_office_rpc",
+      name,
+      args,
+    }),
   });
 
   const json = (await res.json().catch(() => ({}))) as {
     data?: T;
     error?: { message?: string };
+    message?: string;
+    success?: boolean;
   };
 
-  if (!res.ok || json.error) {
-    throw new Error(json.error?.message || `Staff office RPC failed (${res.status})`);
+  if (!res.ok || json.success === false || json.error) {
+    throw new Error(json.error?.message || json.message || `Staff office RPC failed (${res.status})`);
   }
 
   return json.data as T;
 }
 
-async function legacyStaffOfficeRpc<T>(
-  name: string,
-  args: Record<string, unknown>
-): Promise<T> {
+async function legacyStaffOfficeRpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.rpc(name, args);
   if (error) throw new Error(rpcErrorMessage(error));
   return data as T;
@@ -74,10 +80,10 @@ async function legacyStaffOfficeRpc<T>(
 
 async function callStaffOfficeRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
   try {
-    return await staffOfficeRpc<T>(name, args);
+    return await staffOfficeRpcViaSendMail<T>(name, args);
   } catch (vercelErr) {
     const msg = vercelErr instanceof Error ? vercelErr.message : String(vercelErr);
-    if (!/404|503|not configured|Method not allowed|fetch/i.test(msg)) {
+    if (!/404|503|not configured|fetch failed|Failed to fetch/i.test(msg)) {
       throw vercelErr;
     }
     return legacyStaffOfficeRpc<T>(name, args);
