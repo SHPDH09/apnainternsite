@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Apply staff attendance office schema + admin RPCs to RDS.
- * Usage: DATABASE_URL='postgresql://...' node aws/scripts/apply-staff-attendance-offices-rds.mjs
+ * Usage: DATABASE_URL='postgresql://ezyintern:PASSWORD@ezyintern-staging-db.c5makww6eq8y.ap-south-1.rds.amazonaws.com:5432/ezyintern?sslmode=require' node aws/scripts/apply-staff-attendance-offices-rds.mjs
  */
 import fs from "node:fs";
 import path from "node:path";
