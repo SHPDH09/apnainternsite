@@ -90,11 +90,36 @@ async function callStaffOfficeRpc<T>(name: string, args: Record<string, unknown>
   }
 }
 
+async function listOfficesFromTable(activeOnly: boolean): Promise<StaffAttendanceOffice[]> {
+  let q = supabase.from("staff_attendance_offices").select("*").order("name");
+  if (activeOnly) q = q.eq("is_active", true);
+  const { data, error } = await q;
+  if (error) throw new Error(rpcErrorMessage(error));
+  return (data || []) as StaffAttendanceOffice[];
+}
+
+async function listAssignmentsFromTable(): Promise<StaffOfficeAssignment[]> {
+  const { data, error } = await supabase
+    .from("staff_office_assignments")
+    .select("*")
+    .order("assigned_at", { ascending: false });
+  if (error) throw new Error(rpcErrorMessage(error));
+  return (data || []) as StaffOfficeAssignment[];
+}
+
 export async function listStaffAttendanceOffices(activeOnly = false): Promise<StaffAttendanceOffice[]> {
-  const data = await callStaffOfficeRpc<StaffAttendanceOffice[]>("admin_list_staff_attendance_offices", {
-    p_active_only: activeOnly,
-  });
-  return Array.isArray(data) ? data : [];
+  try {
+    const data = await callStaffOfficeRpc<StaffAttendanceOffice[]>("admin_list_staff_attendance_offices", {
+      p_active_only: activeOnly,
+    });
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/does not exist on RDS|42883|could not find the function|staff office RPC failed/i.test(msg)) {
+      throw e;
+    }
+    return listOfficesFromTable(activeOnly);
+  }
 }
 
 export async function upsertStaffAttendanceOffice(input: {
@@ -128,8 +153,16 @@ export async function deleteStaffAttendanceOffice(id: string): Promise<void> {
 }
 
 export async function listStaffOfficeAssignments(): Promise<StaffOfficeAssignment[]> {
-  const data = await callStaffOfficeRpc<StaffOfficeAssignment[]>("admin_list_staff_office_assignments");
-  return Array.isArray(data) ? data : [];
+  try {
+    const data = await callStaffOfficeRpc<StaffOfficeAssignment[]>("admin_list_staff_office_assignments");
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/does not exist on RDS|42883|could not find the function|staff office RPC failed/i.test(msg)) {
+      throw e;
+    }
+    return listAssignmentsFromTable();
+  }
 }
 
 export async function assignStaffOffice(input: {
