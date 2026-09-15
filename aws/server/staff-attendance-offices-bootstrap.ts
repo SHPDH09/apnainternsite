@@ -222,7 +222,16 @@ async function runAdminRpcStatements(): Promise<boolean> {
 async function applyAdminOfficeRpcSql(): Promise<boolean> {
   let applied = false;
 
-  for (const rel of [ENSURE_SQL, ADMIN_RPC_SQL, ADMIN_RPC_HOTFIX_SQL]) {
+  try {
+    if (await runSqlFile(ENSURE_SQL)) {
+      applied = true;
+      await query("SELECT public._ensure_staff_attendance_office_schema()");
+    }
+  } catch (err) {
+    console.warn("[staff-attendance-offices-bootstrap] ensure schema:", String(err).slice(0, 240));
+  }
+
+  for (const rel of [ADMIN_RPC_SQL, ADMIN_RPC_HOTFIX_SQL]) {
     try {
       if (await runSqlFile(rel)) applied = true;
     } catch (err) {
