@@ -80,6 +80,7 @@ import {
   X,
   CalendarDays,
   SlidersHorizontal,
+  ChevronUp,
 } from "lucide-react";
 import { SiteLoader } from "@/components/SiteLoader";
 import { Button } from "@/components/ui/button";
@@ -1276,6 +1277,109 @@ const StaffDashboard = () => {
 
   if (loading) return <SiteLoader />;
 
+  const staffAvatarUrl =
+    resolveStorageUrl(staffProfile?.profile_image_url || "") || staffProfile?.profile_image_url || "";
+  const staffInitial = (staffName.trim()[0] || staffEmail?.[0] || "S").toUpperCase();
+
+  const navigateStaffTab = (tab: string) => {
+    setActiveTab(tab);
+    setSidebarOpen(false);
+  };
+
+  const renderStaffAvatar = (sizeClass = "size-10") =>
+    staffAvatarUrl ? (
+      <img
+        src={staffAvatarUrl}
+        alt=""
+        className={`${sizeClass} rounded-full object-cover border border-slate-200`}
+      />
+    ) : (
+      <div
+        className={`flex ${sizeClass} items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-semibold text-[#5AA3E6]`}
+      >
+        {staffInitial}
+      </div>
+    );
+
+  const renderStaffAccountMenu = (
+    align: "start" | "end" = "end",
+    variant: "icon" | "sidebar" = "icon"
+  ) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        {variant === "sidebar" ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5 text-left transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AA3E6]"
+            aria-label="Open account menu"
+          >
+            {renderStaffAvatar("size-10")}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-900">{staffName || "Staff"}</p>
+              <p className="truncate text-[11px] text-slate-500">{staffEmail || "Account"}</p>
+            </div>
+            <ChevronUp className="size-4 shrink-0 text-slate-400" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="rounded-full transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AA3E6] focus-visible:ring-offset-2"
+            aria-label="Open account menu"
+          >
+            {renderStaffAvatar("size-10")}
+          </button>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align={align} className="w-56">
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium">{staffName || "Staff member"}</span>
+            {staffEmail ? (
+              <span className="truncate text-xs text-muted-foreground">{staffEmail}</span>
+            ) : null}
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => navigateStaffTab("dashboard")}>
+          <LayoutDashboard className="mr-2 size-4" />
+          Dashboard
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigateStaffTab("profile")}>
+          <User className="mr-2 size-4" />
+          Profile
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigateStaffTab("security")}>
+          <Shield className="mr-2 size-4" />
+          Security
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigateStaffTab("my-attendance")}>
+          <Calendar className="mr-2 size-4" />
+          My Attendance
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigateStaffTab("requests")}>
+          <ClipboardList className="mr-2 size-4" />
+          Requests
+        </DropdownMenuItem>
+        {hasStaffPerm(permissions, "can_manage_settings") ? (
+          <DropdownMenuItem onClick={() => navigateStaffTab("settings")}>
+            <Cog className="mr-2 size-4" />
+            Settings
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={() => {
+            void handleStaffLogout();
+          }}
+        >
+          <LogOut className="mr-2 size-4" />
+          Logout
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <div className="portal-dashboard-bg flex min-h-screen">
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-5 md:flex">
@@ -1316,7 +1420,19 @@ const StaffDashboard = () => {
           <button onClick={() => setActiveTab("my-attendance")} data-active={activeTab === "my-attendance"} className={portalNavItemClass}><Calendar className="size-4" /> My Attendance</button>
           <button onClick={() => setActiveTab("requests")} data-active={activeTab === "requests"} className={portalNavItemClass}><ClipboardList className="size-4" /> Requests</button>
         </nav>
-        <Button variant="ghost" className="mt-auto justify-start font-medium text-red-600 hover:bg-red-50" onClick={() => { void handleStaffLogout(); }}><LogOut className="size-4 mr-2" /> Logout</Button>
+        <div className="mt-auto space-y-2 border-t border-slate-200 pt-4">
+          {renderStaffAccountMenu("start", "sidebar")}
+          <Button
+            variant="ghost"
+            className="w-full justify-start font-medium text-red-600 hover:bg-red-50"
+            onClick={() => {
+              void handleStaffLogout();
+            }}
+          >
+            <LogOut className="mr-2 size-4" />
+            Logout
+          </Button>
+        </div>
       </aside>
 
       <main className="flex-1 overflow-y-auto">
@@ -1333,17 +1449,7 @@ const StaffDashboard = () => {
           }</h1>
             <p className="text-xs font-medium text-slate-500">Apna Intern staff portal</p>
           </div>
-          {(() => {
-            const avatar =
-              resolveStorageUrl(staffProfile?.profile_image_url || "") || staffProfile?.profile_image_url;
-            return avatar ? (
-              <img src={avatar} alt="" className="size-10 rounded-full object-cover border border-slate-200" />
-            ) : (
-              <div className="flex size-10 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-semibold text-[#5AA3E6]">
-                {staffName[0]}
-              </div>
-            );
-          })()}
+          {renderStaffAccountMenu("end", "icon")}
         </header>
 
         <div className="mx-auto max-w-7xl p-6 portal-dash-animate-in md:p-10">
