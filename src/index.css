@@ -143,6 +143,13 @@
     background-size: 24px 24px;
   }
 
+  .staff-page-canvas {
+    background-color: #f4f7fb;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgb(148 163 184 / 0.12) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+
   /* Student dashboard — professional / enterprise aesthetic */
   .student-dashboard-bg {
     background-color: #f8fafc;

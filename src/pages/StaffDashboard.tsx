@@ -162,7 +162,11 @@ import type { StudentDirectoryStudent } from "@/components/admin/StudentDirector
 import { fetchAdminStudentsLight } from "@/lib/adminStudentDirectory";
 import type { AdminStaffProfile } from "@/lib/staffProfile";
 import { resolveStorageUrl } from "@/lib/storageUrl";
-import { portalNavItemClass, portalNavSectionClass } from "@/components/portal/portalDashboardUi";
+import { PortalStatTile } from "@/components/portal/portalDashboardUi";
+import { StaffShell } from "@/components/staff/StaffShell";
+import { staffHeroClass, staffStatCardClass } from "@/components/staff/staffStyles";
+import { BRAND_NAME } from "@/lib/brand";
+import { cn } from "@/lib/utils";
 
 const STAFF_PAGE_SIZE = 20;
 
@@ -1310,12 +1314,12 @@ const StaffDashboard = () => {
         {variant === "sidebar" ? (
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5 text-left transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AA3E6]"
+            className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] p-2.5 text-left transition hover:bg-white/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AA3E6]/50"
             aria-label="Open account menu"
           >
             {renderStaffAvatar("size-10")}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-slate-900">{staffName || "Staff"}</p>
+              <p className="truncate text-sm font-semibold text-slate-100">{staffName || "Staff"}</p>
               <p className="truncate text-[11px] text-slate-500">{staffEmail || "Account"}</p>
             </div>
             <ChevronUp className="size-4 shrink-0 text-slate-400" />
@@ -1323,7 +1327,7 @@ const StaffDashboard = () => {
         ) : (
           <button
             type="button"
-            className="rounded-full transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AA3E6] focus-visible:ring-offset-2"
+            className="rounded-full ring-2 ring-[#5AA3E6]/20 transition hover:opacity-90 hover:ring-[#5AA3E6]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5AA3E6] focus-visible:ring-offset-2"
             aria-label="Open account menu"
           >
             {renderStaffAvatar("size-10")}
@@ -1380,107 +1384,132 @@ const StaffDashboard = () => {
     </DropdownMenu>
   );
 
+  const staffPageTitle =
+    activeTab === "dashboard"
+      ? `Hello, ${staffName.split(" ")[0] || "there"}`
+      : activeTab === "add-registration"
+        ? "Add Registration"
+        : activeTab === "profile"
+          ? "Profile"
+          : activeTab === "security"
+            ? "Security"
+            : activeTab === "my-attendance"
+              ? "My Attendance"
+              : activeTab === "requests"
+                ? "Requests"
+                : services.find((s) => s.tab === activeTab)?.label || "Staff Portal";
+
+  const enabledModuleCount = services.filter((service) => hasStaffPerm(permissions, service.id)).length;
+
   return (
-    <div className="portal-dashboard-bg flex min-h-screen">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-5 md:flex">
-        <div className="mb-8 flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-[#5AA3E6] shadow-sm">
-            <LayoutDashboard className="size-5 text-white" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Staff portal</p>
-            <p className="text-[11px] font-medium text-slate-500">Apna Intern</p>
-          </div>
-        </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto">
-          <button onClick={() => setActiveTab("dashboard")} data-active={activeTab === "dashboard"} className={portalNavItemClass}><LayoutDashboard className="size-4" /> Dashboard</button>
-          <div className={portalNavSectionClass}>Authorized access</div>
-          {services.map(s => hasStaffPerm(permissions, s.id) && (
-            <button
-              key={s.tab}
-              onClick={() => setActiveTab(s.tab)}
-              data-active={activeTab === s.tab}
-              className={portalNavItemClass}
-            >
-              <s.icon className={`size-4 ${s.color}`} /> {s.label}
-            </button>
-          ))}
-          {hasStaffPerm(permissions, "can_manage_students") && (
-            <button
-              onClick={() => setActiveTab("add-registration")}
-              data-active={activeTab === "add-registration"}
-              className={portalNavItemClass}
-            >
-              <UserPlus className="size-4 text-emerald-600" /> Add Registration
-            </button>
-          )}
-          <div className={portalNavSectionClass}>Account</div>
-          <button onClick={() => setActiveTab("profile")} data-active={activeTab === "profile"} className={portalNavItemClass}><User className="size-4" /> Profile</button>
-          <button onClick={() => setActiveTab("security")} data-active={activeTab === "security"} className={portalNavItemClass}><Shield className="size-4" /> Security</button>
-          <button onClick={() => setActiveTab("my-attendance")} data-active={activeTab === "my-attendance"} className={portalNavItemClass}><Calendar className="size-4" /> My Attendance</button>
-          <button onClick={() => setActiveTab("requests")} data-active={activeTab === "requests"} className={portalNavItemClass}><ClipboardList className="size-4" /> Requests</button>
-        </nav>
-        <div className="mt-auto space-y-2 border-t border-slate-200 pt-4">
-          {renderStaffAccountMenu("start", "sidebar")}
-          <Button
-            variant="ghost"
-            className="w-full justify-start font-medium text-red-600 hover:bg-red-50"
-            onClick={() => {
-              void handleStaffLogout();
-            }}
-          >
-            <LogOut className="mr-2 size-4" />
-            Logout
-          </Button>
-        </div>
-      </aside>
-
-      <main className="flex-1 overflow-y-auto">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-6 backdrop-blur md:px-10">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-slate-900 md:text-xl">{
-            activeTab === 'dashboard' ? `Hello, ${staffName.split(' ')[0]}`
-            : activeTab === 'add-registration' ? 'Add Registration'
-            : activeTab === 'profile' ? 'Profile'
-            : activeTab === 'security' ? 'Security'
-            : activeTab === 'my-attendance' ? 'My Attendance'
-            : activeTab === 'requests' ? 'Requests'
-            : services.find(s => s.tab === activeTab)?.label
-          }</h1>
-            <p className="text-xs font-medium text-slate-500">Apna Intern staff portal</p>
-          </div>
-          {renderStaffAccountMenu("end", "icon")}
-        </header>
-
-        <div className="mx-auto max-w-7xl p-6 portal-dash-animate-in md:p-10">
-          {activeTab === 'dashboard' && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {services.map((service) => hasStaffPerm(permissions, service.id) && (
-                <div key={service.tab} className="portal-dash-card cursor-pointer border-l-[3px] border-l-[#5AA3E6] p-6 transition-shadow hover:shadow-md" onClick={() => setActiveTab(service.tab)}>
-                  <div className={`mb-4 flex size-11 items-center justify-center rounded-xl ${service.bg}`}><service.icon className={`size-5 ${service.color}`} /></div>
-                  <h3 className="mb-1 font-semibold text-slate-900">{service.label}</h3>
-                  <p className="text-xs font-medium text-slate-500">Manage {service.label.toLowerCase()}</p>
+    <>
+      <StaffShell
+        activeTab={activeTab}
+        onNavigateTab={navigateStaffTab}
+        pageTitle={staffPageTitle}
+        staffName={staffName}
+        staffEmail={staffEmail}
+        permissions={permissions}
+        services={services}
+        sidebarOpen={sidebarOpen}
+        onSidebarOpenChange={setSidebarOpen}
+        accountMenuSidebar={renderStaffAccountMenu("start", "sidebar")}
+        accountMenuHeader={renderStaffAccountMenu("end", "icon")}
+        onLogout={() => {
+          void handleStaffLogout();
+        }}
+      >
+          {activeTab === "dashboard" && (
+            <div className="space-y-6">
+              <section className={cn(staffHeroClass, "portal-dash-animate-in")}>
+                <div
+                  className="absolute bottom-0 left-0 top-0 w-1 rounded-l-xl student-dash-hero-accent"
+                  aria-hidden
+                />
+                <div className="relative flex flex-col gap-6 pl-2 lg:flex-row lg:items-end lg:justify-between lg:pl-3">
+                  <div className="space-y-3">
+                    <Badge
+                      variant="outline"
+                      className="border-slate-200 bg-slate-50 text-[10px] font-medium text-slate-600"
+                    >
+                      {BRAND_NAME} · Staff workspace
+                    </Badge>
+                    <div>
+                      <h2 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">
+                        Your service dashboard
+                      </h2>
+                      <p className="mt-1 max-w-lg text-sm text-slate-500">
+                        Access students, leads, attendance, and every module assigned to your account.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <PortalStatTile label="Active modules" value={enabledModuleCount} />
+                    <PortalStatTile
+                      label="Signed in as"
+                      value={staffName.split(" ")[0] || "Staff"}
+                      hint={staffEmail || undefined}
+                    />
+                    <PortalStatTile
+                      label="Portal"
+                      value="Staff"
+                      valueClassName="text-[#2B7CD3]"
+                    />
+                  </div>
                 </div>
-              ))}
+              </section>
 
-              <div className="portal-dash-card border-l-[3px] border-l-indigo-500 p-6">
-                <div className="mb-4 flex size-11 items-center justify-center rounded-xl bg-indigo-50"><FileText className="size-5 text-indigo-600" /></div>
-                <h3 className="mb-4 font-semibold text-slate-900">Quick offer letter</h3>
-                <div className="space-y-3">
-                  <Input 
-                    placeholder="Student Email Address" 
-                    value={downloadEmail} 
-                    onChange={e => setDownloadEmail(e.target.value)}
-                    className="h-10 text-xs"
-                  />
-                  <Button 
-                    className="h-10 w-full gap-2 bg-slate-800 text-xs font-medium hover:bg-slate-900" 
-                    onClick={handleManualDownload}
-                    disabled={processing}
-                  >
-                    {processing ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}
-                    Download Letter
-                  </Button>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {services.map(
+                  (service) =>
+                    hasStaffPerm(permissions, service.id) && (
+                      <button
+                        key={service.tab}
+                        type="button"
+                        className={cn(
+                          staffStatCardClass,
+                          "cursor-pointer border-l-[3px] border-l-[#5AA3E6] p-6 text-left"
+                        )}
+                        onClick={() => setActiveTab(service.tab)}
+                      >
+                        <div
+                          className={`mb-4 flex size-11 items-center justify-center rounded-xl ${service.bg}`}
+                        >
+                          <service.icon className={`size-5 ${service.color}`} />
+                        </div>
+                        <h3 className="mb-1 font-semibold text-slate-900">{service.label}</h3>
+                        <p className="text-xs font-medium text-slate-500">
+                          Open {service.label.toLowerCase()}
+                        </p>
+                      </button>
+                    )
+                )}
+
+                <div className={cn(staffStatCardClass, "border-l-[3px] border-l-indigo-500 p-6")}>
+                  <div className="mb-4 flex size-11 items-center justify-center rounded-xl bg-indigo-50">
+                    <FileText className="size-5 text-indigo-600" />
+                  </div>
+                  <h3 className="mb-4 font-semibold text-slate-900">Quick offer letter</h3>
+                  <div className="space-y-3">
+                    <Input
+                      placeholder="Student email address"
+                      value={downloadEmail}
+                      onChange={(e) => setDownloadEmail(e.target.value)}
+                      className="h-10 border-slate-200 bg-white text-xs"
+                    />
+                    <Button
+                      className="h-10 w-full gap-2 bg-[#0a101c] text-xs font-medium hover:bg-slate-900"
+                      onClick={handleManualDownload}
+                      disabled={processing}
+                    >
+                      {processing ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Download className="size-3" />
+                      )}
+                      Download letter
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2058,8 +2087,7 @@ const StaffDashboard = () => {
           {activeTab === "requests" && (
             <StaffRequestsPanel isActive={activeTab === "requests"} currentUserId={currentUserId} />
           )}
-        </div>
-      </main>
+      </StaffShell>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-3xl p-0 overflow-hidden rounded-3xl border-none shadow-elegant">
@@ -2325,7 +2353,7 @@ const StaffDashboard = () => {
       <div className="fixed left-[-10000px] top-0 pointer-events-none" aria-hidden>
         {selectedUser && <OfferLetter ref={offerLetterRef} profile={selectedUser} />}
       </div>
-    </div>
+    </>
   );
 };
 
