@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth, UserRole } from "@/hooks/useAuth";
 import { SiteLoader } from "@/components/SiteLoader";
-import { isAdminAreaPath, isCollegeAreaPath, isReferralAreaPath, loginPathForProtectedRoute } from "@/lib/authRoutes";
+import { isAdminAreaPath, isCollegeAreaPath, isCompanyAreaPath, isReferralAreaPath, loginPathForProtectedRoute } from "@/lib/authRoutes";
 import { isAdminPortalSessionActive } from "@/lib/adminAuthSession";
 import { isStudentPortalSessionActive } from "@/lib/studentAuthSession";
 
@@ -48,6 +48,18 @@ export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) 
       const triedAdminArea = isAdminAreaPath(location.pathname);
       const triedCollegeArea = isCollegeAreaPath(location.pathname);
       const triedReferralArea = isReferralAreaPath(location.pathname);
+      const triedCompanyArea = isCompanyAreaPath(location.pathname);
+
+      if (triedCompanyArea && !roles.includes("company_partner")) {
+        if (roles.includes("super_admin")) return <Navigate to="/admin" replace />;
+        if (roles.includes("admin")) return <Navigate to="/admin" replace />;
+        if (roles.includes("staff")) return <Navigate to="/staff-dashboard" replace />;
+        if (roles.includes("college_admin")) return <Navigate to="/college/dashboard" replace />;
+        if (roles.includes("referral_partner")) return <Navigate to="/referral/dashboard" replace />;
+        if (roles.includes("cybercafe")) return <Navigate to="/cybercafe/dashboard" replace />;
+        if (roles.includes("student")) return <Navigate to="/dashboard" replace />;
+        return <Navigate to="/" replace />;
+      }
 
       if (triedReferralArea && !roles.includes("referral_partner")) {
         if (roles.includes("super_admin")) return <Navigate to="/admin" replace />;
@@ -80,6 +92,7 @@ export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) 
       if (roles.includes("staff")) return <Navigate to="/staff-dashboard" replace />;
       if (roles.includes("college_admin")) return <Navigate to="/college/dashboard" replace />;
       if (roles.includes("referral_partner")) return <Navigate to="/referral/dashboard" replace />;
+      if (roles.includes("company_partner")) return <Navigate to="/company/dashboard" replace />;
       if (roles.includes("cybercafe")) return <Navigate to="/cybercafe/dashboard" replace />;
       return <Navigate to="/dashboard" replace />;
     }

@@ -36,6 +36,8 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { StudentDashboardGate } from "./components/StudentDashboardGate";
 import CollegeDashboard from "./pages/CollegeDashboard.tsx";
 import ReferralPartnerDashboard from "./pages/ReferralPartnerDashboard.tsx";
+import CompanyRegister from "./pages/CompanyRegister.tsx";
+import CompanyDashboard from "./pages/CompanyDashboard.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import AuthConfirm from "./pages/AuthConfirm.tsx";
 import Blog from "./pages/Blog.tsx";
@@ -187,6 +189,16 @@ const App = () => (
             element={
               <ProtectedRoute allowedRoles={["referral_partner"]}>
                 <ReferralPartnerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/company/register" element={<CompanyRegister />} />
+          <Route path="/company/login" element={<Login />} />
+          <Route
+            path="/company/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["company_partner"]}>
+                <CompanyDashboard />
               </ProtectedRoute>
             }
           />

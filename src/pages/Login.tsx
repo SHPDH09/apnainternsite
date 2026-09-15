@@ -5,6 +5,8 @@ import {
   ADMIN_LOGIN_PATH,
   COLLEGE_DASHBOARD_PATH,
   COLLEGE_LOGIN_PATH,
+  COMPANY_LOGIN_PATH,
+  COMPANY_REGISTER_PATH,
   CYBER_CAFE_LEGACY_LOGIN_PATH,
   CYBER_CAFE_LOGIN_PATH,
   REFERRAL_DASHBOARD_PATH,
@@ -65,6 +67,8 @@ const Login = () => {
     location.pathname === CYBER_CAFE_LEGACY_LOGIN_PATH;
   const isCollegeLoginRoute = location.pathname === COLLEGE_LOGIN_PATH;
   const isReferralLoginRoute = location.pathname === REFERRAL_LOGIN_PATH;
+  const isCompanyLoginRoute = location.pathname === COMPANY_LOGIN_PATH;
+  const isPartnerPortalLogin = isReferralLoginRoute || isCompanyLoginRoute;
   // /cybercafe/login is partner portal login (no student-sign-out flow).
   const isAdminLoginRoute =
     location.pathname === ADMIN_LOGIN_PATH || isCyberCafeLoginRoute;
@@ -212,6 +216,7 @@ const Login = () => {
     const finish = await finishPortalLoginAfterAuth(supabase, user, {
       isCollegeLoginRoute,
       isReferralLoginRoute,
+      isCompanyLoginRoute,
       isAdminLoginRoute,
     });
     if (!finish.ok) {
@@ -355,12 +360,12 @@ const Login = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) { toast.error("Please enter credentials"); return; }
-    if (!isReferralLoginRoute && !captchaVerified) { toast.error("Please verify you are human"); return; }
+    if (!isPartnerPortalLogin && !captchaVerified) { toast.error("Please verify you are human"); return; }
     setLoginLoading(true);
     try {
       const rawInput = email.trim();
       const digitsOnly = rawInput.replace(/\D/g, "");
-      if ((isReferralLoginRoute || isCollegeLoginRoute) && digitsOnly.length >= 10 && !rawInput.includes("@")) {
+      if ((isPartnerPortalLogin || isCollegeLoginRoute) && digitsOnly.length >= 10 && !rawInput.includes("@")) {
         toast.error("Please sign in with the email address on your invitation (not a phone number).");
         return;
       }
@@ -399,6 +404,17 @@ const Login = () => {
           toast.error(
             "No referral promoter account found for this email. Use the promoter sign-in link you received, or contact Apna Intern support."
           );
+          return;
+        }
+      } else if (isCompanyLoginRoute) {
+        const { data: mayCompany, error: companyRpcErr } = await supabase.rpc(
+          "account_may_use_company_login",
+          { check_email: normalizedEmail }
+        );
+        if (companyRpcErr) {
+          console.warn("account_may_use_company_login RPC:", companyRpcErr.message);
+        } else if (mayCompany !== true) {
+          toast.error("No company account found for this email. Register your company first.");
           return;
         }
       } else if (!isAdminLoginRoute) {
@@ -768,6 +784,8 @@ const Login = () => {
       ? "College portal sign-in"
       : isReferralLoginRoute
         ? "Referral sign-in"
+        : isCompanyLoginRoute
+          ? "Company sign-in"
         : isAdminLoginRoute
           ? "Admin & partner sign-in"
           : "Student sign-in";
@@ -778,6 +796,8 @@ const Login = () => {
       ? "Use the email and College Admin ID from your invitation email"
       : isReferralLoginRoute
         ? "Enter the email and login ID from your invitation to see who registered with your referral link."
+        : isCompanyLoginRoute
+          ? "Sign in with the email and password you used during company registration."
         : isAdminLoginRoute
           ? "For administrators, sub-admins, staff, and cyber café partners"
           : "For enrolled students (intern dashboard)";
@@ -914,12 +934,12 @@ const Login = () => {
                   <Label
                     htmlFor="email"
                     className={
-                      isReferralLoginRoute || isStudentLoginRoute
+                      isPartnerPortalLogin || isStudentLoginRoute
                         ? "text-sm font-medium text-slate-700 ml-0.5"
                         : "text-xs font-black uppercase tracking-widest text-slate-500 ml-1"
                     }
                   >
-                    {isReferralLoginRoute
+                    {isPartnerPortalLogin
                       ? "Email"
                       : isStudentLoginRoute
                         ? "Email, phone, or registration / roll no."
@@ -929,7 +949,7 @@ const Login = () => {
                     id="email"
                     type="text"
                     placeholder={
-                      isReferralLoginRoute
+                      isPartnerPortalLogin
                         ? "you@example.com"
                         : isStudentLoginRoute
                           ? "Email, mobile, API/INT/2026/… or roll no."
@@ -947,7 +967,7 @@ const Login = () => {
                     <Label
                       htmlFor="pass"
                       className={
-                        isReferralLoginRoute || isStudentLoginRoute
+                        isPartnerPortalLogin || isStudentLoginRoute
                           ? "text-sm font-medium text-slate-700"
                           : "text-xs font-black uppercase tracking-widest text-slate-500"
                       }
@@ -958,7 +978,7 @@ const Login = () => {
                         ? "Login ID from your email"
                         : "Password"}
                     </Label>
-                    {!isCollegeLoginRoute && !isReferralLoginRoute ? (
+                    {!isCollegeLoginRoute && !isPartnerPortalLogin ? (
                       <button type="button" onClick={openResetDialog} className="text-[10px] font-black uppercase text-primary hover:underline">Forgot?</button>
                     ) : null}
                   </div>
@@ -981,7 +1001,7 @@ const Login = () => {
                   </div>
                 </div>
 
-                {!isReferralLoginRoute ? (
+                {!isPartnerPortalLogin ? (
                   <LoginSecurityCheck
                     verified={captchaVerified}
                     verifying={verifyingCaptcha}
@@ -992,10 +1012,10 @@ const Login = () => {
                 <Button 
                   type="submit" 
                   className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-xl shadow-glow transition-all disabled:opacity-50"
-                  disabled={loginLoading || (!isReferralLoginRoute && !captchaVerified)}
+                  disabled={loginLoading || (!isPartnerPortalLogin && !captchaVerified)}
                 >
                   {loginLoading ? <Loader2 className="size-5 animate-spin mr-2" /> : null}
-                  {isReferralLoginRoute ? "Sign in" : "Login"}
+                  {isPartnerPortalLogin ? "Sign in" : "Login"}
                 </Button>
               </form>
             )}
@@ -1016,6 +1036,15 @@ const Login = () => {
                   <Link to={STUDENT_LOGIN_PATH} className="text-primary font-semibold hover:underline">
                     Main sign-in
                   </Link>
+                </span>
+              ) : isCompanyLoginRoute ? (
+                <span className="block space-y-1">
+                  <span>
+                    New company?{" "}
+                    <Link to={COMPANY_REGISTER_PATH} className="text-primary font-semibold hover:underline">
+                      Register here
+                    </Link>
+                  </span>
                 </span>
               ) : isAdminLoginRoute ? (
                 <>

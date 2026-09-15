@@ -41,6 +41,11 @@ export const PARTNER_DASHBOARD_PATH = "/partner/dashboard";
 export const CYBER_CAFE_LOGIN_PATH = "/cybercafe/login";
 export const CYBER_CAFE_DASHBOARD_PATH = "/cybercafe/dashboard";
 
+/** Company collaboration partners. */
+export const COMPANY_REGISTER_PATH = "/company/register";
+export const COMPANY_LOGIN_PATH = "/company/login";
+export const COMPANY_DASHBOARD_PATH = "/company/dashboard";
+
 /** Legacy URL (hyphenated); kept for redirects from old bookmarks. */
 export const CYBER_CAFE_LEGACY_LOGIN_PATH = "/cyber-cafe/login";
 
@@ -57,6 +62,8 @@ const COLLEGE_AREA_PREFIXES = [COLLEGE_DASHBOARD_PATH] as const;
 
 const REFERRAL_AREA_PREFIXES = [REFERRAL_DASHBOARD_PATH] as const;
 
+const COMPANY_AREA_PREFIXES = [COMPANY_DASHBOARD_PATH] as const;
+
 export function isReferralAreaPath(pathname: string): boolean {
   return REFERRAL_AREA_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
@@ -71,6 +78,10 @@ export function isAdminAreaPath(pathname: string): boolean {
 
 export function isCyberCafeAreaPath(pathname: string): boolean {
   return CYBER_CAFE_AREA_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+export function isCompanyAreaPath(pathname: string): boolean {
+  return COMPANY_AREA_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 /** Partner marketing + login pages — nav "Login" should not go to student sign-in. */
@@ -117,6 +128,7 @@ export function buildReferralLoginLink(): string {
 
 export function loginPathForProtectedRoute(pathname: string): string {
   if (isReferralAreaPath(pathname)) return REFERRAL_LOGIN_PATH;
+  if (isCompanyAreaPath(pathname)) return COMPANY_LOGIN_PATH;
   if (isCollegeAreaPath(pathname)) return COLLEGE_LOGIN_PATH;
   if (isCyberCafeAreaPath(pathname)) return CYBER_CAFE_LOGIN_PATH;
   return isAdminAreaPath(pathname) ? ADMIN_LOGIN_PATH : STUDENT_LOGIN_PATH;
@@ -129,6 +141,8 @@ export function isPublicLoginPath(pathname: string): boolean {
     pathname === COLLEGE_LOGIN_PATH ||
     pathname === REFERRAL_LOGIN_PATH ||
     pathname === CYBER_CAFE_LOGIN_PATH ||
-    pathname === CYBER_CAFE_LEGACY_LOGIN_PATH
+    pathname === CYBER_CAFE_LEGACY_LOGIN_PATH ||
+    pathname === COMPANY_LOGIN_PATH ||
+    pathname === COMPANY_REGISTER_PATH
   );
 }
