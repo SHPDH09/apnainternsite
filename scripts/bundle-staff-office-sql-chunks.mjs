@@ -26,13 +26,15 @@ function emitChunks(constName, fnName, sql) {
 
 const ensureSql = readSql("aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql");
 const adminSql = readSql("aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql");
+const selfSql = readSql("aws/scripts/88-rds-staff-office-self-attendance-rpc.sql");
 
 const body = `/** Bundled staff office SQL for Vercel (generated — run scripts/bundle-staff-office-sql-chunks.mjs). */
 ${emitChunks("STAFF_OFFICE_ENSURE_SCHEMA_CHUNKS", "staffOfficeEnsureSchemaSql", ensureSql)}
 ${emitChunks("STAFF_OFFICE_ADMIN_RPC_CHUNKS", "staffOfficeAdminRpcSql", adminSql)}
+${emitChunks("STAFF_OFFICE_SELF_RPC_CHUNKS", "staffOfficeSelfAttendanceRpcSql", selfSql)}
 /** @deprecated Use ensure + call ensure() + admin RPCs instead of one-shot apply. */
 export function staffOfficeBootstrapSql(): string {
-  return staffOfficeEnsureSchemaSql() + staffOfficeAdminRpcSql();
+  return staffOfficeEnsureSchemaSql() + staffOfficeAdminRpcSql() + staffOfficeSelfAttendanceRpcSql();
 }
 export const STAFF_OFFICE_REQUIRED_RPCS = [
   "admin_list_staff_attendance_offices",
@@ -41,6 +43,12 @@ export const STAFF_OFFICE_REQUIRED_RPCS = [
   "admin_assign_staff_office",
   "admin_remove_staff_office_assignment",
   "admin_list_staff_office_assignments",
+];
+export const STAFF_SELF_OFFICE_REQUIRED_RPCS = [
+  "_staff_office_for_employee",
+  "staff_self_attendance_status",
+  "staff_self_check_in",
+  "staff_self_check_out",
 ];
 `;
 

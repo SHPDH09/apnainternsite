@@ -7,6 +7,7 @@ const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const ENSURE_SQL = "aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql";
 const ADMIN_RPC_SQL = "aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql";
 const ADMIN_RPC_HOTFIX_SQL = "aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql";
+const STAFF_SELF_RPC_SQL = "aws/scripts/88-rds-staff-office-self-attendance-rpc.sql";
 const OFFICES_SQL = "aws/scripts/82-rds-staff-attendance-offices.sql";
 
 const OFFICE_TABLES = new Set(["staff_attendance_offices", "staff_office_assignments"]);
@@ -250,12 +251,16 @@ async function applyAdminOfficeRpcSql(): Promise<boolean> {
 
   if (!(await rpcsReady())) {
     const root = path.resolve(moduleDir, "../..");
-    for (const rel of [ENSURE_SQL, ADMIN_RPC_SQL, ADMIN_RPC_HOTFIX_SQL]) {
+    const retryFiles = [ENSURE_SQL, ADMIN_RPC_SQL, ADMIN_RPC_HOTFIX_SQL];
+    for (const rel of retryFiles) {
       const fp = path.join(root, rel);
       if (!fs.existsSync(fp)) continue;
       try {
         await query(fs.readFileSync(fp, "utf8"));
         applied = true;
+        if (rel === ENSURE_SQL) {
+          await query("SELECT public._ensure_staff_attendance_office_schema()");
+        }
       } catch (err) {
         console.warn("[staff-attendance-offices-bootstrap] retry sql:", rel, String(err).slice(0, 180));
       }
@@ -267,9 +272,18 @@ async function applyAdminOfficeRpcSql(): Promise<boolean> {
 }
 
 /** Apply ensure + admin RPC SQL (85 then 83). Required for office save/list. */
+async function ensureStaffSelfOfficeRpcs(): Promise<void> {
+  try {
+    await runSqlFile(STAFF_SELF_RPC_SQL);
+  } catch (err) {
+    console.warn("[staff-attendance-offices-bootstrap] staff self rpc:", String(err).slice(0, 240));
+  }
+}
+
 async function ensureAdminOfficeRpcs(): Promise<void> {
   await ensureCoreTables();
   await applyAdminOfficeRpcSql();
+  await ensureStaffSelfOfficeRpcs();
 
   if (!(await rpcsReady())) {
     throw new Error("Could not apply staff attendance office admin RPC SQL");
