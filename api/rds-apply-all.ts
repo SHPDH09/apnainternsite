@@ -54,12 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const { applyStaffOfficeBootstrap } = await import("./staffOfficeApply.js");
-    const { applyStaffSalaryBootstrap } = await import("./staffSalaryApply.js");
     const pg = await import("pg");
     const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
     try {
       await applyStaffOfficeBootstrap(pool);
-      await applyStaffSalaryBootstrap(pool);
       return res.status(200).json({
         ok: true,
         scope: "staff_attendance_offices,staff_salary",

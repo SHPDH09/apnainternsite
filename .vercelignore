@@ -19,8 +19,6 @@ api/**
 !api/staff-office-rpc.ts
 !api/staffOfficeSqlChunks.ts
 !api/staffOfficeApply.ts
-!api/staffSalaryApply.ts
-!api/staffSalarySqlChunks.ts
 !api/rds-apply-all.ts
 !api/lib/**
 
