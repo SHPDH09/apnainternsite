@@ -170,9 +170,27 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.admin_list_staff_office_assignments()
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  PERFORM public._assert_admin_attendance_offices();
+  RETURN coalesce(
+    (SELECT jsonb_agg(to_jsonb(a) ORDER BY a.assigned_at DESC)
+     FROM public.staff_office_assignments a),
+    '[]'::jsonb
+  );
+END;
+$$;
+
 GRANT EXECUTE ON FUNCTION public.admin_upsert_staff_attendance_office(
   uuid, text, text, double precision, double precision, integer, numeric, boolean, boolean, boolean
 ) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_delete_staff_attendance_office(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_assign_staff_office(uuid, uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_remove_staff_office_assignment(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_list_staff_office_assignments() TO authenticated;

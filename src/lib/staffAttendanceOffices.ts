@@ -70,9 +70,9 @@ export async function deleteStaffAttendanceOffice(id: string): Promise<void> {
 }
 
 export async function listStaffOfficeAssignments(): Promise<StaffOfficeAssignment[]> {
-  const { data, error } = await supabase.from("staff_office_assignments").select("*");
+  const { data, error } = await supabase.rpc("admin_list_staff_office_assignments");
   if (error) throw new Error(rpcErrorMessage(error));
-  return (data || []) as StaffOfficeAssignment[];
+  return (Array.isArray(data) ? data : []) as StaffOfficeAssignment[];
 }
 
 export async function assignStaffOffice(input: {

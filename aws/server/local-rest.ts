@@ -657,13 +657,15 @@ export async function restRpc(req: Request, res: Response) {
         name === "admin_upsert_staff_attendance_office" ||
         name === "admin_delete_staff_attendance_office" ||
         name === "admin_assign_staff_office" ||
-        name === "admin_remove_staff_office_assignment";
+        name === "admin_remove_staff_office_assignment" ||
+        name === "admin_list_staff_office_assignments";
       const shouldBootstrapOffices =
         isOfficeRpc &&
         (code === "42883" ||
           /could not find the function/i.test(msg) ||
-          /function public\.admin_upsert_staff_attendance_office does not exist/i.test(msg) ||
-          /relation .*staff_attendance_offices.* does not exist/i.test(msg));
+          /function public\.admin_(upsert_staff_attendance_office|list_staff_office_assignments) does not exist/i.test(msg) ||
+          /relation .*staff_attendance_offices.* does not exist/i.test(msg) ||
+          /relation .*staff_office_assignments.* does not exist/i.test(msg));
 
       if (!shouldBootstrapRegistration && !shouldBootstrapUpload && !shouldBootstrapOffices) {
         throw firstErr;

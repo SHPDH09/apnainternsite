@@ -304,6 +304,10 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["p_employee_id"],
     auth: "admin",
   },
+  admin_list_staff_office_assignments: {
+    args: [],
+    auth: "admin",
+  },
   admin_generate_staff_salary: {
     args: ["p_employee_id", "p_salary_month"],
     auth: "admin",
