@@ -83,6 +83,14 @@ BEGIN
 
   IF to_regclass('public.employee_attendance') IS NOT NULL THEN
     ALTER TABLE public.employee_attendance
+      ADD COLUMN IF NOT EXISTS check_in_latitude double precision,
+      ADD COLUMN IF NOT EXISTS check_in_longitude double precision,
+      ADD COLUMN IF NOT EXISTS check_out_latitude double precision,
+      ADD COLUMN IF NOT EXISTS check_out_longitude double precision,
+      ADD COLUMN IF NOT EXISTS check_in_face_score numeric,
+      ADD COLUMN IF NOT EXISTS check_out_face_score numeric,
+      ADD COLUMN IF NOT EXISTS check_in_method text,
+      ADD COLUMN IF NOT EXISTS check_out_method text,
       ADD COLUMN IF NOT EXISTS office_id uuid REFERENCES public.staff_attendance_offices(id) ON DELETE SET NULL,
       ADD COLUMN IF NOT EXISTS check_in_distance_m numeric,
       ADD COLUMN IF NOT EXISTS check_out_distance_m numeric,

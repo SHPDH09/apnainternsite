@@ -82,8 +82,8 @@ export async function handleStaffOfficeRpcAction(input: {
   args?: Record<string, unknown>;
 }): Promise<unknown> {
   const name = String(input.name || "").trim();
-  const argOrder = STAFF_OFFICE_RPCS[name];
-  if (!argOrder) throw new Error(`Unknown staff office RPC: ${name}`);
+  const argOrder = STAFF_ATTENDANCE_RPCS[name];
+  if (!argOrder) throw new Error(`Unknown staff attendance RPC: ${name}`);
   await applyStaffOfficeSql(input.databaseUrl);
   return callStaffOfficeRpc(
     input.databaseUrl,
