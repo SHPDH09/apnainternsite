@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import {
   Calendar,
   ClipboardList,
+  IndianRupee,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -98,6 +99,7 @@ function StaffNav({
           { tab: "profile", label: "Profile", Icon: User },
           { tab: "security", label: "Security", Icon: Shield },
           { tab: "my-attendance", label: "My Attendance", Icon: Calendar },
+          { tab: "salary-slips", label: "Salary Slips", Icon: IndianRupee },
           { tab: "requests", label: "Requests", Icon: ClipboardList },
         ] as const
       ).map((item) => (

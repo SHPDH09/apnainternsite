@@ -180,6 +180,20 @@ export async function upsertStaffSalarySetup(input: {
   return data as StaffSalarySetupRow;
 }
 
+/** Paid salary slips for the signed-in staff member (RLS: employee_id = auth.uid()). */
+export async function listMyPaidSalarySlips(): Promise<StaffSalarySlipRow[]> {
+  await ensureStaffSalarySchema();
+  const { data, error } = await supabase
+    .from("staff_salary_slips")
+    .select("*")
+    .eq("status", "paid")
+    .order("salary_month", { ascending: false })
+    .order("paid_at", { ascending: false });
+
+  if (error) throw new Error(rpcError(error));
+  return (data || []) as StaffSalarySlipRow[];
+}
+
 export async function listStaffSalarySlips(opts?: {
   salaryMonth?: string;
   employeeId?: string;
