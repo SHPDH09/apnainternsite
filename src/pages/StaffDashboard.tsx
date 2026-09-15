@@ -2082,7 +2082,10 @@ const StaffDashboard = () => {
             />
           )}
           {activeTab === "my-attendance" && (
-            <StaffOwnAttendancePanel isActive={activeTab === "my-attendance"} />
+            <StaffOwnAttendancePanel
+              isActive={activeTab === "my-attendance"}
+              profileImageUrl={staffProfile?.profile_image_url}
+            />
           )}
           {activeTab === "requests" && (
             <StaffRequestsPanel isActive={activeTab === "requests"} currentUserId={currentUserId} />

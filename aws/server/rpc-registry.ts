@@ -265,6 +265,18 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["target_id"],
     auth: "admin",
   },
+  staff_self_attendance_status: {
+    args: [],
+    auth: "auth",
+  },
+  staff_self_check_in: {
+    args: ["p_latitude", "p_longitude", "p_face_score"],
+    auth: "auth",
+  },
+  staff_self_check_out: {
+    args: ["p_latitude", "p_longitude", "p_face_score"],
+    auth: "auth",
+  },
   admin_student_data_upload_save_history: {
     args: [
       "p_upload_id",

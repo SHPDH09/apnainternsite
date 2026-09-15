@@ -42,6 +42,7 @@ import {
 } from "@/lib/staffSessions";
 import type { AdminStaffProfile } from "@/lib/staffProfile";
 import { resolveStorageUrl } from "@/lib/storageUrl";
+import { StaffGeoFaceAttendanceMark } from "@/components/staff/StaffGeoFaceAttendanceMark";
 
 type ProfileProps = {
   profile: AdminStaffProfile | null;
@@ -362,9 +363,13 @@ export function StaffSecurityPanel({ isActive = true, onSignOutCurrent }: Securi
 
 type OwnAttendanceProps = {
   isActive?: boolean;
+  profileImageUrl?: string | null;
 };
 
-export function StaffOwnAttendancePanel({ isActive = true }: OwnAttendanceProps) {
+export function StaffOwnAttendancePanel({
+  isActive = true,
+  profileImageUrl,
+}: OwnAttendanceProps) {
   const [rows, setRows] = useState<EmployeeAttendanceRow[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -395,8 +400,15 @@ export function StaffOwnAttendancePanel({ isActive = true }: OwnAttendanceProps)
         <h2 className="text-xl font-black flex items-center gap-2">
           <CalendarDays className="size-5 text-primary" /> My Attendance
         </h2>
-        <p className="text-sm text-muted-foreground mt-1">Your attendance history (read-only).</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Mark check-in at 10:00 AM and check-out at 6:00 PM with face + location verification.
+        </p>
       </div>
+      <StaffGeoFaceAttendanceMark
+        profileImageUrl={profileImageUrl}
+        isActive={isActive}
+        onMarked={() => void load()}
+      />
       <Card className="border-none shadow-elegant overflow-hidden">
         <Table>
           <TableHeader>
