@@ -1,32 +1,27 @@
 #!/usr/bin/env node
-/** Regenerate Vercel-safe self-contained staff office API files from bundled SQL. */
+/** Regenerate self-contained Vercel staff-office-rpc.ts from SQL script 87. */
 import fs from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
-const bundledPath = path.join(root, "api/lib/staffOfficeSqlBundled.ts");
-const bundled = fs.readFileSync(bundledPath, "utf8");
-const sqlMatch = bundled.match(/export const STAFF_OFFICE_BOOTSTRAP_SQL = ([\s\S]+);\s*$/);
-if (!sqlMatch) {
-  console.error("Could not parse STAFF_OFFICE_BOOTSTRAP_SQL from", bundledPath);
+const sql = fs.readFileSync(
+  path.join(root, "aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql"),
+  "utf8"
+);
+const chunks = [];
+for (let i = 0; i < sql.length; i += 1800) chunks.push(sql.slice(i, i + 1800));
+
+const templatePath = path.join(root, "api/staff-office-rpc.ts");
+const template = fs.readFileSync(templatePath, "utf8");
+if (!template.includes("Fully self-contained for Vercel")) {
+  console.error("api/staff-office-rpc.ts template changed — update build script manually");
   process.exit(1);
 }
-const sqlConst = sqlMatch[1];
 
-const rpcHandler = fs.readFileSync(path.join(root, "api/staff-office-rpc.ts"), "utf8");
-if (!rpcHandler.includes("Self-contained for Vercel")) {
-  console.error("api/staff-office-rpc.ts template changed — update build-staff-office-vercel-api.mjs");
-  process.exit(1);
-}
-
-// Replace SQL constant in both files
-for (const file of ["api/staff-office-rpc.ts", "api/ensure-staff-attendance-offices.ts"]) {
-  const fp = path.join(root, file);
-  let src = fs.readFileSync(fp, "utf8");
-  src = src.replace(
-    /const STAFF_OFFICE_BOOTSTRAP_SQL = [\s\S]+?;\n\n/,
-    `const STAFF_OFFICE_BOOTSTRAP_SQL = ${sqlConst};\n\n`
-  );
-  fs.writeFileSync(fp, src);
-  console.log("Updated", file);
-}
+const chunksCode = `const SQL_CHUNKS = ${JSON.stringify(chunks)};\nfunction bootstrapSql() { return SQL_CHUNKS.join(""); }`;
+const updated = template.replace(
+  /const SQL_CHUNKS = \[[\s\S]*?\nfunction bootstrapSql\(\) \{ return SQL_CHUNKS\.join\(""\); \}/,
+  chunksCode
+);
+fs.writeFileSync(templatePath, updated);
+console.log("Updated api/staff-office-rpc.ts with", chunks.length, "SQL chunks");
