@@ -211,6 +211,41 @@ async function sendBulkViaSesApi(to: string, subject: string, html: string): Pro
   );
 }
 
+function canUseSesForOtp(): boolean {
+  if (process.env.USE_SES_API === 'false') return false;
+  return Boolean(
+    process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
+  );
+}
+
+async function sendOtpViaSesApi(
+  recipient: string,
+  mailContent: { subject: string; html: string; text: string }
+): Promise<string> {
+  const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
+  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+  const client = new SESv2Client({ region });
+  const fromAddress = resolveMailFromAddress();
+  const result = await client.send(
+    new SendEmailCommand({
+      FromEmailAddress: `Apna Intern <${fromAddress}>`,
+      Destination: { ToAddresses: [recipient] },
+      Content: {
+        Simple: {
+          Subject: { Data: mailContent.subject, Charset: 'UTF-8' },
+          Body: {
+            Html: { Data: mailContent.html, Charset: 'UTF-8' },
+            Text: { Data: mailContent.text, Charset: 'UTF-8' },
+          },
+        },
+      },
+    })
+  );
+  const messageId = String(result.MessageId || '').trim();
+  if (!messageId) throw new Error('SES accepted send but returned no MessageId');
+  return messageId;
+}
+
 async function sendOtpViaSmtp(
   recipient: string,
   mailContent: { subject: string; html: string; text: string }
@@ -637,30 +672,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const mailContent = buildOtpMailContent(code, otpPurpose);
 
       try {
-        const messageId = await sendOtpViaSmtp(recipient, mailContent);
+        let messageId = '';
+        let channel: 'smtp' | 'ses' = 'smtp';
+
+        try {
+          messageId = await sendOtpViaSmtp(recipient, mailContent);
+        } catch (smtpErr) {
+          console.warn('SMTP OTP failed, trying Amazon SES:', smtpErr instanceof Error ? smtpErr.message : smtpErr);
+          if (canUseSesForOtp()) {
+            messageId = await sendOtpViaSesApi(recipient, mailContent);
+            channel = 'ses';
+          } else {
+            throw smtpErr;
+          }
+        }
+
         if (!String(messageId || '').trim()) {
           throw new Error('Email server did not confirm delivery — no message id returned');
         }
 
-        // Store OTP only after the mail server confirms acceptance.
         await storeOtpInRds(recipient, code);
 
         return res.status(200).json({
           success: true,
           emailSent: true,
           email: recipient,
-          channel: 'smtp',
-          message: `Verification code sent to ${recipient} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
+          channel,
+          message:
+            channel === 'ses'
+              ? `Verification code sent to ${recipient} via Amazon SES. Check Inbox and Spam/Promotions.`
+              : `Verification code sent to ${recipient} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
           messageId,
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        return res.status(isSmtpAuthError(e) ? 502 : 500).json({
+        const sandbox = isSesIdentityNotVerifiedError(e);
+        return res.status(isSmtpAuthError(e) ? 502 : sandbox ? 503 : 500).json({
           success: false,
           emailSent: false,
-          message: isSmtpAuthError(e)
-            ? 'Email server authentication failed (SMTP 535)'
-            : 'Failed to send verification email',
+          message: sandbox
+            ? `Amazon SES sandbox: ${recipient} is not verified. Add it in AWS SES (ap-south-1) → Verified identities, then retry.`
+            : isSmtpAuthError(e)
+              ? 'Email server authentication failed (SMTP 535)'
+              : msg || 'Failed to send verification email',
           error: formatSmtpError(e, { to: recipient, from: resolveMailFromAddress() }),
         });
       }
