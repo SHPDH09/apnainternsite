@@ -14,7 +14,7 @@ type SmtpCreds = {
 
 type OtpSendResult = {
   messageId: string;
-  channel: 'smtp';
+  channel: 'smtp' | 'ses';
 };
 
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
@@ -277,6 +277,54 @@ function isMailboxSuspendedError(e: unknown): boolean {
   );
 }
 
+function isSesSandboxError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    raw.includes('not verified') ||
+    raw.includes('messagerejected') ||
+    raw.includes('sandbox') ||
+    raw.includes('email address is not verified')
+  );
+}
+
+function canUseSesForOtp(): boolean {
+  if (process.env.USE_SES_API === 'false') return false;
+  return Boolean(
+    process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
+  );
+}
+
+async function sendOtpViaSesApi(
+  to: string,
+  mail: { subject: string; html: string; text: string }
+): Promise<string> {
+  const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
+  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+  const client = new SESv2Client({ region });
+  const fromAddress = resolveMailFromAddress();
+
+  const result = await client.send(
+    new SendEmailCommand({
+      FromEmailAddress: `Apna Intern <${fromAddress}>`,
+      Destination: { ToAddresses: [to] },
+      ReplyToAddresses: [fromAddress],
+      Content: {
+        Simple: {
+          Subject: { Data: mail.subject, Charset: 'UTF-8' },
+          Body: {
+            Html: { Data: mail.html, Charset: 'UTF-8' },
+            Text: { Data: mail.text, Charset: 'UTF-8' },
+          },
+        },
+      },
+    })
+  );
+
+  const messageId = String(result.MessageId || '').trim();
+  if (!messageId) throw new Error('SES accepted send but returned no MessageId');
+  return messageId;
+}
+
 async function sendOtpViaSmtpWithCreds(
   to: string,
   mail: { subject: string; html: string; text: string },
@@ -363,15 +411,11 @@ async function trySmtpCandidates(
   return null;
 }
 
-const HOSTINGER_OUTBOUND_MESSAGE =
-  'OTP could not be sent — email mailbox is suspended or outbound SMTP is disabled for info@apnaintern.in. ' +
-  'In Hostinger → Emails → Manage → re-enable outbound/SMTP sending for info@apnaintern.in.';
-
 async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<OtpSendResult> {
   const mail = buildOtpMail(otp, purpose);
   const errors: string[] = [];
 
-  // Primary: mailbox app-password SMTP (Hostinger info@apnaintern.in or Gmail from env).
+  // Primary: Hostinger mailbox SMTP (when outbound is enabled).
   const mailboxResult = await trySmtpCandidates(
     await collectSmtpCandidatesForOtp(),
     email,
@@ -380,13 +424,25 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
   );
   if (mailboxResult) return mailboxResult;
 
-  if (errors.some((e) => isMailboxSuspendedError(new Error(e)))) {
-    throw new Error(HOSTINGER_OUTBOUND_MESSAGE);
+  // Fallback: Amazon SES (200/day sandbox — recipient must be verified in SES until Production Access).
+  if (canUseSesForOtp()) {
+    try {
+      const messageId = await sendOtpViaSesApi(email, mail);
+      return { messageId, channel: 'ses' };
+    } catch (sesErr) {
+      const msg = sesErr instanceof Error ? sesErr.message : String(sesErr);
+      errors.push(`SES: ${msg}`);
+      if (isSesSandboxError(sesErr)) {
+        throw new Error(
+          `Amazon SES sandbox: ${email} is not verified. Open AWS Console → SES (ap-south-1) → Verified identities → Create identity → add ${email}, click the link AWS emails you, then retry OTP. Sandbox limit: 200 emails/day.`
+        );
+      }
+    }
   }
 
   throw new Error(
     errors.join(' | ') ||
-      'Failed to send verification email via SMTP. Check SMTP_USER and SMTP_PASS in Vercel project settings.'
+      'Failed to send verification email. Hostinger SMTP is disabled and Amazon SES is not configured.'
   );
 }
 
@@ -419,13 +475,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const delivery = await sendOtpEmail(email, otp, purpose);
     await storeOtp(email, otp);
 
+    const viaSes = delivery.channel === 'ses';
     return res.status(200).json({
       success: true,
       emailSent: true,
       email,
-      channel: 'smtp',
-      smtpProvider: 'smtp',
-      message: `Verification code sent to ${email} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
+      channel: delivery.channel,
+      smtpProvider: viaSes ? 'ses' : 'smtp',
+      message: viaSes
+        ? `Verification code sent to ${email} via Amazon SES from info@apnaintern.in. Check Inbox and Spam/Promotions.`
+        : `Verification code sent to ${email} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
       messageId: delivery.messageId,
     });
   } catch (e: unknown) {

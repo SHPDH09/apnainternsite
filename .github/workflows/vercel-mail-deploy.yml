@@ -52,7 +52,7 @@ jobs:
             "SMTP_USER=${SMTP_USER}" \
             "SMTP_PORT=587" \
             "MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS}" \
-            "USE_SES_API=false"; do
+            "USE_SES_API=true"; do
             key="${pair%%=*}"
             val="${pair#*=}"
             printf '%s' "$val" | npx vercel env add "$key" production --token "$VERCEL_TOKEN" --yes 2>/dev/null || \
