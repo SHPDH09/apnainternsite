@@ -31,6 +31,7 @@ import { ensureAllCmsTables } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import { ensureProjectReportSchema } from "./project-report-bootstrap";
+import { ensureStaffAttendanceOfficesSchema } from "./staff-attendance-offices-bootstrap";
 import {
   authLogout,
   authSettings,
@@ -164,6 +165,12 @@ async function buildApp(): Promise<Express> {
       }
     } catch (err) {
       console.warn("[project-report-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      await ensureStaffAttendanceOfficesSchema();
+      console.log("[staff-attendance-offices-bootstrap] staff office admin RPCs ready");
+    } catch (err) {
+      console.warn("[staff-attendance-offices-bootstrap] startup ensure failed:", err);
     }
     if (process.env.AWS_LAMBDA_FUNCTION_NAME && process.env.RDS_APPLY_ON_START !== "false") {
       void (async () => {

@@ -7,6 +7,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import {
+  STAFF_OFFICE_REQUIRED_RPCS,
+  staffOfficeRpcCheckSql,
+  staffOfficeRpcsReady,
+} from "./rds-sql-order.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const files = [
@@ -14,6 +19,7 @@ const files = [
   "aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql",
   "aws/scripts/84-rds-staff-office-assignments-fix.sql",
   "aws/scripts/82-rds-staff-attendance-offices.sql",
+  "aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql",
 ];
 
 const url = process.env.DATABASE_URL?.trim();
@@ -49,15 +55,14 @@ for (const rel of files) {
     }
   }
 }
-const { rows } = await client.query(
-  `SELECT EXISTS (
-     SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-     WHERE n.nspname = 'public' AND p.proname = 'admin_upsert_staff_attendance_office'
-   ) AS ok`
-);
+
+const { rows } = await client.query(staffOfficeRpcCheckSql());
 await client.end();
-if (!rows[0]?.ok) {
-  console.error("FAIL: admin_upsert_staff_attendance_office still missing after apply");
+
+if (!staffOfficeRpcsReady(rows[0])) {
+  const missing = STAFF_OFFICE_REQUIRED_RPCS.filter((name) => !rows[0]?.[name]);
+  console.error("FAIL: staff office admin RPCs still missing:", missing.join(", "));
   process.exit(1);
 }
-console.log("Done — staff attendance offices schema + admin RPCs applied.");
+
+console.log("Done — all staff attendance office admin RPCs applied.");

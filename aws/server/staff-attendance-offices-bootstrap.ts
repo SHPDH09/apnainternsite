@@ -6,12 +6,16 @@ import { query } from "./db.js";
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const ENSURE_SQL = "aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql";
 const ADMIN_RPC_SQL = "aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql";
+const ADMIN_RPC_HOTFIX_SQL = "aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql";
 const OFFICES_SQL = "aws/scripts/82-rds-staff-attendance-offices.sql";
 
 const OFFICE_TABLES = new Set(["staff_attendance_offices", "staff_office_assignments"]);
 const OFFICE_RPCS = [
-  "admin_upsert_staff_attendance_office",
   "admin_list_staff_attendance_offices",
+  "admin_upsert_staff_attendance_office",
+  "admin_delete_staff_attendance_office",
+  "admin_assign_staff_office",
+  "admin_remove_staff_office_assignment",
   "admin_list_staff_office_assignments",
 ] as const;
 
@@ -39,7 +43,9 @@ export function isStaffAttendanceOfficesRpcMissingError(err: unknown): boolean {
   return (
     code === "42883" ||
     /could not find the function/i.test(msg) ||
-    /admin_upsert_staff_attendance_office does not exist/i.test(msg) ||
+    /admin_(list|upsert|delete)_staff_attendance_office does not exist/i.test(msg) ||
+    /admin_(assign|remove)_staff_office/i.test(msg) ||
+    /admin_list_staff_office_assignments does not exist/i.test(msg) ||
     /_ensure_staff_attendance_office_schema does not exist/i.test(msg) ||
     /relation .*staff_attendance_offices.* does not exist/i.test(msg) ||
     /relation .*staff_office_assignments.* does not exist/i.test(msg)
@@ -187,27 +193,55 @@ async function runSqlFile(rel: string): Promise<boolean> {
   return true;
 }
 
-/** Apply ensure + admin RPC SQL (85 then 83). Required for office save/list. */
-async function ensureAdminOfficeRpcs(): Promise<void> {
-  await ensureCoreTables();
+/** Apply admin RPC SQL one function at a time so partial failures still create missing RPCs. */
+async function runAdminRpcStatements(): Promise<boolean> {
+  const fp = resolveSqlPath(ADMIN_RPC_SQL);
+  if (!fs.existsSync(fp)) return false;
 
+  const sql = fs.readFileSync(fp, "utf8");
+  const chunks = sql.split(/\n(?=CREATE OR REPLACE FUNCTION |GRANT EXECUTE ON FUNCTION )/);
   let applied = false;
-  try {
-    if (await runSqlFile(ENSURE_SQL)) applied = true;
-  } catch (err) {
-    console.warn("[staff-attendance-offices-bootstrap] ensure sql:", String(err).slice(0, 240));
+
+  for (const chunk of chunks) {
+    const stmt = chunk.trim();
+    if (!stmt || stmt.startsWith("--")) continue;
+    try {
+      await query(stmt.endsWith(";") ? stmt : `${stmt};`);
+      applied = true;
+    } catch (err) {
+      const msg = String((err as { message?: string })?.message || err || "");
+      if (!/already exists|duplicate key|does not exist|42P13|42710|42701/i.test(msg)) {
+        console.warn("[staff-attendance-offices-bootstrap] admin rpc stmt:", msg.slice(0, 180));
+      }
+    }
   }
 
-  try {
-    if (await runSqlFile(ADMIN_RPC_SQL)) applied = true;
-  } catch (err) {
-    console.warn("[staff-attendance-offices-bootstrap] admin rpc sql:", String(err).slice(0, 240));
+  return applied;
+}
+
+async function applyAdminOfficeRpcSql(): Promise<boolean> {
+  let applied = false;
+
+  for (const rel of [ENSURE_SQL, ADMIN_RPC_SQL, ADMIN_RPC_HOTFIX_SQL]) {
+    try {
+      if (await runSqlFile(rel)) applied = true;
+    } catch (err) {
+      console.warn("[staff-attendance-offices-bootstrap] sql:", rel, String(err).slice(0, 240));
+    }
+    if (await rpcsReady()) return true;
   }
 
   if (!(await rpcsReady())) {
-    // Last resort: run bundled files from repo root even if moduleDir sql/ missed a file
+    try {
+      if (await runAdminRpcStatements()) applied = true;
+    } catch (err) {
+      console.warn("[staff-attendance-offices-bootstrap] stmt apply:", String(err).slice(0, 240));
+    }
+  }
+
+  if (!(await rpcsReady())) {
     const root = path.resolve(moduleDir, "../..");
-    for (const rel of [ENSURE_SQL, ADMIN_RPC_SQL]) {
+    for (const rel of [ENSURE_SQL, ADMIN_RPC_SQL, ADMIN_RPC_HOTFIX_SQL]) {
       const fp = path.join(root, rel);
       if (!fs.existsSync(fp)) continue;
       try {
@@ -216,10 +250,19 @@ async function ensureAdminOfficeRpcs(): Promise<void> {
       } catch (err) {
         console.warn("[staff-attendance-offices-bootstrap] retry sql:", rel, String(err).slice(0, 180));
       }
+      if (await rpcsReady()) return true;
     }
   }
 
-  if (!applied && !(await rpcsReady())) {
+  return applied;
+}
+
+/** Apply ensure + admin RPC SQL (85 then 83). Required for office save/list. */
+async function ensureAdminOfficeRpcs(): Promise<void> {
+  await ensureCoreTables();
+  await applyAdminOfficeRpcSql();
+
+  if (!(await rpcsReady())) {
     throw new Error("Could not apply staff attendance office admin RPC SQL");
   }
 }
@@ -246,8 +289,12 @@ export async function ensureStaffAttendanceOfficesSchema(): Promise<{ ok: true }
   await ensureCoreTables();
 
   if (!(await bootstrapReady())) {
+    const missing = [];
+    for (const fn of OFFICE_RPCS) {
+      if (!(await functionExists(fn))) missing.push(fn);
+    }
     throw new Error(
-      "staff_attendance_offices bootstrap incomplete — admin_upsert_staff_attendance_office missing on RDS"
+      `staff_attendance_offices bootstrap incomplete — missing on RDS: ${missing.join(", ")}`
     );
   }
 

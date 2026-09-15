@@ -12,6 +12,15 @@ const extraFiles = [
   "supabase/migrations/20260605120000_notification_management.sql",
 ] as const;
 
+export const STAFF_OFFICE_REQUIRED_RPCS = [
+  "admin_list_staff_attendance_offices",
+  "admin_upsert_staff_attendance_office",
+  "admin_delete_staff_attendance_office",
+  "admin_assign_staff_office",
+  "admin_remove_staff_office_assignment",
+  "admin_list_staff_office_assignments",
+] as const;
+
 export type RdsApplyAllResult = {
   ok: true;
   applied: number;
@@ -35,6 +44,7 @@ function resolveSqlPath(rel: string): string {
 function awsSqlSortKey(filename: string): number {
   if (filename.includes("85-rds-staff-attendance-offices-ensure-schema")) return 829;
   if (filename.includes("83-rds-staff-attendance-offices-admin-rpc")) return 831;
+  if (filename.includes("87-rds-staff-attendance-offices-all-admin-rpc-fix")) return 832;
   const m = filename.match(/^(\d+)-/);
   return m ? Number(m[1]) * 10 : 99999;
 }
@@ -51,6 +61,8 @@ const STAFF_OFFICE_ADMIN_RPC_FILES = [
   "aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql",
 ] as const;
 
+const STAFF_OFFICE_HOTFIX = "aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql";
+
 function listAwsSqlFiles(): string[] {
   const scriptsDir = path.join(repoRoot(), "aws/scripts");
   return fs
@@ -60,21 +72,34 @@ function listAwsSqlFiles(): string[] {
     .map((f) => path.join("aws/scripts", f));
 }
 
+async function staffOfficeRpcStatus(client: import("pg").PoolClient): Promise<Record<string, boolean>> {
+  const checks = STAFF_OFFICE_REQUIRED_RPCS.map(
+    (name) => `EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = '${name}'
+    ) AS "${name}"`
+  );
+  const { rows } = await client.query<Record<string, boolean>>(`SELECT ${checks.join(", ")}`);
+  return rows[0] || {};
+}
+
+function staffOfficeRpcsReady(status: Record<string, boolean>): boolean {
+  return STAFF_OFFICE_REQUIRED_RPCS.every((name) => Boolean(status[name]));
+}
+
 async function ensureStaffOfficeAdminRpcs(
   client: import("pg").PoolClient,
   applyFile: (rel: string) => Promise<"ok" | "warn" | "skip">
 ): Promise<void> {
-  const { rows } = await client.query<{ ok: boolean }>(`
-    SELECT EXISTS (
-      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-      WHERE n.nspname = 'public' AND p.proname = 'admin_upsert_staff_attendance_office'
-    ) AS ok
-  `);
-  if (rows[0]?.ok) return;
+  if (staffOfficeRpcsReady(await staffOfficeRpcStatus(client))) return;
 
   for (const rel of STAFF_OFFICE_ADMIN_RPC_FILES) {
     await applyFile(rel);
   }
+
+  if (staffOfficeRpcsReady(await staffOfficeRpcStatus(client))) return;
+
+  await applyFile(STAFF_OFFICE_HOTFIX);
 }
 
 const warnPattern = /already exists|duplicate key|does not exist|cannot drop|multiple primary keys|cannot change return type|42P13|42710|42701|operator does not exist|25P02/i;
@@ -131,6 +156,7 @@ export async function applyAllRdsSql(): Promise<RdsApplyAllResult> {
 
     await ensureStaffOfficeAdminRpcs(client, applyFile);
 
+    const staffRpcs = await staffOfficeRpcStatus(client);
     const { rows } = await client.query(`
       SELECT
         to_regclass('public.student_data_uploads') AS student_data_uploads,
@@ -141,11 +167,7 @@ export async function applyAllRdsSql(): Promise<RdsApplyAllResult> {
         EXISTS (
           SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
           WHERE n.nspname = 'public' AND p.proname = 'admin_create_minimal_student_registration'
-        ) AS add_registration_rpc,
-        EXISTS (
-          SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-          WHERE n.nspname = 'public' AND p.proname = 'admin_upsert_staff_attendance_office'
-        ) AS staff_office_upsert_rpc
+        ) AS add_registration_rpc
     `);
 
     return {
@@ -153,7 +175,7 @@ export async function applyAllRdsSql(): Promise<RdsApplyAllResult> {
       applied,
       warnings,
       skipped,
-      checks: rows[0] || {},
+      checks: { ...(rows[0] || {}), staff_office_rpcs: staffRpcs },
       files: results,
     };
   } finally {

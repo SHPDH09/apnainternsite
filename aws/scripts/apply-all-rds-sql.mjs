@@ -14,10 +14,13 @@ import { loadAwsRdsDatabaseUrl, pgClientConfig } from "./aws-rds-url.mjs";
 import {
   STAFF_OFFICE_ADMIN_RPC_FILES,
   compareAwsSqlFilenames,
+  staffOfficeRpcCheckSql,
+  staffOfficeRpcsReady,
 } from "./rds-sql-order.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const scriptsDir = path.join(root, "aws/scripts");
+const STAFF_OFFICE_HOTFIX = "aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql";
 
 const extraFiles = [
   "supabase/update_payment_schema.sql",
@@ -65,20 +68,24 @@ async function applySqlFile(client, rel) {
   }
 }
 
-/** Re-apply ensure + admin RPC SQL when apply-all ran 83 before 85 on a prior deploy. */
+async function staffOfficeRpcStatus(client) {
+  const { rows } = await client.query(staffOfficeRpcCheckSql());
+  return rows[0] || {};
+}
+
+/** Re-apply ensure + admin RPC SQL when any staff office admin RPC is missing. */
 async function ensureStaffOfficeAdminRpcs(client) {
-  const { rows } = await client.query(`
-    SELECT EXISTS (
-      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-      WHERE n.nspname = 'public' AND p.proname = 'admin_upsert_staff_attendance_office'
-    ) AS ok
-  `);
-  if (rows[0]?.ok) return;
+  if (staffOfficeRpcsReady(await staffOfficeRpcStatus(client))) return;
 
   console.log("\n→ staff office admin RPC hotfix (85 + 83) …");
   for (const rel of STAFF_OFFICE_ADMIN_RPC_FILES) {
     await applySqlFile(client, rel);
   }
+
+  if (staffOfficeRpcsReady(await staffOfficeRpcStatus(client))) return;
+
+  console.log("→ staff office admin RPC hotfix (87 combined) …");
+  await applySqlFile(client, STAFF_OFFICE_HOTFIX);
 }
 
 async function main() {
@@ -103,6 +110,7 @@ async function main() {
 
   await ensureStaffOfficeAdminRpcs(client);
 
+  const staffRpcs = await staffOfficeRpcStatus(client);
   const checks = await client.query(`
     SELECT
       to_regclass('public.student_data_uploads') AS student_data_uploads,
@@ -113,17 +121,13 @@ async function main() {
       EXISTS (
         SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = 'public' AND p.proname = 'admin_create_minimal_student_registration'
-      ) AS add_registration_rpc,
-      EXISTS (
-        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-        WHERE n.nspname = 'public' AND p.proname = 'admin_upsert_staff_attendance_office'
-      ) AS staff_office_upsert_rpc
+      ) AS add_registration_rpc
   `);
   console.log("\n✅ Apply-all complete:", { applied: ok, warnings: warn });
-  console.log("Checks:", checks.rows[0]);
+  console.log("Checks:", { ...checks.rows[0], staff_office_rpcs: staffRpcs });
 
-  if (!checks.rows[0]?.staff_office_upsert_rpc) {
-    console.error("FAIL: admin_upsert_staff_attendance_office still missing after apply-all");
+  if (!staffOfficeRpcsReady(staffRpcs)) {
+    console.error("FAIL: staff office admin RPCs still missing after apply-all:", staffRpcs);
     await client.end();
     process.exit(1);
   }
