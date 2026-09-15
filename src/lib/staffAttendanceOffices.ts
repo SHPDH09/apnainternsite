@@ -40,6 +40,17 @@ function isApiUnavailableError(msg: string): boolean {
   return /404|500|503|not configured|fetch failed|Failed to fetch|network|FUNCTION_INVOCATION/i.test(msg);
 }
 
+async function ensureStaffOfficesSchema(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const token = await readAccessToken();
+  if (!token) return;
+  const origin = window.location.origin.replace(/\/$/, "");
+  await fetch(`${origin}/api/ensure-staff-attendance-offices`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => undefined);
+}
+
 async function staffOfficeRpcViaApi<T>(
   name: string,
   args: Record<string, unknown> = {}
@@ -52,6 +63,7 @@ async function staffOfficeRpcViaApi<T>(
   if (!token) throw new Error("Not signed in");
 
   const origin = window.location.origin.replace(/\/$/, "");
+  await ensureStaffOfficesSchema();
   const res = await fetch(`${origin}/api/staff-office-rpc`, {
     method: "POST",
     headers: {

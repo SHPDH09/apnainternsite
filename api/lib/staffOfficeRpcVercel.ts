@@ -1,5 +1,8 @@
-/** Vercel-safe staff office RDS bootstrap + RPC (shared helpers). */
-import { STAFF_OFFICE_BOOTSTRAP_SQL } from "./staffOfficeSqlBundled.js";
+/** Vercel-safe staff office RDS bootstrap + RPC (loaded dynamically from staff-office-rpc). */
+async function loadBootstrapSql(): Promise<string> {
+  const { STAFF_OFFICE_BOOTSTRAP_SQL } = await import("./staffOfficeSqlBundled.js");
+  return STAFF_OFFICE_BOOTSTRAP_SQL;
+}
 
 const STAFF_OFFICE_RPCS: Record<string, string[]> = {
   admin_list_staff_attendance_offices: ["p_active_only"],
@@ -38,7 +41,7 @@ async function applyStaffOfficeSql(databaseUrl: string): Promise<void> {
   const pg = await import("pg");
   const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
   try {
-    await pool.query(STAFF_OFFICE_BOOTSTRAP_SQL);
+    await pool.query(await loadBootstrapSql());
     const checks = REQUIRED_RPCS.map(
       (name) => `EXISTS (
         SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
