@@ -3,9 +3,8 @@
  * Vercel-safe (no aws/* imports).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import fs from "node:fs";
-import path from "node:path";
 import jwt from "jsonwebtoken";
+import { handleEnsureStaffAttendanceOffices } from "./lib/staffOfficeRpcVercel.js";
 
 const LAMBDA_AUTH =
   process.env.LAMBDA_API_URL?.trim()?.replace(/\/$/, "") ||
@@ -46,37 +45,6 @@ async function verifySession(token: string): Promise<{ sub: string } | null> {
   }
 }
 
-async function applyStaffOfficeSql(databaseUrl: string): Promise<void> {
-  const files = [
-    "87-rds-staff-attendance-offices-all-admin-rpc-fix.sql",
-    "85-rds-staff-attendance-offices-ensure-schema.sql",
-    "83-rds-staff-attendance-offices-admin-rpc.sql",
-  ];
-  const sql = files
-    .map((file) => {
-      const fp = path.join(process.cwd(), "aws/scripts", file);
-      return fs.existsSync(fp) ? fs.readFileSync(fp, "utf8") : "";
-    })
-    .filter(Boolean)
-    .join("\n\n");
-
-  if (!sql.trim()) throw new Error("Staff office SQL files missing from deployment bundle");
-
-  const pg = await import("pg");
-  const pool = new pg.default.Pool({
-    connectionString: databaseUrl
-      .replace(/([?&])sslmode=[^&]*/gi, "$1")
-      .replace(/[?&]$/, ""),
-    ssl: /rds\.amazonaws\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
-    max: 1,
-  });
-  try {
-    await pool.query(sql);
-  } finally {
-    await pool.end();
-  }
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
@@ -104,7 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    await applyStaffOfficeSql(databaseUrl);
+    await handleEnsureStaffAttendanceOffices(databaseUrl);
     return res.status(200).json({ ok: true, schema: "staff_attendance_offices" });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

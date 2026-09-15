@@ -1,7 +1,5 @@
-/** Vercel-safe staff office RDS bootstrap + RPC (used from send-mail action). */
-import fs from "node:fs";
-import path from "node:path";
-import jwt from "jsonwebtoken";
+/** Vercel-safe staff office RDS bootstrap + RPC (shared helpers). */
+import { STAFF_OFFICE_BOOTSTRAP_SQL } from "./staffOfficeSqlBundled.js";
 
 const STAFF_OFFICE_RPCS: Record<string, string[]> = {
   admin_list_staff_attendance_offices: ["p_active_only"],
@@ -36,27 +34,11 @@ function pgPoolConfig(databaseUrl: string) {
   };
 }
 
-function readStaffOfficeSql(): string {
-  const files = [
-    "87-rds-staff-attendance-offices-all-admin-rpc-fix.sql",
-    "85-rds-staff-attendance-offices-ensure-schema.sql",
-    "83-rds-staff-attendance-offices-admin-rpc.sql",
-  ];
-  const chunks = files
-    .map((file) => {
-      const fp = path.join(process.cwd(), "aws/scripts", file);
-      return fs.existsSync(fp) ? fs.readFileSync(fp, "utf8") : "";
-    })
-    .filter(Boolean);
-  if (!chunks.length) throw new Error("Staff office SQL files missing from deployment bundle");
-  return chunks.join("\n\n");
-}
-
 async function applyStaffOfficeSql(databaseUrl: string): Promise<void> {
   const pg = await import("pg");
   const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
   try {
-    await pool.query(readStaffOfficeSql());
+    await pool.query(STAFF_OFFICE_BOOTSTRAP_SQL);
     const checks = REQUIRED_RPCS.map(
       (name) => `EXISTS (
         SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace

@@ -32,41 +32,43 @@ async function readAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
-/** Production path: send-mail action on Vercel applies SQL + runs RPC on RDS directly. */
-async function staffOfficeRpcViaSendMail<T>(
+function isMissingRpcError(msg: string): boolean {
+  return /does not exist|42883|could not find the function|PGRST202|relation .* does not exist/i.test(msg);
+}
+
+function isApiUnavailableError(msg: string): boolean {
+  return /404|503|not configured|fetch failed|Failed to fetch|network/i.test(msg);
+}
+
+async function staffOfficeRpcViaApi<T>(
   name: string,
   args: Record<string, unknown> = {}
 ): Promise<T> {
   if (typeof window === "undefined") {
-    throw new Error("Staff office RPC requires browser session");
+    throw new Error("Staff office API requires browser session");
   }
 
   const token = await readAccessToken();
   if (!token) throw new Error("Not signed in");
 
   const origin = window.location.origin.replace(/\/$/, "");
-  const res = await fetch(`${origin}/api/send-mail`, {
+  const res = await fetch(`${origin}/api/staff-office-rpc`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      action: "staff_office_rpc",
-      name,
-      args,
-    }),
+    body: JSON.stringify({ name, args }),
   });
 
   const json = (await res.json().catch(() => ({}))) as {
     data?: T;
     error?: { message?: string };
     message?: string;
-    success?: boolean;
   };
 
-  if (!res.ok || json.success === false || json.error) {
-    throw new Error(json.error?.message || json.message || `Staff office RPC failed (${res.status})`);
+  if (!res.ok || json.error) {
+    throw new Error(json.error?.message || json.message || `Staff office request failed (${res.status})`);
   }
 
   return json.data as T;
@@ -80,13 +82,13 @@ async function legacyStaffOfficeRpc<T>(name: string, args: Record<string, unknow
 
 async function callStaffOfficeRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
   try {
-    return await staffOfficeRpcViaSendMail<T>(name, args);
-  } catch (vercelErr) {
-    const msg = vercelErr instanceof Error ? vercelErr.message : String(vercelErr);
-    if (!/404|503|not configured|fetch failed|Failed to fetch/i.test(msg)) {
-      throw vercelErr;
+    return await legacyStaffOfficeRpc<T>(name, args);
+  } catch (directErr) {
+    const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
+    if (!isMissingRpcError(directMsg)) {
+      throw directErr;
     }
-    return legacyStaffOfficeRpc<T>(name, args);
+    return staffOfficeRpcViaApi<T>(name, args);
   }
 }
 
@@ -115,7 +117,7 @@ export async function listStaffAttendanceOffices(activeOnly = false): Promise<St
     return Array.isArray(data) ? data : [];
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (!/does not exist on RDS|42883|could not find the function|staff office RPC failed/i.test(msg)) {
+    if (!isMissingRpcError(msg) && !isApiUnavailableError(msg)) {
       throw e;
     }
     return listOfficesFromTable(activeOnly);
@@ -158,7 +160,7 @@ export async function listStaffOfficeAssignments(): Promise<StaffOfficeAssignmen
     return Array.isArray(data) ? data : [];
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (!/does not exist on RDS|42883|could not find the function|staff office RPC failed/i.test(msg)) {
+    if (!isMissingRpcError(msg) && !isApiUnavailableError(msg)) {
       throw e;
     }
     return listAssignmentsFromTable();

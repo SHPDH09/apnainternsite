@@ -557,54 +557,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return '';
     })();
 
-    if (
-      normalizedAction === 'staff_office_rpc' ||
-      normalizedAction === 'ensure_staff_attendance_offices'
-    ) {
-      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
-      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-      if (!tokenMatch) {
-        return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
-      }
-      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
-      const session = await verifyBearerSession(tokenMatch[1]);
-      if (!session?.sub) {
-        return res.status(401).json({ success: false, message: 'Invalid or expired session' });
-      }
-      const databaseUrl = process.env.DATABASE_URL?.trim();
-      if (!databaseUrl) {
-        return res.status(503).json({
-          success: false,
-          message: 'DATABASE_URL is not configured on this deployment',
-        });
-      }
-      try {
-        const { handleEnsureStaffAttendanceOffices, handleStaffOfficeRpcAction } = await import(
-          './lib/staffOfficeRpcVercel.js'
-        );
-        if (normalizedAction === 'ensure_staff_attendance_offices') {
-          await handleEnsureStaffAttendanceOffices(databaseUrl);
-          return res.status(200).json({ success: true, ok: true, schema: 'staff_attendance_offices' });
-        }
-        const rpcName = String(body.name || body.rpc || '').trim();
-        const rpcArgs =
-          body.args && typeof body.args === 'object' && !Array.isArray(body.args)
-            ? (body.args as Record<string, unknown>)
-            : {};
-        const data = await handleStaffOfficeRpcAction({
-          databaseUrl,
-          userId: session.sub,
-          name: rpcName,
-          args: rpcArgs,
-        });
-        return res.status(200).json({ success: true, data, error: null });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error('[send-mail staff_office_rpc]', message);
-        return res.status(400).json({ success: false, message, data: null, error: { message } });
-      }
-    }
-
     if (normalizedAction === 'ensure_blog_cms') {
       const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
       const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
