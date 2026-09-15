@@ -21,6 +21,8 @@ import {
 } from "./project-report-bootstrap";
 import {
   ensureStaffAttendanceOfficesSchema,
+  isStaffAttendanceOfficesRpc,
+  isStaffAttendanceOfficesRpcMissingError,
   isStaffAttendanceOfficesTable,
 } from "./staff-attendance-offices-bootstrap";
 import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
@@ -653,22 +655,8 @@ export async function restRpc(req: Request, res: Response) {
           /could not find the function/i.test(msg) ||
           /column "id" is of type uuid but expression is of type text/i.test(msg) ||
           /function public\.admin_student_data_upload/i.test(msg));
-      const isOfficeRpc =
-        name === "admin_list_staff_attendance_offices" ||
-        name === "admin_upsert_staff_attendance_office" ||
-        name === "admin_delete_staff_attendance_office" ||
-        name === "admin_assign_staff_office" ||
-        name === "admin_remove_staff_office_assignment" ||
-        name === "admin_list_staff_office_assignments" ||
-        name === "_ensure_staff_attendance_office_schema";
       const shouldBootstrapOffices =
-        isOfficeRpc &&
-        (code === "42883" ||
-          /could not find the function/i.test(msg) ||
-          /function public\.admin_(list_staff_attendance_offices|upsert_staff_attendance_office|list_staff_office_assignments) does not exist/i.test(msg) ||
-          /function public\._ensure_staff_attendance_office_schema does not exist/i.test(msg) ||
-          /relation .*staff_attendance_offices.* does not exist/i.test(msg) ||
-          /relation .*staff_office_assignments.* does not exist/i.test(msg));
+        isStaffAttendanceOfficesRpc(name) && isStaffAttendanceOfficesRpcMissingError(firstErr);
 
       if (!shouldBootstrapRegistration && !shouldBootstrapUpload && !shouldBootstrapOffices) {
         throw firstErr;

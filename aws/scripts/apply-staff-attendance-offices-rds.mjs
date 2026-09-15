@@ -49,5 +49,15 @@ for (const rel of files) {
     }
   }
 }
+const { rows } = await client.query(
+  `SELECT EXISTS (
+     SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.proname = 'admin_upsert_staff_attendance_office'
+   ) AS ok`
+);
 await client.end();
-console.log("Done — staff attendance offices schema applied.");
+if (!rows[0]?.ok) {
+  console.error("FAIL: admin_upsert_staff_attendance_office still missing after apply");
+  process.exit(1);
+}
+console.log("Done — staff attendance offices schema + admin RPCs applied.");

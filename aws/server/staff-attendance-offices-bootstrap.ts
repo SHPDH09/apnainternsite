@@ -5,15 +5,45 @@ import { query } from "./db.js";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const ENSURE_SQL = "aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql";
-const OFFICES_SQL = "aws/scripts/82-rds-staff-attendance-offices.sql";
 const ADMIN_RPC_SQL = "aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql";
+const OFFICES_SQL = "aws/scripts/82-rds-staff-attendance-offices.sql";
 
 const OFFICE_TABLES = new Set(["staff_attendance_offices", "staff_office_assignments"]);
+const OFFICE_RPCS = [
+  "admin_upsert_staff_attendance_office",
+  "admin_list_staff_attendance_offices",
+  "admin_list_staff_office_assignments",
+] as const;
 
 let bootstrapped = false;
 
 export function isStaffAttendanceOfficesTable(table: string): boolean {
   return OFFICE_TABLES.has(table);
+}
+
+export function isStaffAttendanceOfficesRpc(name: string): boolean {
+  return (
+    name === "admin_list_staff_attendance_offices" ||
+    name === "admin_upsert_staff_attendance_office" ||
+    name === "admin_delete_staff_attendance_office" ||
+    name === "admin_assign_staff_office" ||
+    name === "admin_remove_staff_office_assignment" ||
+    name === "admin_list_staff_office_assignments" ||
+    name === "_ensure_staff_attendance_office_schema"
+  );
+}
+
+export function isStaffAttendanceOfficesRpcMissingError(err: unknown): boolean {
+  const msg = String((err as { message?: string })?.message || err || "");
+  const code = String((err as { code?: string })?.code || "");
+  return (
+    code === "42883" ||
+    /could not find the function/i.test(msg) ||
+    /function public\.admin_upsert_staff_attendance_office does not exist/i.test(msg) ||
+    /function public\._ensure_staff_attendance_office_schema does not exist/i.test(msg) ||
+    /relation .*staff_attendance_offices.* does not exist/i.test(msg) ||
+    /relation .*staff_office_assignments.* does not exist/i.test(msg)
+  );
 }
 
 function resolveSqlPath(rel: string): string {
@@ -30,6 +60,18 @@ async function tableExists(table: string): Promise<boolean> {
   return Boolean(rows[0]?.reg);
 }
 
+async function functionExists(fn: string): Promise<boolean> {
+  const { rows } = await query<{ ok: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND p.proname = $1
+     ) AS ok`,
+    [fn]
+  );
+  return Boolean(rows[0]?.ok);
+}
+
 async function schemaReady(): Promise<boolean> {
   const [offices, assignments] = await Promise.all([
     tableExists("staff_attendance_offices"),
@@ -38,7 +80,18 @@ async function schemaReady(): Promise<boolean> {
   return offices && assignments;
 }
 
-/** Minimal idempotent DDL — both tables must exist (offices alone is not enough). */
+async function rpcsReady(): Promise<boolean> {
+  for (const fn of OFFICE_RPCS) {
+    if (!(await functionExists(fn))) return false;
+  }
+  return true;
+}
+
+async function bootstrapReady(): Promise<boolean> {
+  return (await schemaReady()) && (await rpcsReady());
+}
+
+/** Minimal idempotent DDL — both tables must exist. */
 async function ensureCoreTables(): Promise<void> {
   await query(`
     CREATE TABLE IF NOT EXISTS public.staff_attendance_offices (
@@ -122,48 +175,64 @@ async function ensureCoreTables(): Promise<void> {
     GRANT SELECT, INSERT, UPDATE, DELETE ON public.staff_attendance_offices TO authenticated;
     GRANT SELECT, INSERT, UPDATE, DELETE ON public.staff_office_assignments TO authenticated;
   `);
-
-  try {
-    await query(`
-      ALTER TABLE public.employee_attendance
-        ADD COLUMN IF NOT EXISTS office_id uuid REFERENCES public.staff_attendance_offices(id) ON DELETE SET NULL,
-        ADD COLUMN IF NOT EXISTS check_in_distance_m numeric,
-        ADD COLUMN IF NOT EXISTS check_out_distance_m numeric,
-        ADD COLUMN IF NOT EXISTS check_in_gps_accuracy_m numeric,
-        ADD COLUMN IF NOT EXISTS check_out_gps_accuracy_m numeric,
-        ADD COLUMN IF NOT EXISTS verification_flags jsonb NOT NULL DEFAULT '{}'::jsonb;
-    `);
-  } catch {
-    /* employee_attendance may not exist in some envs */
-  }
 }
 
-async function runSqlFile(rel: string): Promise<void> {
+async function runSqlFile(rel: string): Promise<boolean> {
   const fp = resolveSqlPath(rel);
-  if (!fs.existsSync(fp)) return;
+  if (!fs.existsSync(fp)) {
+    console.warn("[staff-attendance-offices-bootstrap] sql file missing:", rel);
+    return false;
+  }
   await query(fs.readFileSync(fp, "utf8"));
+  return true;
+}
+
+/** Apply ensure + admin RPC SQL (85 then 83). Required for office save/list. */
+async function ensureAdminOfficeRpcs(): Promise<void> {
+  await ensureCoreTables();
+
+  let applied = false;
+  try {
+    if (await runSqlFile(ENSURE_SQL)) applied = true;
+  } catch (err) {
+    console.warn("[staff-attendance-offices-bootstrap] ensure sql:", String(err).slice(0, 240));
+  }
+
+  try {
+    if (await runSqlFile(ADMIN_RPC_SQL)) applied = true;
+  } catch (err) {
+    console.warn("[staff-attendance-offices-bootstrap] admin rpc sql:", String(err).slice(0, 240));
+  }
+
+  if (!(await rpcsReady())) {
+    // Last resort: run bundled files from repo root even if moduleDir sql/ missed a file
+    const root = path.resolve(moduleDir, "../..");
+    for (const rel of [ENSURE_SQL, ADMIN_RPC_SQL]) {
+      const fp = path.join(root, rel);
+      if (!fs.existsSync(fp)) continue;
+      try {
+        await query(fs.readFileSync(fp, "utf8"));
+        applied = true;
+      } catch (err) {
+        console.warn("[staff-attendance-offices-bootstrap] retry sql:", rel, String(err).slice(0, 180));
+      }
+    }
+  }
+
+  if (!applied && !(await rpcsReady())) {
+    throw new Error("Could not apply staff attendance office admin RPC SQL");
+  }
 }
 
 /** Idempotent RDS bootstrap for staff attendance office tables + admin RPCs. */
 export async function ensureStaffAttendanceOfficesSchema(): Promise<{ ok: true }> {
-  if (bootstrapped && (await schemaReady())) return { ok: true };
-
-  // Always ensure both core tables — offices may exist from RPC without assignments.
-  await ensureCoreTables();
-
-  try {
-    await runSqlFile(ENSURE_SQL);
-  } catch (err) {
-    const msg = String((err as { message?: string })?.message || err || "");
-    console.warn("[staff-attendance-offices-bootstrap] ensure sql:", msg.slice(0, 240));
+  if (await bootstrapReady()) {
+    bootstrapped = true;
+    return { ok: true };
   }
 
-  try {
-    await runSqlFile(ADMIN_RPC_SQL);
-  } catch (err) {
-    const msg = String((err as { message?: string })?.message || err || "");
-    console.warn("[staff-attendance-offices-bootstrap] admin rpc sql:", msg.slice(0, 240));
-  }
+  bootstrapped = false;
+  await ensureAdminOfficeRpcs();
 
   try {
     await runSqlFile(OFFICES_SQL);
@@ -174,11 +243,12 @@ export async function ensureStaffAttendanceOfficesSchema(): Promise<{ ok: true }
     }
   }
 
-  // Re-run core DDL in case full script failed mid-way.
   await ensureCoreTables();
 
-  if (!(await schemaReady())) {
-    throw new Error("staff_attendance_offices / staff_office_assignments could not be created");
+  if (!(await bootstrapReady())) {
+    throw new Error(
+      "staff_attendance_offices bootstrap incomplete — admin_upsert_staff_attendance_office missing on RDS"
+    );
   }
 
   bootstrapped = true;
