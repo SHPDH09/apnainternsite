@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Clock, Edit2, Loader2, LogOut, Plus, Save, Trash2, X } from "lucide-react";
+import {
+  CalendarDays,
+  Clock,
+  Edit2,
+  Loader2,
+  LogOut,
+  MapPin,
+  Plus,
+  Save,
+  ScanFace,
+  Shield,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +56,7 @@ import {
   type EmployeeAttendanceRow,
   type EmployeeAttendanceStatus,
 } from "@/lib/employeeAttendance";
+import type { StaffAttendanceOffice } from "@/lib/staffAttendanceOffices";
 
 export type StaffEmployeeOption = {
   id: string;
@@ -53,8 +67,57 @@ export type StaffEmployeeOption = {
 type Props = {
   employees: StaffEmployeeOption[];
   currentUserId: string | null;
+  offices?: StaffAttendanceOffice[];
   isActive?: boolean;
 };
+
+function methodLabel(method: string | null | undefined): string {
+  if (!method) return "—";
+  if (method === "geo_face") return "Geo + Face";
+  if (method === "manual_admin") return "Manual (Admin)";
+  return method;
+}
+
+function VerificationBadges({ row, officeName }: { row: EmployeeAttendanceRow; officeName?: string }) {
+  const isSelf = row.check_in_method === "geo_face" || row.check_out_method === "geo_face";
+  return (
+    <div className="flex flex-col gap-1">
+      {officeName ? (
+        <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+          <MapPin className="size-3" /> {officeName}
+        </span>
+      ) : null}
+      <div className="flex flex-wrap gap-1">
+        {isSelf && (
+          <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+            <Shield className="size-2.5 mr-0.5" /> Verified
+          </Badge>
+        )}
+        {row.check_in_method === "manual_admin" && (
+          <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-800 border-amber-200">
+            Manual in
+          </Badge>
+        )}
+        {row.check_in_distance_m != null && (
+          <Badge variant="outline" className="text-[10px]">
+            In {Math.round(row.check_in_distance_m)}m
+          </Badge>
+        )}
+        {row.check_in_gps_accuracy_m != null && (
+          <Badge variant="outline" className="text-[10px]">
+            GPS ±{Math.round(row.check_in_gps_accuracy_m)}m
+          </Badge>
+        )}
+        {row.check_in_face_score != null && (
+          <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700">
+            <ScanFace className="size-2.5 mr-0.5" />
+            {(row.check_in_face_score * 100).toFixed(0)}%
+          </Badge>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /** Pull HH:MM from an ISO timestamp string (locale-safe for <input type="time">). */
 function isoToTime(iso: string | null | undefined): string {
@@ -89,7 +152,12 @@ type EditState = {
   notes: string;
 };
 
-export function EmployeeAttendancePanel({ employees, currentUserId, isActive = true }: Props) {
+export function EmployeeAttendancePanel({
+  employees,
+  currentUserId,
+  offices = [],
+  isActive = true,
+}: Props) {
   const [rows, setRows] = useState<EmployeeAttendanceRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -117,6 +185,14 @@ export function EmployeeAttendancePanel({ employees, currentUserId, isActive = t
       return e?.full_name || e?.email || id.slice(0, 8);
     },
     [employees]
+  );
+
+  const officeNameById = useCallback(
+    (id: string | null | undefined) => {
+      if (!id) return undefined;
+      return offices.find((o) => o.id === id)?.name;
+    },
+    [offices]
   );
 
   const load = useCallback(async () => {
@@ -295,7 +371,8 @@ export function EmployeeAttendancePanel({ employees, currentUserId, isActive = t
           <CalendarDays className="size-6 text-primary" /> Employee Attendance
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Mark, edit and manage attendance for staff and sub-admin employees.
+          Mark, edit and manage attendance. Self marks show geo, face and GPS accuracy; manual marks are
+          flagged for audit.
         </p>
       </div>
 
@@ -422,6 +499,8 @@ export function EmployeeAttendancePanel({ employees, currentUserId, isActive = t
                 <TableHead>Check-out</TableHead>
                 <TableHead>Working Hrs</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Method</TableHead>
+                <TableHead>Verification</TableHead>
                 <TableHead>Notes</TableHead>
                 <TableHead className="w-24 text-right">Actions</TableHead>
               </TableRow>
@@ -429,14 +508,14 @@ export function EmployeeAttendancePanel({ employees, currentUserId, isActive = t
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     <Loader2 className="size-5 animate-spin inline mr-2" /> Loading…
                   </TableCell>
                 </TableRow>
               )}
               {!loading && rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     No attendance records found.
                   </TableCell>
                 </TableRow>
@@ -455,6 +534,15 @@ export function EmployeeAttendancePanel({ employees, currentUserId, isActive = t
                       <Badge variant="outline" className={STATUS_BADGE_CLS[r.status]}>
                         {ATTENDANCE_STATUS_LABELS[r.status]}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-600">
+                      <div>In: {methodLabel(r.check_in_method)}</div>
+                      {r.check_out_at ? (
+                        <div className="text-muted-foreground">Out: {methodLabel(r.check_out_method)}</div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <VerificationBadges row={r} officeName={officeNameById(r.office_id)} />
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
                       {r.notes || "—"}

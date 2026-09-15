@@ -270,11 +270,11 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     auth: "auth",
   },
   staff_self_check_in: {
-    args: ["p_latitude", "p_longitude", "p_face_score"],
+    args: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
     auth: "auth",
   },
   staff_self_check_out: {
-    args: ["p_latitude", "p_longitude", "p_face_score"],
+    args: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
     auth: "auth",
   },
   admin_generate_staff_salary: {

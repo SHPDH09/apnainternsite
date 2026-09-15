@@ -11,6 +11,16 @@ export type EmployeeAttendanceRow = {
   marked_by: string | null;
   check_in_at: string | null;
   check_out_at: string | null;
+  check_in_method: string | null;
+  check_out_method: string | null;
+  check_in_face_score: number | null;
+  check_out_face_score: number | null;
+  check_in_distance_m: number | null;
+  check_out_distance_m: number | null;
+  check_in_gps_accuracy_m: number | null;
+  check_out_gps_accuracy_m: number | null;
+  office_id: string | null;
+  verification_flags: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
@@ -104,8 +114,9 @@ export async function upsertEmployeeAttendance(input: {
   markedBy?: string | null;
   checkInAt?: string | null;
   checkOutAt?: string | null;
+  officeId?: string | null;
 }): Promise<EmployeeAttendanceRow> {
-  const payload = {
+  const payload: Record<string, unknown> = {
     employee_id: input.employeeId,
     attendance_date: input.attendanceDate,
     status: statusForDb(input.status) || "present",
@@ -115,6 +126,10 @@ export async function upsertEmployeeAttendance(input: {
     check_out_at: input.checkOutAt ?? null,
     updated_at: new Date().toISOString(),
   };
+
+  if (input.checkInAt) payload.check_in_method = "manual_admin";
+  if (input.checkOutAt) payload.check_out_method = "manual_admin";
+  if (input.officeId) payload.office_id = input.officeId;
 
   const { data, error } = await supabase
     .from("employee_attendance")
@@ -144,6 +159,7 @@ export async function updateEmployeeAttendance(
     notes?: string;
     checkInAt?: string | null;
     checkOutAt?: string | null;
+    officeId?: string | null;
     editedBy?: string | null;
     previousValue?: Record<string, unknown>;
   }
@@ -155,8 +171,15 @@ export async function updateEmployeeAttendance(
   if (updates.attendanceDate !== undefined) payload.attendance_date = updates.attendanceDate;
   if (updates.status !== undefined) payload.status = statusForDb(updates.status);
   if (updates.notes !== undefined) payload.notes = updates.notes.trim() || null;
-  if (updates.checkInAt !== undefined) payload.check_in_at = updates.checkInAt;
-  if (updates.checkOutAt !== undefined) payload.check_out_at = updates.checkOutAt;
+  if (updates.checkInAt !== undefined) {
+    payload.check_in_at = updates.checkInAt;
+    if (updates.checkInAt) payload.check_in_method = "manual_admin";
+  }
+  if (updates.checkOutAt !== undefined) {
+    payload.check_out_at = updates.checkOutAt;
+    if (updates.checkOutAt) payload.check_out_method = "manual_admin";
+  }
+  if (updates.officeId !== undefined) payload.office_id = updates.officeId;
 
   const { data, error } = await supabase
     .from("employee_attendance")

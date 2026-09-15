@@ -1,5 +1,17 @@
 import { supabase } from "@/integrations/supabase/client";
 
+export type StaffAttendanceOfficePayload = {
+  id: string;
+  name: string;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+  radius_meters: number;
+  max_gps_accuracy_m: number | null;
+  require_face: boolean;
+  require_geo: boolean;
+};
+
 export type StaffAttendanceStatusPayload = {
   attendance_date: string;
   ist_minutes: number;
@@ -11,12 +23,8 @@ export type StaffAttendanceStatusPayload = {
   can_check_out: boolean;
   check_in_opens_at: string;
   check_out_opens_at: string;
-  office: {
-    latitude: number;
-    longitude: number;
-    radius_meters: number;
-    label: string | null;
-  } | null;
+  office_assigned: boolean;
+  office: StaffAttendanceOfficePayload | null;
 };
 
 export async function fetchStaffSelfAttendanceStatus(): Promise<StaffAttendanceStatusPayload> {
@@ -29,11 +37,13 @@ export async function staffSelfCheckIn(input: {
   latitude: number;
   longitude: number;
   faceScore: number;
+  gpsAccuracyM?: number | null;
 }) {
   const { data, error } = await supabase.rpc("staff_self_check_in", {
     p_latitude: input.latitude,
     p_longitude: input.longitude,
     p_face_score: input.faceScore,
+    p_gps_accuracy_m: input.gpsAccuracyM ?? null,
   });
   if (error) throw error;
   return data;
@@ -43,11 +53,13 @@ export async function staffSelfCheckOut(input: {
   latitude: number;
   longitude: number;
   faceScore: number;
+  gpsAccuracyM?: number | null;
 }) {
   const { data, error } = await supabase.rpc("staff_self_check_out", {
     p_latitude: input.latitude,
     p_longitude: input.longitude,
     p_face_score: input.faceScore,
+    p_gps_accuracy_m: input.gpsAccuracyM ?? null,
   });
   if (error) throw error;
   return data;

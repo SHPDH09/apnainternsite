@@ -107,8 +107,22 @@ export function StaffGeoFaceAttendanceMark({
 
   const verifyLocation = async () => {
     const office = status?.office;
-    if (!office) throw new Error("Office location is not configured");
+    if (!status?.office_assigned || !office) {
+      throw new Error("No office assigned. Contact admin to assign your work location.");
+    }
     const pos = await requestCurrentPosition();
+    const accuracy = pos.accuracy ?? null;
+
+    if (
+      office.max_gps_accuracy_m != null &&
+      accuracy != null &&
+      accuracy > office.max_gps_accuracy_m
+    ) {
+      throw new Error(
+        `GPS signal too weak (±${Math.round(accuracy)} m). Disable mock location, move outdoors, and retry.`
+      );
+    }
+
     const distance = haversineMeters(
       { latitude: pos.latitude, longitude: pos.longitude },
       { latitude: office.latitude, longitude: office.longitude }
@@ -118,7 +132,7 @@ export function StaffGeoFaceAttendanceMark({
     setGeoOk(ok);
     if (!ok) {
       throw new Error(
-        `You are ${Math.round(distance)} m from office (max ${office.radius_meters} m)`
+        `You are ${Math.round(distance)} m from ${office.name} (max ${office.radius_meters} m)`
       );
     }
     return pos;
@@ -148,6 +162,7 @@ export function StaffGeoFaceAttendanceMark({
           latitude: pos.latitude,
           longitude: pos.longitude,
           faceScore: score,
+          gpsAccuracyM: pos.accuracy ?? null,
         });
         toast.success("Check-in recorded");
       } else {
@@ -155,6 +170,7 @@ export function StaffGeoFaceAttendanceMark({
           latitude: pos.latitude,
           longitude: pos.longitude,
           faceScore: score,
+          gpsAccuracyM: pos.accuracy ?? null,
         });
         toast.success("Check-out recorded");
       }
@@ -248,10 +264,18 @@ export function StaffGeoFaceAttendanceMark({
           <div className="rounded-xl border border-slate-200 bg-white p-3">
             <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
               <MapPin className="size-3.5" />
-              Office: {status?.office?.label || "Configured location"}
+              Office:{" "}
+              {status?.office_assigned && status?.office
+                ? status.office.name
+                : "Not assigned — contact admin"}
             </p>
+            {status?.office?.address ? (
+              <p className="mt-0.5 text-[11px] text-slate-500">{status.office.address}</p>
+            ) : null}
             <p className="mt-1 text-sm text-slate-700">
-              {geoOk === true && geoDistance !== null ? (
+              {!status?.office_assigned ? (
+                <span className="text-amber-700">Admin must assign your office before check-in.</span>
+              ) : geoOk === true && geoDistance !== null ? (
                 <span className="inline-flex items-center gap-1 text-emerald-700">
                   <CheckCircle2 className="size-4" /> Within range ({geoDistance} m)
                 </span>
@@ -267,7 +291,7 @@ export function StaffGeoFaceAttendanceMark({
             <Button
               type="button"
               className="gap-2 bg-[#2B7CD3] hover:bg-[#256bb8]"
-              disabled={busy || loading || !windowState.canCheckIn}
+              disabled={busy || loading || !windowState.canCheckIn || !status?.office_assigned}
               onClick={() => void runMark("check_in")}
             >
               {busy ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
@@ -277,7 +301,7 @@ export function StaffGeoFaceAttendanceMark({
               type="button"
               variant="outline"
               className="gap-2"
-              disabled={busy || loading || !windowState.canCheckOut}
+              disabled={busy || loading || !windowState.canCheckOut || !status?.office_assigned}
               onClick={() => void runMark("check_out")}
             >
               {busy ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}

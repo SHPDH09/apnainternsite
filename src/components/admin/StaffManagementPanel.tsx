@@ -56,7 +56,7 @@ import {
   type AdminStaffProfile,
   type StaffProfileFormFields,
 } from "@/lib/staffProfile";
-import { EmployeeAttendancePanel } from "@/components/admin/EmployeeAttendancePanel";
+import { StaffAttendanceAdminPanel } from "@/components/admin/StaffAttendanceAdminPanel";
 import { StaffSalaryAccountPanel } from "@/components/admin/StaffSalaryAccountPanel";
 import {
   AdminStaffLeaveRequestsPanel,
@@ -477,7 +477,7 @@ export function StaffManagementPanel({
         </TabsContent>
 
         <TabsContent value="attendance" className="mt-4">
-          <EmployeeAttendancePanel
+          <StaffAttendanceAdminPanel
             employees={employees}
             currentUserId={currentUserId}
             isActive={isActive && subTab === "attendance"}
