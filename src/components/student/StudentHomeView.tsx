@@ -387,6 +387,7 @@ type Props = {
   documents: StudentDocumentMeta[];
   downloadingDoc: StudentDocumentId | null;
   uploadingConsent?: boolean;
+  uploadingProject?: boolean;
   onViewDocument: (id: StudentDocumentId) => void;
   onDownloadDocument: (id: StudentDocumentId) => void;
   onUploadDocument?: (id: StudentDocumentId) => void;
@@ -414,6 +415,7 @@ export function StudentHomeView({
   documents,
   downloadingDoc,
   uploadingConsent = false,
+  uploadingProject = false,
   onViewDocument,
   onDownloadDocument,
   onUploadDocument,
@@ -647,7 +649,10 @@ export function StudentHomeView({
                 accent={DOCUMENT_ACCENTS[doc.id]}
                 icon={DOCUMENT_ICONS[doc.id]}
                 downloading={downloadingDoc === doc.id}
-                uploading={doc.id === "consent" && uploadingConsent}
+                uploading={
+                  (doc.id === "consent" && uploadingConsent) ||
+                  (doc.id === "project" && uploadingProject)
+                }
                 serviceLocked={!!docServiceLocked}
                 onView={() => guardDocument(doc.id, () => onViewDocument(doc.id))}
                 onDownload={() => guardDocument(doc.id, () => onDownloadDocument(doc.id))}
