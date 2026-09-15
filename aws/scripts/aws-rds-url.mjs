@@ -50,10 +50,10 @@ export function loadAwsRdsDatabaseUrl() {
   const host =
     process.env.AWS_RDS_HOST ||
     fileEnv.AWS_RDS_HOST ||
-    "database-1-instance-1.cgve8kwacke8.us-east-1.rds.amazonaws.com";
-  const user = process.env.AWS_RDS_USER || fileEnv.AWS_RDS_USER;
+    "ezyintern-staging-db.c5makww6eq8y.ap-south-1.rds.amazonaws.com";
+  const user = process.env.AWS_RDS_USER || fileEnv.AWS_RDS_USER || "ezyintern";
   const pass = process.env.AWS_RDS_PASSWORD || fileEnv.AWS_RDS_PASSWORD;
-  const db = process.env.AWS_RDS_DATABASE || fileEnv.AWS_RDS_DATABASE || "postgres";
+  const db = process.env.AWS_RDS_DATABASE || fileEnv.AWS_RDS_DATABASE || "ezyintern";
   const port = process.env.AWS_RDS_PORT || fileEnv.AWS_RDS_PORT || "5432";
 
   if (user && pass) {

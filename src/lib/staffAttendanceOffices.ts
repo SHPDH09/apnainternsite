@@ -40,11 +40,20 @@ function isApiUnavailableError(msg: string): boolean {
   return /404|500|503|not configured|fetch failed|Failed to fetch|network|FUNCTION_INVOCATION/i.test(msg);
 }
 
+const RDS_APPLY_CODE = "apnaintern-owner-setup-v1";
+
 async function ensureStaffOfficesSchema(): Promise<void> {
   if (typeof window === "undefined") return;
-  const token = await readAccessToken();
-  if (!token) return;
   const origin = window.location.origin.replace(/\/$/, "");
+  const token = await readAccessToken();
+
+  await fetch(`${origin}/api/rds-apply-all`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: RDS_APPLY_CODE }),
+  }).catch(() => undefined);
+
+  if (!token) return;
   await fetch(`${origin}/api/ensure-staff-attendance-offices`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
