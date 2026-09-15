@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { ensureStaffOfficesSchema } from "@/lib/staffAttendanceOffices";
 
 export type EmployeeAttendanceStatus = "present" | "absent" | "half_day" | "leave" | "holiday" | "overtime";
 
@@ -41,6 +42,11 @@ const LEGACY_SAFE_STATUSES = new Set<EmployeeAttendanceStatus>([
   "half_day",
   "leave",
 ]);
+
+function isMissingColumnError(error: { message?: string } | null, column: string): boolean {
+  const msg = error?.message || "";
+  return new RegExp(`column "${column}"`, "i").test(msg) || new RegExp(`column ${column}`, "i").test(msg);
+}
 
 function statusForDb(status: EmployeeAttendanceStatus | undefined): EmployeeAttendanceStatus | undefined {
   if (!status) return undefined;
@@ -131,11 +137,28 @@ export async function upsertEmployeeAttendance(input: {
   if (input.checkOutAt) payload.check_out_method = "manual_admin";
   if (input.officeId) payload.office_id = input.officeId;
 
-  const { data, error } = await supabase
+  await ensureStaffOfficesSchema();
+
+  let { data, error } = await supabase
     .from("employee_attendance")
     .upsert(payload, { onConflict: "employee_id,attendance_date" })
     .select("*")
     .single();
+
+  if (
+    error &&
+    (isMissingColumnError(error, "check_in_method") || isMissingColumnError(error, "check_out_method"))
+  ) {
+    await ensureStaffOfficesSchema();
+    const fallback = { ...payload };
+    delete fallback.check_in_method;
+    delete fallback.check_out_method;
+    ({ data, error } = await supabase
+      .from("employee_attendance")
+      .upsert(fallback, { onConflict: "employee_id,attendance_date" })
+      .select("*")
+      .single());
+  }
 
   if (error) throw error;
   return data as EmployeeAttendanceRow;
@@ -181,12 +204,30 @@ export async function updateEmployeeAttendance(
   }
   if (updates.officeId !== undefined) payload.office_id = updates.officeId;
 
-  const { data, error } = await supabase
+  await ensureStaffOfficesSchema();
+
+  let { data, error } = await supabase
     .from("employee_attendance")
     .update(payload)
     .eq("id", id)
     .select("*")
     .single();
+
+  if (
+    error &&
+    (isMissingColumnError(error, "check_in_method") || isMissingColumnError(error, "check_out_method"))
+  ) {
+    await ensureStaffOfficesSchema();
+    const fallback = { ...payload };
+    delete fallback.check_in_method;
+    delete fallback.check_out_method;
+    ({ data, error } = await supabase
+      .from("employee_attendance")
+      .update(fallback)
+      .eq("id", id)
+      .select("*")
+      .single());
+  }
 
   if (error) throw error;
   return data as EmployeeAttendanceRow;
