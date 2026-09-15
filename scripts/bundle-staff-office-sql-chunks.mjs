@@ -12,11 +12,22 @@ function readSql(rel) {
 }
 
 function chunkSql(sql, size = 7500) {
+  if (sql.length <= size) return [sql];
+  const parts = sql.split(/\n(?=CREATE OR REPLACE FUNCTION |DROP FUNCTION IF EXISTS |GRANT EXECUTE ON FUNCTION )/);
   const chunks = [];
-  for (let i = 0; i < sql.length; i += size) {
-    chunks.push(sql.slice(i, i + size));
+  let buf = "";
+  for (const part of parts) {
+    const piece = part.startsWith("\n") ? part.slice(1) : part;
+    if (!piece) continue;
+    if ((buf + piece).length > size && buf) {
+      chunks.push(buf);
+      buf = piece;
+    } else {
+      buf += (buf ? "\n" : "") + piece;
+    }
   }
-  return chunks;
+  if (buf) chunks.push(buf);
+  return chunks.length ? chunks : [sql];
 }
 
 function emitChunks(constName, fnName, sql) {
