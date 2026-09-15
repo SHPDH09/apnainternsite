@@ -39,8 +39,8 @@ export function isStaffAttendanceOfficesRpcMissingError(err: unknown): boolean {
   return (
     code === "42883" ||
     /could not find the function/i.test(msg) ||
-    /function public\.admin_upsert_staff_attendance_office does not exist/i.test(msg) ||
-    /function public\._ensure_staff_attendance_office_schema does not exist/i.test(msg) ||
+    /admin_upsert_staff_attendance_office does not exist/i.test(msg) ||
+    /_ensure_staff_attendance_office_schema does not exist/i.test(msg) ||
     /relation .*staff_attendance_offices.* does not exist/i.test(msg) ||
     /relation .*staff_office_assignments.* does not exist/i.test(msg)
   );

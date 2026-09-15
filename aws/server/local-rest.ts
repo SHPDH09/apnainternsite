@@ -628,6 +628,17 @@ export async function restRpc(req: Request, res: Response) {
       }
     }
 
+    if (isStaffAttendanceOfficesRpc(name)) {
+      try {
+        await ensureStaffAttendanceOfficesSchema();
+      } catch (bootstrapErr) {
+        console.warn(
+          "[rest/rpc] staff offices pre-bootstrap:",
+          String(bootstrapErr).slice(0, 240)
+        );
+      }
+    }
+
     const invokeRpc = async () =>
       def
         ? await callRpc(name, def.args, body, jwt)
