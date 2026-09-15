@@ -15,6 +15,7 @@ api/**
 !api/partner-application-submit.ts
 !api/ensure-partner-applications.ts
 !api/ensure-project-report-templates.ts
+!api/ensure-staff-attendance-offices.ts
 !api/rds-apply-all.ts
 !api/lib/**
 
@@ -24,4 +25,8 @@ aws/**
 !aws/server/partner-applications-bootstrap.ts
 !aws/server/project-report-bootstrap.ts
 !aws/server/project-report-template-save.ts
+!aws/server/staff-attendance-offices-bootstrap.ts
 !aws/server/rds-apply-all.ts
+!aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql
+!aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql
+!aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql
