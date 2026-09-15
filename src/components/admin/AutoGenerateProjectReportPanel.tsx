@@ -128,6 +128,11 @@ export function AutoGenerateProjectReportPanel({
     return templateByDomain.get(key) || null;
   }, [generateDomain, templateByDomain]);
 
+  const catalogUniversityNames = useMemo(
+    () => unis.map((u) => String(u.name || "").trim()).filter(Boolean),
+    [unis]
+  );
+
   const generateInput = useMemo<ProjectReportGenerateInput | null>(() => {
     if (!selectedUniversity || !generateDomain.trim()) return null;
     return {
@@ -135,8 +140,9 @@ export function AutoGenerateProjectReportPanel({
       universityLogoUrl: selectedUniversity.logo_url,
       domain: generateDomain.trim(),
       mode,
+      catalogUniversityNames,
     };
-  }, [selectedUniversity, generateDomain, mode]);
+  }, [selectedUniversity, generateDomain, mode, catalogUniversityNames]);
 
   const canGenerate = !!generateInput && !!selectedDomainTemplate?.template_pdf_url;
 
