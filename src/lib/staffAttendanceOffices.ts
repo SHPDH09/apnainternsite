@@ -42,7 +42,8 @@ function isApiUnavailableError(msg: string): boolean {
 
 const RDS_APPLY_CODE = "apnaintern-owner-setup-v1";
 
-async function ensureStaffOfficesSchema(): Promise<void> {
+/** Bootstrap staff office schema on Vercel RDS (not Lambda). */
+export async function ensureStaffOfficesSchema(): Promise<void> {
   if (typeof window === "undefined") return;
   const origin = window.location.origin.replace(/\/$/, "");
   const token = await readAccessToken();
@@ -101,48 +102,34 @@ async function legacyStaffOfficeRpc<T>(name: string, args: Record<string, unknow
   return data as T;
 }
 
+/** Prefer Vercel /api/staff-office-rpc (RDS bootstrap); Lambda /rest RPC is fallback only. */
 async function callStaffOfficeRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
   try {
-    return await legacyStaffOfficeRpc<T>(name, args);
-  } catch (directErr) {
-    const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
-    if (!isMissingRpcError(directMsg)) {
+    return await staffOfficeRpcViaApi<T>(name, args);
+  } catch (apiErr) {
+    const apiMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (!isApiUnavailableError(apiMsg)) {
+      throw apiErr;
+    }
+    try {
+      return await legacyStaffOfficeRpc<T>(name, args);
+    } catch (directErr) {
+      const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
+      if (isMissingRpcError(directMsg)) {
+        throw new Error(
+          "Staff office database is not ready. Refresh the page — if this persists, contact support."
+        );
+      }
       throw directErr;
     }
-    return staffOfficeRpcViaApi<T>(name, args);
   }
-}
-
-async function listOfficesFromTable(activeOnly: boolean): Promise<StaffAttendanceOffice[]> {
-  let q = supabase.from("staff_attendance_offices").select("*").order("name");
-  if (activeOnly) q = q.eq("is_active", true);
-  const { data, error } = await q;
-  if (error) throw new Error(rpcErrorMessage(error));
-  return (data || []) as StaffAttendanceOffice[];
-}
-
-async function listAssignmentsFromTable(): Promise<StaffOfficeAssignment[]> {
-  const { data, error } = await supabase
-    .from("staff_office_assignments")
-    .select("*")
-    .order("assigned_at", { ascending: false });
-  if (error) throw new Error(rpcErrorMessage(error));
-  return (data || []) as StaffOfficeAssignment[];
 }
 
 export async function listStaffAttendanceOffices(activeOnly = false): Promise<StaffAttendanceOffice[]> {
-  try {
-    const data = await callStaffOfficeRpc<StaffAttendanceOffice[]>("admin_list_staff_attendance_offices", {
-      p_active_only: activeOnly,
-    });
-    return Array.isArray(data) ? data : [];
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (!isMissingRpcError(msg) && !isApiUnavailableError(msg)) {
-      throw e;
-    }
-    return listOfficesFromTable(activeOnly);
-  }
+  const data = await callStaffOfficeRpc<StaffAttendanceOffice[]>("admin_list_staff_attendance_offices", {
+    p_active_only: activeOnly,
+  });
+  return Array.isArray(data) ? data : [];
 }
 
 export async function upsertStaffAttendanceOffice(input: {
@@ -176,16 +163,8 @@ export async function deleteStaffAttendanceOffice(id: string): Promise<void> {
 }
 
 export async function listStaffOfficeAssignments(): Promise<StaffOfficeAssignment[]> {
-  try {
-    const data = await callStaffOfficeRpc<StaffOfficeAssignment[]>("admin_list_staff_office_assignments");
-    return Array.isArray(data) ? data : [];
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (!isMissingRpcError(msg) && !isApiUnavailableError(msg)) {
-      throw e;
-    }
-    return listAssignmentsFromTable();
-  }
+  const data = await callStaffOfficeRpc<StaffOfficeAssignment[]>("admin_list_staff_office_assignments");
+  return Array.isArray(data) ? data : [];
 }
 
 export async function assignStaffOffice(input: {

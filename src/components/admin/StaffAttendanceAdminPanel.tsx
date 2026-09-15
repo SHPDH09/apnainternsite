@@ -48,6 +48,7 @@ import { requestCurrentPosition } from "@/lib/geoLocation";
 import {
   assignStaffOffice,
   deleteStaffAttendanceOffice,
+  ensureStaffOfficesSchema,
   listStaffAttendanceOffices,
   listStaffOfficeAssignments,
   removeStaffOfficeAssignment,
@@ -123,6 +124,7 @@ export function StaffAttendanceAdminPanel({ employees, currentUserId, isActive =
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      await ensureStaffOfficesSchema();
       const [officeRows, assignmentRows] = await Promise.all([
         listStaffAttendanceOffices(),
         listStaffOfficeAssignments(),
