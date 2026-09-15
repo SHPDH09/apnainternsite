@@ -22,11 +22,16 @@ export type StaffOfficeAssignment = {
   assigned_at: string;
 };
 
+function rpcErrorMessage(error: { message?: string; details?: string; hint?: string } | null): string {
+  if (!error) return "Unknown error";
+  return [error.message, error.details, error.hint].filter(Boolean).join(" — ") || "Request failed";
+}
+
 export async function listStaffAttendanceOffices(activeOnly = false): Promise<StaffAttendanceOffice[]> {
   let q = supabase.from("staff_attendance_offices").select("*").order("name");
   if (activeOnly) q = q.eq("is_active", true);
   const { data, error } = await q;
-  if (error) throw error;
+  if (error) throw new Error(rpcErrorMessage(error));
   return (data || []) as StaffAttendanceOffice[];
 }
 
@@ -42,36 +47,31 @@ export async function upsertStaffAttendanceOffice(input: {
   requireGeo?: boolean;
   isActive?: boolean;
 }): Promise<StaffAttendanceOffice> {
-  const payload = {
-    ...(input.id ? { id: input.id } : {}),
-    name: input.name.trim(),
-    address: input.address?.trim() || null,
-    latitude: input.latitude,
-    longitude: input.longitude,
-    radius_meters: input.radiusMeters,
-    max_gps_accuracy_m: input.maxGpsAccuracyM ?? 100,
-    require_face: input.requireFace ?? true,
-    require_geo: input.requireGeo ?? true,
-    is_active: input.isActive ?? true,
-    updated_at: new Date().toISOString(),
-  };
+  const { data, error } = await supabase.rpc("admin_upsert_staff_attendance_office", {
+    p_id: input.id ?? null,
+    p_name: input.name.trim(),
+    p_address: input.address?.trim() || null,
+    p_latitude: input.latitude,
+    p_longitude: input.longitude,
+    p_radius_meters: input.radiusMeters,
+    p_max_gps_accuracy_m: input.maxGpsAccuracyM ?? 100,
+    p_require_face: input.requireFace ?? true,
+    p_require_geo: input.requireGeo ?? true,
+    p_is_active: input.isActive ?? true,
+  });
 
-  const { data, error } = input.id
-    ? await supabase.from("staff_attendance_offices").update(payload).eq("id", input.id).select("*").single()
-    : await supabase.from("staff_attendance_offices").insert(payload).select("*").single();
-
-  if (error) throw error;
+  if (error) throw new Error(rpcErrorMessage(error));
   return data as StaffAttendanceOffice;
 }
 
 export async function deleteStaffAttendanceOffice(id: string): Promise<void> {
-  const { error } = await supabase.from("staff_attendance_offices").delete().eq("id", id);
-  if (error) throw error;
+  const { error } = await supabase.rpc("admin_delete_staff_attendance_office", { p_id: id });
+  if (error) throw new Error(rpcErrorMessage(error));
 }
 
 export async function listStaffOfficeAssignments(): Promise<StaffOfficeAssignment[]> {
   const { data, error } = await supabase.from("staff_office_assignments").select("*");
-  if (error) throw error;
+  if (error) throw new Error(rpcErrorMessage(error));
   return (data || []) as StaffOfficeAssignment[];
 }
 
@@ -80,25 +80,18 @@ export async function assignStaffOffice(input: {
   officeId: string;
   assignedBy?: string | null;
 }): Promise<StaffOfficeAssignment> {
-  const { data, error } = await supabase
-    .from("staff_office_assignments")
-    .upsert(
-      {
-        employee_id: input.employeeId,
-        office_id: input.officeId,
-        assigned_by: input.assignedBy ?? null,
-        assigned_at: new Date().toISOString(),
-      },
-      { onConflict: "employee_id" }
-    )
-    .select("*")
-    .single();
-
-  if (error) throw error;
+  void input.assignedBy;
+  const { data, error } = await supabase.rpc("admin_assign_staff_office", {
+    p_employee_id: input.employeeId,
+    p_office_id: input.officeId,
+  });
+  if (error) throw new Error(rpcErrorMessage(error));
   return data as StaffOfficeAssignment;
 }
 
 export async function removeStaffOfficeAssignment(employeeId: string): Promise<void> {
-  const { error } = await supabase.from("staff_office_assignments").delete().eq("employee_id", employeeId);
-  if (error) throw error;
+  const { error } = await supabase.rpc("admin_remove_staff_office_assignment", {
+    p_employee_id: employeeId,
+  });
+  if (error) throw new Error(rpcErrorMessage(error));
 }

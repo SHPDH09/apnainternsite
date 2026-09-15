@@ -277,6 +277,33 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
     auth: "auth",
   },
+  admin_upsert_staff_attendance_office: {
+    args: [
+      "p_id",
+      "p_name",
+      "p_address",
+      "p_latitude",
+      "p_longitude",
+      "p_radius_meters",
+      "p_max_gps_accuracy_m",
+      "p_require_face",
+      "p_require_geo",
+      "p_is_active",
+    ],
+    auth: "admin",
+  },
+  admin_delete_staff_attendance_office: {
+    args: ["p_id"],
+    auth: "admin",
+  },
+  admin_assign_staff_office: {
+    args: ["p_employee_id", "p_office_id"],
+    auth: "admin",
+  },
+  admin_remove_staff_office_assignment: {
+    args: ["p_employee_id"],
+    auth: "admin",
+  },
   admin_generate_staff_salary: {
     args: ["p_employee_id", "p_salary_month"],
     auth: "admin",

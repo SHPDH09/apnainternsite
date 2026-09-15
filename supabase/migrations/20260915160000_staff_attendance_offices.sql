@@ -25,17 +25,22 @@ CREATE TABLE IF NOT EXISTS public.staff_office_assignments (
 CREATE INDEX IF NOT EXISTS idx_staff_office_assignments_office
   ON public.staff_office_assignments (office_id);
 
--- Migrate legacy single office row if present
-INSERT INTO public.staff_attendance_offices (name, address, latitude, longitude, radius_meters)
-SELECT
-  coalesce(o.label, 'Main Office'),
-  NULL,
-  o.latitude,
-  o.longitude,
-  o.radius_meters
-FROM public.staff_attendance_office o
-WHERE o.id = 1
-  AND NOT EXISTS (SELECT 1 FROM public.staff_attendance_offices LIMIT 1);
+-- Migrate legacy single office row if present (only when old table exists)
+DO $$
+BEGIN
+  IF to_regclass('public.staff_attendance_office') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public.staff_attendance_offices LIMIT 1) THEN
+    INSERT INTO public.staff_attendance_offices (name, address, latitude, longitude, radius_meters)
+    SELECT
+      coalesce(o.label, 'Main Office'),
+      NULL,
+      o.latitude,
+      o.longitude,
+      o.radius_meters
+    FROM public.staff_attendance_office o
+    WHERE o.id = 1;
+  END IF;
+END $$;
 
 ALTER TABLE public.employee_attendance
   ADD COLUMN IF NOT EXISTS office_id uuid REFERENCES public.staff_attendance_offices(id) ON DELETE SET NULL,

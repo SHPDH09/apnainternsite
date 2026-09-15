@@ -206,7 +206,8 @@ export function StaffAttendanceAdminPanel({ employees, currentUserId, isActive =
       setOfficeDialogOpen(false);
       await load();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Could not save office");
+      const msg = e instanceof Error ? e.message : "Could not save office";
+      toast.error(msg);
     } finally {
       setSaving(false);
     }

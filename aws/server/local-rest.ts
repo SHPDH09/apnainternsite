@@ -19,6 +19,10 @@ import {
   ensureProjectReportSchema,
   isProjectReportTable,
 } from "./project-report-bootstrap";
+import {
+  ensureStaffAttendanceOfficesSchema,
+  isStaffAttendanceOfficesTable,
+} from "./staff-attendance-offices-bootstrap";
 import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
 
 function jwtFromRequest(req: Request) {
@@ -53,6 +57,10 @@ async function withCmsRetry<T>(table: string, run: () => Promise<T>): Promise<T>
       }
       if (isProjectReportTable(table)) {
         await ensureProjectReportSchema();
+        return await run();
+      }
+      if (isStaffAttendanceOfficesTable(table)) {
+        await ensureStaffAttendanceOfficesSchema();
         return await run();
       }
     }
@@ -645,8 +653,19 @@ export async function restRpc(req: Request, res: Response) {
           /could not find the function/i.test(msg) ||
           /column "id" is of type uuid but expression is of type text/i.test(msg) ||
           /function public\.admin_student_data_upload/i.test(msg));
+      const isOfficeRpc =
+        name === "admin_upsert_staff_attendance_office" ||
+        name === "admin_delete_staff_attendance_office" ||
+        name === "admin_assign_staff_office" ||
+        name === "admin_remove_staff_office_assignment";
+      const shouldBootstrapOffices =
+        isOfficeRpc &&
+        (code === "42883" ||
+          /could not find the function/i.test(msg) ||
+          /function public\.admin_upsert_staff_attendance_office does not exist/i.test(msg) ||
+          /relation .*staff_attendance_offices.* does not exist/i.test(msg));
 
-      if (!shouldBootstrapRegistration && !shouldBootstrapUpload) {
+      if (!shouldBootstrapRegistration && !shouldBootstrapUpload && !shouldBootstrapOffices) {
         throw firstErr;
       }
 
@@ -657,6 +676,10 @@ export async function restRpc(req: Request, res: Response) {
       if (shouldBootstrapUpload) {
         console.warn("[rest/rpc] student data upload RPC failed, applying bootstrap and retrying:", msg);
         await ensureStudentDataUploadSchema();
+      }
+      if (shouldBootstrapOffices) {
+        console.warn("[rest/rpc] staff attendance offices RPC failed, applying bootstrap and retrying:", msg);
+        await ensureStaffAttendanceOfficesSchema();
       }
       const data = await invokeRpc();
       res.json(data);
