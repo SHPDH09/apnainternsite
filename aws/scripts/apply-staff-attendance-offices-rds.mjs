@@ -20,6 +20,7 @@ const files = [
   "aws/scripts/84-rds-staff-office-assignments-fix.sql",
   "aws/scripts/82-rds-staff-attendance-offices.sql",
   "aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql",
+  "aws/scripts/88-rds-staff-office-self-attendance-rpc.sql",
 ];
 
 const url = process.env.DATABASE_URL?.trim();
