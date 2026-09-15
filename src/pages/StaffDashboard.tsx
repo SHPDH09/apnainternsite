@@ -136,6 +136,7 @@ import {
   StaffOwnAttendancePanel,
 } from "@/components/staff/StaffAccountPanels";
 import { StaffRequestsPanel } from "@/components/staff/StaffRequestPanels";
+import { StaffSalarySlipsPanel } from "@/components/staff/StaffSalarySlipsPanel";
 import {
   StaffAssignmentsPanel,
   StaffCertificatesPanel,
@@ -1028,7 +1029,7 @@ const StaffDashboard = () => {
 
   useEffect(() => {
     if (loading || !permissions) return;
-    const isBaseTab = ["dashboard", "profile", "security", "my-attendance", "requests"].includes(activeTab);
+    const isBaseTab = ["dashboard", "profile", "security", "my-attendance", "salary-slips", "requests"].includes(activeTab);
     if (!isBaseTab) {
       if (activeTab === "add-registration") {
         if (!hasStaffPerm(permissions, "can_manage_students")) setActiveTab("dashboard");
@@ -1360,6 +1361,10 @@ const StaffDashboard = () => {
           <Calendar className="mr-2 size-4" />
           My Attendance
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigateStaffTab("salary-slips")}>
+          <CreditCard className="mr-2 size-4" />
+          Salary Slips
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigateStaffTab("requests")}>
           <ClipboardList className="mr-2 size-4" />
           Requests
@@ -1395,6 +1400,8 @@ const StaffDashboard = () => {
             ? "Security"
             : activeTab === "my-attendance"
               ? "My Attendance"
+              : activeTab === "salary-slips"
+                ? "Salary Slips"
               : activeTab === "requests"
                 ? "Requests"
                 : services.find((s) => s.tab === activeTab)?.label || "Staff Portal";
@@ -2086,6 +2093,9 @@ const StaffDashboard = () => {
               isActive={activeTab === "my-attendance"}
               profileImageUrl={staffProfile?.profile_image_url}
             />
+          )}
+          {activeTab === "salary-slips" && (
+            <StaffSalarySlipsPanel isActive={activeTab === "salary-slips"} />
           )}
           {activeTab === "requests" && (
             <StaffRequestsPanel isActive={activeTab === "requests"} currentUserId={currentUserId} />
