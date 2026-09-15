@@ -108,6 +108,7 @@ import {
   fetchAdminStudentsLight,
   fetchSuperAdminUserIds,
 } from "@/lib/adminStudentDirectory";
+import { purgeStudentPermanently } from "@/lib/purgeStudentAccount";
 import { fetchCollegeAdminDirectory } from "@/lib/collegeAdminDirectory";
 import { parseJsonField } from "@/lib/parseJsonField";
 import { exportAdminStudentsCsv } from "@/lib/adminStudentExport";
@@ -2400,19 +2401,27 @@ export default function Admin() {
   };
 
   const handleDelete = async (id: string, fallbackName?: string) => {
-    if (!confirm("Are you sure?")) return;
-    const user = students.find(s => s.id === id);
-    await supabase.from("students").delete().eq("id", id);
-    
-    await logAdminAction(
-      'DELETE', 
-      'student', 
-      `Deleted student ${user?.full_name || fallbackName || id} (Admin)`,
-      { entity_id: id, name: user?.full_name || fallbackName }
-    );
-
-    toast.success("Deleted");
-    loadAll();
+    const user = students.find((s) => s.id === id);
+    const label = user?.full_name || fallbackName || id;
+    if (
+      !confirm(
+        `Permanently delete ${label}? This removes the login account, student record, and related data. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await purgeStudentPermanently(supabase, id);
+      await logAdminAction("DELETE", "student", `Permanently deleted student ${label} (Admin)`, {
+        entity_id: id,
+        name: user?.full_name || fallbackName,
+      });
+      toast.success("User permanently deleted");
+      await Promise.all([loadAll(), fetchStudents()]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to delete user";
+      toast.error(msg);
+    }
   };
 
   const openStudentEditDialog = async (
@@ -2988,15 +2997,20 @@ Apna Intern Team`;
   };
 
   const handleDeleteStaff = async (staffId: string) => {
-    if (!confirm("Remove this admin's access?")) return;
+    if (
+      !confirm(
+        "Permanently delete this staff account? Login, profile, and access will be removed. This cannot be undone."
+      )
+    ) {
+      return;
+    }
     try {
-      await supabase.from("admin_staff").delete().eq("id", staffId);
-      await supabase.rpc('remove_staff_access', { target_id: staffId });
-      toast.success("Staff member removed.");
+      await purgeStudentPermanently(supabase, staffId);
+      toast.success("Staff account permanently deleted.");
       loadAll();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error("Failed to remove staff.");
+      toast.error(err instanceof Error ? err.message : "Failed to delete staff account.");
     }
   };
 

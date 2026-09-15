@@ -81,6 +81,7 @@ import {
 import { programmeAttendanceDayBasis, bulkAttendanceDateRangeForUniversity, ADMIN_PROGRAMME_ATTENDANCE_HINT } from "@/lib/internshipProgramme";
 import { countProgrammePresentDays } from "@/lib/studentPortalDocuments";
 import { fetchAdminStudentDirectoryPage, fetchAdminStudentsLight, fetchAdminSiteVisitStats } from "@/lib/adminStudentDirectory";
+import { purgeStudentPermanently } from "@/lib/purgeStudentAccount";
 import { exportAdminStudentsCsv } from "@/lib/adminStudentExport";
 import { filterCommsRecipients } from "@/lib/adminBulkComms";
 import { InternshipModeFilterSelect } from "@/components/admin/InternshipModeFilterSelect";
@@ -1041,19 +1042,26 @@ const SuperAdmin = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure?")) return;
-    const user = students.find(s => s.id === id) || staff.find(s => s.id === id);
-    await supabase.from("students").delete().eq("id", id);
-    
-    await logAdminAction(
-      'DELETE', 
-      'student', 
-      `Deleted student/staff ${user?.full_name || id}`,
-      { entity_id: id, name: user?.full_name }
-    );
-
-    toast.success("Deleted");
-    loadAll();
+    const user = students.find((s) => s.id === id) || staff.find((s) => s.id === id);
+    const label = user?.full_name || id;
+    if (
+      !confirm(
+        `Permanently delete ${label}? This removes the login account and all related data. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await purgeStudentPermanently(supabase, id);
+      await logAdminAction("DELETE", "student", `Permanently deleted ${label}`, {
+        entity_id: id,
+        name: user?.full_name,
+      });
+      toast.success("User permanently deleted");
+      loadAll();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete user");
+    }
   };
 
 
@@ -1488,14 +1496,25 @@ const SuperAdmin = () => {
   };
 
   const removeStaff = async (id: string) => {
-    if (!confirm("Remove this person from staff?")) return;
-    const s = staff.find(x => x.id === id);
-    await supabase.from("user_roles").delete().eq("user_id", id).eq("role", "admin");
-    
-    await logAdminAction('DELETE', 'staff', `Revoked admin access for ${s?.full_name || id}`, { user_id: id, name: s?.full_name });
-    
-    toast.success("Staff access revoked");
-    loadAll();
+    const s = staff.find((x) => x.id === id);
+    if (
+      !confirm(
+        `Permanently delete ${s?.full_name || "this staff account"}? Login and access will be removed. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await purgeStudentPermanently(supabase, id);
+      await logAdminAction("DELETE", "staff", `Permanently deleted staff ${s?.full_name || id}`, {
+        user_id: id,
+        name: s?.full_name,
+      });
+      toast.success("Staff account permanently deleted");
+      loadAll();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete staff account");
+    }
   };
 
   const toggleAdminPermission = async (userId: string, permKey: string, currentVal: boolean) => {
@@ -2736,7 +2755,7 @@ const SuperAdmin = () => {
                             {s.roles.includes('super_admin') ? (
                               <span className="text-[9px] font-bold text-muted-foreground italic px-3">PROTECTED</span>
                             ) : (
-                              <Button variant="ghost" size="sm" className="size-8 p-0 text-destructive hover:bg-destructive/10 rounded-xl" onClick={() => handleDelete(s.id)}><Trash2 className="size-4" /></Button>
+                              <Button variant="ghost" size="sm" className="size-8 p-0 text-destructive hover:bg-destructive/10 rounded-xl" onClick={() => removeStaff(s.id)}><Trash2 className="size-4" /></Button>
                             )}
                           </div>
                         </TableCell>
