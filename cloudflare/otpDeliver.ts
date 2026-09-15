@@ -25,7 +25,7 @@ function isOtpDeliverPath(pathname: string): boolean {
 }
 
 /**
- * OTP delivery runs on Vercel with Amazon SES SMTP (real inbox delivery).
+ * OTP delivery runs on Vercel via Hostinger SMTP (info@apnaintern.in).
  * Edge Mail Manager accepted mail but never delivered — do not send from the Worker.
  */
 export async function tryHandleOtpDeliver(

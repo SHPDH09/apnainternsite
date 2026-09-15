@@ -40,11 +40,12 @@ function defaultHostForUser(user: string): string {
 
 /** OTP/login mail must not use Mail Manager — it accepts but never delivers. */
 function resolveOtpSmtpHost(user: string): string {
-  const envHost = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').trim();
+  const envHost = (process.env.SMTP_HOST || '').trim();
   const u = user.toLowerCase();
   if (u.endsWith('@apnaintern.in') || u.includes('apnaintern')) return HOSTINGER_SMTP_HOST;
   if (u.includes('gmail')) return 'smtp.gmail.com';
-  if (envHost && !isBrokenRelayHost(envHost) && !envHost.includes('email-smtp.')) return envHost;
+  if (envHost.includes('email-smtp.') || envHost.includes('amazonaws.com')) return HOSTINGER_SMTP_HOST;
+  if (envHost && !isBrokenRelayHost(envHost)) return envHost;
   return HOSTINGER_SMTP_HOST;
 }
 
@@ -180,16 +181,6 @@ function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_re
   return { subject: copy.subject, html, text };
 }
 
-function canUseSesApiForOtp(): boolean {
-  if (process.env.USE_SES_API === 'false') return false;
-  if (process.env.USE_SES_API !== 'true') return false;
-  const user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim().toLowerCase();
-  if (user.includes('@') && !user.startsWith('akia')) return false;
-  return Boolean(
-    process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
-  );
-}
-
 /** Bulk announcements via SES — keeps Hostinger mailbox free for OTP (avoids suspension). */
 function canUseSesApiForBulk(): boolean {
   if (process.env.USE_SES_FOR_BULK === 'false') return false;
@@ -218,32 +209,6 @@ async function sendBulkViaSesApi(to: string, subject: string, html: string): Pro
       },
     })
   );
-}
-
-async function sendOtpViaSesApi(
-  recipient: string,
-  mailContent: { subject: string; html: string; text: string }
-): Promise<string> {
-  const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
-  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
-  const client = new SESv2Client({ region });
-  const fromAddress = resolveMailFromAddress();
-  const result = await client.send(
-    new SendEmailCommand({
-      FromEmailAddress: `Apna Intern <${fromAddress}>`,
-      Destination: { ToAddresses: [recipient] },
-      Content: {
-        Simple: {
-          Subject: { Data: mailContent.subject, Charset: 'UTF-8' },
-          Body: {
-            Html: { Data: mailContent.html, Charset: 'UTF-8' },
-            Text: { Data: mailContent.text, Charset: 'UTF-8' },
-          },
-        },
-      },
-    })
-  );
-  return String(result.MessageId || 'ses');
 }
 
 async function sendOtpViaSmtp(
@@ -672,31 +637,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const mailContent = buildOtpMailContent(code, otpPurpose);
 
       try {
-        let messageId = '';
-        let channel = 'smtp';
-        let sesSandboxLimited = false;
-
-        try {
-          messageId = await sendOtpViaSmtp(recipient, mailContent);
-          channel = 'smtp';
-        } catch (smtpErr) {
-          console.warn('SMTP OTP send failed, trying SES if enabled:', smtpErr instanceof Error ? smtpErr.message : smtpErr);
-        }
-
-        if (!messageId && canUseSesApiForOtp()) {
-          try {
-            messageId = await sendOtpViaSesApi(recipient, mailContent);
-            channel = 'ses';
-          } catch (sesErr) {
-            if (isSesIdentityNotVerifiedError(sesErr)) {
-              sesSandboxLimited = true;
-              console.warn('SES sandbox blocked recipient:', recipient);
-            } else {
-              console.warn('SES OTP send failed:', sesErr instanceof Error ? sesErr.message : sesErr);
-            }
-          }
-        }
-
+        const messageId = await sendOtpViaSmtp(recipient, mailContent);
         if (!String(messageId || '').trim()) {
           throw new Error('Email server did not confirm delivery — no message id returned');
         }
@@ -704,17 +645,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Store OTP only after the mail server confirms acceptance.
         await storeOtpInRds(recipient, code);
 
-        const deliveryNote = sesSandboxLimited
-          ? ' Amazon SES is still in sandbox — request Production Access once in AWS Console so OTP reaches all users (no per-email verification).'
-          : '';
-
         return res.status(200).json({
           success: true,
           emailSent: true,
           email: recipient,
-          channel,
-          sesSandboxLimited,
-          message: `Verification code sent to ${recipient}. Check inbox and spam (sender: ${resolveMailFromAddress()}).${deliveryNote}`,
+          channel: 'smtp',
+          message: `Verification code sent to ${recipient} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
           messageId,
         });
       } catch (e) {
@@ -745,7 +681,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { user: SMTP_USER, pass: SMTP_PASS } = smtpCreds;
     const mailFrom = { name: 'Apna Intern', address: smtpCreds.fromAddress };
     const mailSender = smtpCreds.fromAddress;
-    const useSesApi = canUseSesApi();
+    const fastOtpMail =
+      normalizedAction === 'login_otp' || normalizedAction === 'send_otp';
+    // OTP always uses Hostinger/mailbox SMTP — never AWS SES.
+    const useSesApi = fastOtpMail ? false : canUseSesApi();
 
     if (!useSesApi && (!SMTP_USER || !SMTP_PASS)) {
       return res.status(500).json({
@@ -835,9 +774,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           : `Batch sent (${sent} ok${failed ? `, ${failed} failed` : ''}).`,
       });
     }
-
-    const fastOtpMail =
-      normalizedAction === 'login_otp' || normalizedAction === 'send_otp';
 
     // Skip verify on OTP + bulk — extra SMTP handshakes add 2–10s latency per login code.
     if (
@@ -1076,14 +1012,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
         const toAddr = String(mailOptions.to || '').trim();
-        return res.status(isSesIdentityNotVerifiedError(e) ? 503 : isSmtpAuthError(e) ? 502 : 500).json({
+        return res.status(isSmtpAuthError(e) ? 502 : 500).json({
           success: false,
           emailSent: false,
-          message: isSesIdentityNotVerifiedError(e)
-            ? 'Verification email could not be delivered — recipient not verified in Amazon SES'
-            : isSmtpAuthError(e)
-              ? 'Email server authentication failed (SMTP 535)'
-              : 'Failed to send verification email',
+          message: isSmtpAuthError(e)
+            ? 'Email server authentication failed (SMTP 535). Check SMTP_USER/SMTP_PASS on Vercel.'
+            : 'Failed to send verification email via SMTP',
           error: formatSmtpError(e, { to: toAddr, from: resolveMailFromAddress() }),
         });
       }
