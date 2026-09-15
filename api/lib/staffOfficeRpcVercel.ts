@@ -1,9 +1,4 @@
 /** Vercel-safe staff office RDS bootstrap + RPC (loaded dynamically from staff-office-rpc). */
-async function loadBootstrapSql(): Promise<string> {
-  const { STAFF_OFFICE_BOOTSTRAP_SQL } = await import("./staffOfficeSqlBundled.js");
-  return STAFF_OFFICE_BOOTSTRAP_SQL;
-}
-
 const STAFF_OFFICE_RPCS: Record<string, string[]> = {
   admin_list_staff_attendance_offices: ["p_active_only"],
   admin_upsert_staff_attendance_office: [
@@ -39,18 +34,10 @@ function pgPoolConfig(databaseUrl: string) {
 
 async function applyStaffOfficeSql(databaseUrl: string): Promise<void> {
   const pg = await import("pg");
+  const { applyStaffOfficeBootstrap } = await import("../staffOfficeApply.js");
   const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
   try {
-    await pool.query(await loadBootstrapSql());
-    const checks = REQUIRED_RPCS.map(
-      (name) => `EXISTS (
-        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-        WHERE n.nspname = 'public' AND p.proname = '${name}'
-      ) AS "${name}"`
-    );
-    const { rows } = await pool.query<Record<string, boolean>>(`SELECT ${checks.join(", ")}`);
-    const missing = REQUIRED_RPCS.filter((n) => !rows[0]?.[n]);
-    if (missing.length) throw new Error(`Staff office RPCs still missing: ${missing.join(", ")}`);
+    await applyStaffOfficeBootstrap(pool);
   } finally {
     await pool.end();
   }

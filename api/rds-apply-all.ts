@@ -53,28 +53,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { staffOfficeBootstrapSql, STAFF_OFFICE_REQUIRED_RPCS } = await import(
-      "./staffOfficeSqlChunks.js"
-    );
+    const { applyStaffOfficeBootstrap } = await import("./staffOfficeApply.js");
     const pg = await import("pg");
     const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
     try {
-      await pool.query(staffOfficeBootstrapSql());
-      const checks = STAFF_OFFICE_REQUIRED_RPCS.map(
-        (name) => `EXISTS (
-          SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-          WHERE n.nspname = 'public' AND p.proname = '${name}'
-        ) AS "${name}"`
-      );
-      const { rows } = await pool.query<Record<string, boolean>>(`SELECT ${checks.join(", ")}`);
-      const missing = STAFF_OFFICE_REQUIRED_RPCS.filter((n) => !rows[0]?.[n]);
-      if (missing.length) {
-        throw new Error(`Staff office RPCs still missing: ${missing.join(", ")}`);
-      }
+      await applyStaffOfficeBootstrap(pool);
       return res.status(200).json({
         ok: true,
         scope: "staff_attendance_offices",
-        checks: rows[0],
       });
     } finally {
       await pool.end();

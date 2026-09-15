@@ -18,6 +18,7 @@ api/**
 !api/ensure-staff-attendance-offices.ts
 !api/staff-office-rpc.ts
 !api/staffOfficeSqlChunks.ts
+!api/staffOfficeApply.ts
 !api/rds-apply-all.ts
 !api/lib/**
 
