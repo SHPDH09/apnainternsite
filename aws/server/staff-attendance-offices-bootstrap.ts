@@ -20,6 +20,13 @@ const OFFICE_RPCS = [
   "admin_list_staff_office_assignments",
 ] as const;
 
+const STAFF_SELF_RPCS = [
+  "_staff_office_for_employee",
+  "staff_self_attendance_status",
+  "staff_self_check_in",
+  "staff_self_check_out",
+] as const;
+
 let bootstrapped = false;
 
 export function isStaffAttendanceOfficesTable(table: string): boolean {
@@ -34,7 +41,11 @@ export function isStaffAttendanceOfficesRpc(name: string): boolean {
     name === "admin_assign_staff_office" ||
     name === "admin_remove_staff_office_assignment" ||
     name === "admin_list_staff_office_assignments" ||
-    name === "_ensure_staff_attendance_office_schema"
+    name === "_ensure_staff_attendance_office_schema" ||
+    name === "_staff_office_for_employee" ||
+    name === "staff_self_attendance_status" ||
+    name === "staff_self_check_in" ||
+    name === "staff_self_check_out"
   );
 }
 
@@ -49,7 +60,10 @@ export function isStaffAttendanceOfficesRpcMissingError(err: unknown): boolean {
     /admin_list_staff_office_assignments does not exist/i.test(msg) ||
     /_ensure_staff_attendance_office_schema does not exist/i.test(msg) ||
     /relation .*staff_attendance_offices.* does not exist/i.test(msg) ||
-    /relation .*staff_office_assignments.* does not exist/i.test(msg)
+    /relation .*staff_office_assignments.* does not exist/i.test(msg) ||
+    /staff_self_attendance_status does not exist/i.test(msg) ||
+    /_staff_office_for_employee does not exist/i.test(msg) ||
+    /staff_self_check_(in|out) does not exist/i.test(msg)
   );
 }
 
@@ -87,11 +101,22 @@ async function schemaReady(): Promise<boolean> {
   return offices && assignments;
 }
 
-async function rpcsReady(): Promise<boolean> {
+async function adminRpcsReady(): Promise<boolean> {
   for (const fn of OFFICE_RPCS) {
     if (!(await functionExists(fn))) return false;
   }
   return true;
+}
+
+async function selfRpcsReady(): Promise<boolean> {
+  for (const fn of STAFF_SELF_RPCS) {
+    if (!(await functionExists(fn))) return false;
+  }
+  return true;
+}
+
+async function rpcsReady(): Promise<boolean> {
+  return (await adminRpcsReady()) && (await selfRpcsReady());
 }
 
 async function bootstrapReady(): Promise<boolean> {
@@ -285,8 +310,12 @@ async function ensureAdminOfficeRpcs(): Promise<void> {
   await applyAdminOfficeRpcSql();
   await ensureStaffSelfOfficeRpcs();
 
-  if (!(await rpcsReady())) {
+  if (!(await adminRpcsReady())) {
     throw new Error("Could not apply staff attendance office admin RPC SQL");
+  }
+
+  if (!(await selfRpcsReady())) {
+    throw new Error("Could not apply staff self attendance office RPC SQL");
   }
 }
 

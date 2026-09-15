@@ -4,7 +4,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-const STAFF_OFFICE_RPCS: Record<string, string[]> = {
+const STAFF_ATTENDANCE_RPCS: Record<string, string[]> = {
   admin_list_staff_attendance_offices: ["p_active_only"],
   admin_upsert_staff_attendance_office: [
     "p_id", "p_name", "p_address", "p_latitude", "p_longitude",
@@ -14,6 +14,9 @@ const STAFF_OFFICE_RPCS: Record<string, string[]> = {
   admin_assign_staff_office: ["p_employee_id", "p_office_id"],
   admin_remove_staff_office_assignment: ["p_employee_id"],
   admin_list_staff_office_assignments: [],
+  staff_self_attendance_status: [],
+  staff_self_check_in: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
+  staff_self_check_out: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
 };
 
 const LAMBDA_AUTH =
@@ -127,9 +130,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
   const name = String(body.name || "").trim();
   const args = body.args && typeof body.args === "object" ? body.args : {};
-  const argOrder = STAFF_OFFICE_RPCS[name];
+  const argOrder = STAFF_ATTENDANCE_RPCS[name];
   if (!argOrder) {
-    return res.status(400).json({ data: null, error: { message: `Unknown staff office RPC: ${name}` } });
+    return res.status(400).json({ data: null, error: { message: `Unknown staff attendance RPC: ${name}` } });
   }
 
   try {

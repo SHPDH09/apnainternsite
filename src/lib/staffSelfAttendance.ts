@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { ensureStaffOfficesSchema } from "@/lib/staffAttendanceOffices";
 
 export type StaffAttendanceOfficePayload = {
   id: string;
@@ -27,10 +28,104 @@ export type StaffAttendanceStatusPayload = {
   office: StaffAttendanceOfficePayload | null;
 };
 
+function rpcErrorMessage(error: { message?: string; details?: string; hint?: string } | null): string {
+  if (!error) return "Unknown error";
+  return [error.message, error.details, error.hint].filter(Boolean).join(" — ") || "Request failed";
+}
+
+async function readAccessToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
+function isMissingRpcError(msg: string): boolean {
+  return /does not exist|42883|could not find the function|PGRST202|relation .* does not exist/i.test(msg);
+}
+
+function isApiUnavailableError(msg: string): boolean {
+  return /404|500|503|not configured|fetch failed|Failed to fetch|network|FUNCTION_INVOCATION/i.test(msg);
+}
+
+/** Old Lambda RPC omits office_assigned; derive it from office.id when present. */
+export function normalizeStaffAttendanceStatus(
+  raw: StaffAttendanceStatusPayload | null | undefined
+): StaffAttendanceStatusPayload | null {
+  if (!raw) return null;
+  const office = raw.office;
+  const officeAssigned =
+    typeof raw.office_assigned === "boolean"
+      ? raw.office_assigned
+      : Boolean(office && typeof office === "object" && "id" in office && office.id);
+  return { ...raw, office_assigned: officeAssigned, office: office ?? null };
+}
+
+async function staffSelfRpcViaApi<T>(
+  name: string,
+  args: Record<string, unknown> = {}
+): Promise<T> {
+  if (typeof window === "undefined") {
+    throw new Error("Staff attendance API requires browser session");
+  }
+
+  const token = await readAccessToken();
+  if (!token) throw new Error("Not signed in");
+
+  const origin = window.location.origin.replace(/\/$/, "");
+  await ensureStaffOfficesSchema();
+  const res = await fetch(`${origin}/api/staff-office-rpc`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name, args }),
+  });
+
+  const json = (await res.json().catch(() => ({}))) as {
+    data?: T;
+    error?: { message?: string };
+    message?: string;
+  };
+
+  if (!res.ok || json.error) {
+    throw new Error(json.error?.message || json.message || `Staff attendance request failed (${res.status})`);
+  }
+
+  return json.data as T;
+}
+
+async function legacyStaffSelfRpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) throw new Error(rpcErrorMessage(error));
+  return data as T;
+}
+
+/** Prefer Vercel /api/staff-office-rpc (per-employee assignment); Lambda is fallback only. */
+async function callStaffSelfRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+  try {
+    return await staffSelfRpcViaApi<T>(name, args);
+  } catch (apiErr) {
+    const apiMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (!isApiUnavailableError(apiMsg)) {
+      throw apiErr;
+    }
+    try {
+      return await legacyStaffSelfRpc<T>(name, args);
+    } catch (directErr) {
+      const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
+      if (isMissingRpcError(directMsg)) {
+        throw new Error(
+          "Staff attendance is not ready yet. Refresh the page — if this persists, contact admin."
+        );
+      }
+      throw directErr;
+    }
+  }
+}
+
 export async function fetchStaffSelfAttendanceStatus(): Promise<StaffAttendanceStatusPayload> {
-  const { data, error } = await supabase.rpc("staff_self_attendance_status");
-  if (error) throw error;
-  return data as StaffAttendanceStatusPayload;
+  const data = await callStaffSelfRpc<StaffAttendanceStatusPayload>("staff_self_attendance_status");
+  return normalizeStaffAttendanceStatus(data)!;
 }
 
 export async function staffSelfCheckIn(input: {
@@ -39,14 +134,12 @@ export async function staffSelfCheckIn(input: {
   faceScore: number;
   gpsAccuracyM?: number | null;
 }) {
-  const { data, error } = await supabase.rpc("staff_self_check_in", {
+  return callStaffSelfRpc("staff_self_check_in", {
     p_latitude: input.latitude,
     p_longitude: input.longitude,
     p_face_score: input.faceScore,
     p_gps_accuracy_m: input.gpsAccuracyM ?? null,
   });
-  if (error) throw error;
-  return data;
 }
 
 export async function staffSelfCheckOut(input: {
@@ -55,12 +148,10 @@ export async function staffSelfCheckOut(input: {
   faceScore: number;
   gpsAccuracyM?: number | null;
 }) {
-  const { data, error } = await supabase.rpc("staff_self_check_out", {
+  return callStaffSelfRpc("staff_self_check_out", {
     p_latitude: input.latitude,
     p_longitude: input.longitude,
     p_face_score: input.faceScore,
     p_gps_accuracy_m: input.gpsAccuracyM ?? null,
   });
-  if (error) throw error;
-  return data;
 }
