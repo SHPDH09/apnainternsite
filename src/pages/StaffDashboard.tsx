@@ -2095,7 +2095,7 @@ const StaffDashboard = () => {
             />
           )}
           {activeTab === "salary-slips" && (
-            <StaffSalarySlipsPanel isActive={activeTab === "salary-slips"} />
+            <StaffSalarySlipsPanel isActive={activeTab === "salary-slips"} profile={staffProfile} />
           )}
           {activeTab === "requests" && (
             <StaffRequestsPanel isActive={activeTab === "requests"} currentUserId={currentUserId} />

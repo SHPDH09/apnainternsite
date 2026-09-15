@@ -43,8 +43,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { SalarySlipDialog } from "@/components/documents/SalarySlipDialog";
 import { adminCardClass } from "@/components/admin/ui/adminStyles";
 import type { AdminStaffProfile } from "@/lib/staffProfile";
+import { employeeInfoFromStaffProfile } from "@/lib/salarySlipFormat";
 import {
   calcGrossFromSetup,
   deleteStaffSalaryHoliday,
@@ -139,6 +141,21 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
     staff.forEach((s) => map.set(s.id, s.full_name || s.email));
     return map;
   }, [staff]);
+
+  const staffById = useMemo(() => {
+    const map = new Map<string, AdminStaffProfile>();
+    staff.forEach((s) => map.set(s.id, s));
+    return map;
+  }, [staff]);
+
+  const breakdownEmployee = useMemo(() => {
+    if (!breakdownSlip) return null;
+    const member = staffById.get(breakdownSlip.employee_id);
+    return employeeInfoFromStaffProfile(
+      member,
+      staffNameById.get(breakdownSlip.employee_id) || breakdownSlip.employee_id
+    );
+  }, [breakdownSlip, staffById, staffNameById]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -732,7 +749,7 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button size="sm" variant="ghost" onClick={() => setBreakdownSlip(slip)}>
-                            Details
+                            View slip
                           </Button>
                           {slip.status === "generated" ? (
                             <Button
@@ -918,46 +935,12 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!breakdownSlip} onOpenChange={(o) => !o && setBreakdownSlip(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Salary breakdown</DialogTitle>
-            <DialogDescription>
-              {breakdownSlip
-                ? `${staffNameById.get(breakdownSlip.employee_id)} — ${formatSalaryMonth(breakdownSlip.salary_month)}`
-                : ""}
-            </DialogDescription>
-          </DialogHeader>
-          {breakdownSlip && (
-            <div className="space-y-2 text-sm">
-              <div className="grid grid-cols-2 gap-2">
-                <span className="text-muted-foreground">Gross</span>
-                <span className="text-right font-medium">{money(breakdownSlip.gross_amount)}</span>
-                <span className="text-muted-foreground">Present (incl. paid leave)</span>
-                <span className="text-right">{breakdownSlip.present_days}</span>
-                <span className="text-muted-foreground">Absent</span>
-                <span className="text-right">{breakdownSlip.absent_days}</span>
-                <span className="text-muted-foreground">Festival holidays</span>
-                <span className="text-right">{breakdownSlip.festival_days ?? 0}</span>
-                <span className="text-muted-foreground">Paid leave used</span>
-                <span className="text-right">{breakdownSlip.leave_days}</span>
-                <span className="text-muted-foreground">Unpaid leave</span>
-                <span className="text-right">{breakdownSlip.unpaid_leave_days ?? 0}</span>
-                <span className="text-muted-foreground">Half days</span>
-                <span className="text-right">{breakdownSlip.half_days}</span>
-                <span className="text-muted-foreground">Half-day deduction</span>
-                <span className="text-right text-red-600">-{money(breakdownSlip.half_day_deduction || 0)}</span>
-                <span className="text-muted-foreground">Attendance deduction</span>
-                <span className="text-right text-red-600">-{money(breakdownSlip.attendance_deduction)}</span>
-                <span className="text-muted-foreground">Overtime ({breakdownSlip.overtime_hours ?? 0}h)</span>
-                <span className="text-right text-emerald-700">+{money(breakdownSlip.overtime_amount || 0)}</span>
-                <span className="text-muted-foreground font-semibold">Net pay</span>
-                <span className="text-right font-bold text-emerald-700">{money(breakdownSlip.net_amount)}</span>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <SalarySlipDialog
+        open={!!breakdownSlip}
+        onOpenChange={(o) => !o && setBreakdownSlip(null)}
+        slip={breakdownSlip}
+        employee={breakdownEmployee}
+      />
 
       <Dialog open={payRefOpen} onOpenChange={setPayRefOpen}>
         <DialogContent>
