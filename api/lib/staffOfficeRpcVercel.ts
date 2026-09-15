@@ -1,4 +1,4 @@
-/** Vercel-safe staff office RDS bootstrap + RPC (used from send-mail action). */
+/** Vercel-safe staff office RDS bootstrap + RPC (shared helpers). */
 import fs from "node:fs";
 import path from "node:path";
 import jwt from "jsonwebtoken";
