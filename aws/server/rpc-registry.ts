@@ -257,6 +257,14 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["p_ids"],
     auth: "admin",
   },
+  admin_purge_student: {
+    args: ["p_user_id"],
+    auth: "admin",
+  },
+  remove_staff_access: {
+    args: ["target_id"],
+    auth: "admin",
+  },
   admin_student_data_upload_save_history: {
     args: [
       "p_upload_id",

@@ -339,7 +339,7 @@ export function StudentDirectoryDetailDialog({
                 className="gap-2 text-destructive border-destructive/30"
                 onClick={() => onDelete(studentAsMenu)}
               >
-                <Trash2 className="size-4" /> Delete
+                <Trash2 className="size-4" /> Delete permanently
               </Button>
             </div>
 

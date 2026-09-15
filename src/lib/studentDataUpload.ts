@@ -1427,20 +1427,8 @@ export async function deleteImportedStudentRecord(
   client: SupabaseClient,
   id: string
 ): Promise<void> {
-  const { data, error } = await client.rpc("admin_student_data_upload_delete_students", {
-    p_ids: [id],
-  });
-  if (error) {
-    // Fallback for environments without the new RPC yet.
-    const { error: delErr } = await client.from("students").delete().eq("id", id);
-    if (delErr) throw error;
-    return;
-  }
-  const payload = (data || {}) as { deleted_students?: number };
-  if (Number(payload.deleted_students || 0) < 1) {
-    const { error: delErr } = await client.from("students").delete().eq("id", id);
-    if (delErr) throw delErr;
-  }
+  const { purgeStudentPermanently } = await import("@/lib/purgeStudentAccount");
+  await purgeStudentPermanently(client, id);
 }
 
 export async function deleteImportedStudentRecords(

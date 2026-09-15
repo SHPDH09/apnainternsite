@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { purgeStudentPermanently } from "@/lib/purgeStudentAccount";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -300,18 +301,25 @@ export function StaffStudentDirectoryPanel({
 
   const handleDelete = useCallback(
     async (student: StudentDirectoryStudent) => {
-      if (!confirm(`Delete ${student.full_name || "this student"}?`)) return;
-      const { error } = await supabase.from("students").delete().eq("id", student.id);
-      if (error) {
-        toast.error(error.message);
+      const label = student.full_name || "this student";
+      if (
+        !confirm(
+          `Permanently delete ${label}? Login account and student record will be removed. This cannot be undone.`
+        )
+      ) {
         return;
       }
-      await onLogAction?.("DELETE", "student", `Deleted student ${student.full_name || student.id} (Staff)`, {
-        entity_id: student.id,
-        name: student.full_name,
-      });
-      toast.success("Deleted");
-      await fetchStudents();
+      try {
+        await purgeStudentPermanently(supabase, student.id);
+        await onLogAction?.("DELETE", "student", `Permanently deleted student ${label} (Staff)`, {
+          entity_id: student.id,
+          name: student.full_name,
+        });
+        toast.success("User permanently deleted");
+        await fetchStudents();
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Failed to delete user");
+      }
     },
     [fetchStudents, onLogAction]
   );
