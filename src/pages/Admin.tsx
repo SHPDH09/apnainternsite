@@ -61,6 +61,7 @@ import { StudentDataUploadPanel } from "@/components/admin/StudentDataUploadPane
 import { GalleryManagementPanel } from "@/components/admin/GalleryManagementPanel";
 import { BlogManagementPanel } from "@/components/admin/BlogManagementPanel";
 import { HomeCmsManagementPanel } from "@/components/admin/HomeCmsManagementPanel";
+import { UniversityLogoManagementPanel } from "@/components/admin/UniversityLogoManagementPanel";
 import { ConsultLetterManagementPanel } from "@/components/admin/ConsultLetterManagementPanel";
 import { DocumentCustomizationPanel } from "@/components/admin/DocumentCustomizationPanel";
 import { StudentServiceKeysPanel } from "@/components/admin/StudentServiceKeysPanel";
@@ -4826,6 +4827,10 @@ Apna Intern Team`;
 
             <TabsContent value="home-cms" className="mt-0">
               <HomeCmsManagementPanel client={supabase} currentUserId={currentUserId} />
+            </TabsContent>
+
+            <TabsContent value="university-logos" className="mt-0">
+              <UniversityLogoManagementPanel client={supabase} currentUserId={currentUserId} />
             </TabsContent>
 
             <TabsContent value="consult-letter" className="mt-0">

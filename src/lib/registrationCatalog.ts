@@ -20,7 +20,7 @@ export type RegistrationCollege = {
   registration_end_date?: string | null;
 };
 
-export type PublicUniversity = { id: string; name: string };
+export type PublicUniversity = { id: string; name: string; logo_url?: string | null };
 export type PublicCollege = { id: string; name: string; university_id: string };
 
 const COLLEGE_FEE_COLUMNS =
@@ -110,7 +110,7 @@ async function fallbackRegistrationColleges(
 
 async function fallbackPublicUniversities(client: SupabaseClient): Promise<PublicUniversity[]> {
   return fetchAllSupabaseRows<PublicUniversity>(client, "universities", {
-    select: "id, name",
+    select: "id, name, logo_url",
     orderBy: "name",
     ascending: true,
     pageSize: 1000,

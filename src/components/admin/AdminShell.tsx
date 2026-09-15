@@ -71,6 +71,7 @@ export const ADMIN_TAB_LABELS: Record<string, string> = {
   gallery: "Gallery",
   blog: "Blog & Vlog",
   "home-cms": "Home Page Content",
+  "university-logos": "University Logos",
   "consult-letter": "Consent Form",
   popups: "Popup Messages",
   "contact-details": "Contact Details",
