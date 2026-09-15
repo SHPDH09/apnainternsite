@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import { ensureStaffOfficesSchema } from "@/lib/staffAttendanceOffices";
 
 export type StaffAttendanceOfficePayload = {
   id: string;
@@ -28,22 +27,9 @@ export type StaffAttendanceStatusPayload = {
   office: StaffAttendanceOfficePayload | null;
 };
 
-function rpcErrorMessage(error: { message?: string; details?: string; hint?: string } | null): string {
-  if (!error) return "Unknown error";
-  return [error.message, error.details, error.hint].filter(Boolean).join(" — ") || "Request failed";
-}
-
 async function readAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
-}
-
-function isMissingRpcError(msg: string): boolean {
-  return /does not exist|42883|could not find the function|PGRST202|relation .* does not exist/i.test(msg);
-}
-
-function isApiUnavailableError(msg: string): boolean {
-  return /404|500|503|not configured|fetch failed|Failed to fetch|network|FUNCTION_INVOCATION/i.test(msg);
 }
 
 /** Old Lambda RPC omits office_assigned; derive it from office.id when present. */
@@ -59,10 +45,8 @@ export function normalizeStaffAttendanceStatus(
   return { ...raw, office_assigned: officeAssigned, office: office ?? null };
 }
 
-async function staffSelfRpcViaApi<T>(
-  name: string,
-  args: Record<string, unknown> = {}
-): Promise<T> {
+/** Staff self attendance must use Vercel /api/staff-office-rpc (per-employee office assignments on RDS). */
+async function callStaffSelfRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
   if (typeof window === "undefined") {
     throw new Error("Staff attendance API requires browser session");
   }
@@ -71,7 +55,6 @@ async function staffSelfRpcViaApi<T>(
   if (!token) throw new Error("Not signed in");
 
   const origin = window.location.origin.replace(/\/$/, "");
-  await ensureStaffOfficesSchema();
   const res = await fetch(`${origin}/api/staff-office-rpc`, {
     method: "POST",
     headers: {
@@ -92,35 +75,6 @@ async function staffSelfRpcViaApi<T>(
   }
 
   return json.data as T;
-}
-
-async function legacyStaffSelfRpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.rpc(name, args);
-  if (error) throw new Error(rpcErrorMessage(error));
-  return data as T;
-}
-
-/** Prefer Vercel /api/staff-office-rpc (per-employee assignment); Lambda is fallback only. */
-async function callStaffSelfRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
-  try {
-    return await staffSelfRpcViaApi<T>(name, args);
-  } catch (apiErr) {
-    const apiMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
-    if (!isApiUnavailableError(apiMsg)) {
-      throw apiErr;
-    }
-    try {
-      return await legacyStaffSelfRpc<T>(name, args);
-    } catch (directErr) {
-      const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
-      if (isMissingRpcError(directMsg)) {
-        throw new Error(
-          "Staff attendance is not ready yet. Refresh the page — if this persists, contact admin."
-        );
-      }
-      throw directErr;
-    }
-  }
 }
 
 export async function fetchStaffSelfAttendanceStatus(): Promise<StaffAttendanceStatusPayload> {

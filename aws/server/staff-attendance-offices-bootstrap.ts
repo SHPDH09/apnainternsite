@@ -8,6 +8,7 @@ const ENSURE_SQL = "aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sq
 const ADMIN_RPC_SQL = "aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql";
 const ADMIN_RPC_HOTFIX_SQL = "aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql";
 const STAFF_SELF_RPC_SQL = "aws/scripts/88-rds-staff-office-self-attendance-rpc.sql";
+const STAFF_SELF_RPC_FIX_SQL = "aws/scripts/89-rds-staff-office-employee-id-resolve.sql";
 const OFFICES_SQL = "aws/scripts/82-rds-staff-attendance-offices.sql";
 
 const OFFICE_TABLES = new Set(["staff_attendance_offices", "staff_office_assignments"]);
@@ -22,6 +23,7 @@ const OFFICE_RPCS = [
 
 const STAFF_SELF_RPCS = [
   "_staff_office_for_employee",
+  "_staff_attendance_employee_id",
   "staff_self_attendance_status",
   "staff_self_check_in",
   "staff_self_check_out",
@@ -296,12 +298,14 @@ async function applyAdminOfficeRpcSql(): Promise<boolean> {
   return applied;
 }
 
-/** Apply ensure + admin RPC SQL (85 then 83). Required for office save/list. */
+/** Apply staff self RPC SQL (88 + 89). Always re-run so CREATE OR REPLACE picks up fixes. */
 async function ensureStaffSelfOfficeRpcs(): Promise<void> {
-  try {
-    await runSqlFile(STAFF_SELF_RPC_SQL);
-  } catch (err) {
-    console.warn("[staff-attendance-offices-bootstrap] staff self rpc:", String(err).slice(0, 240));
+  for (const rel of [STAFF_SELF_RPC_SQL, STAFF_SELF_RPC_FIX_SQL]) {
+    try {
+      await runSqlFile(rel);
+    } catch (err) {
+      console.warn("[staff-attendance-offices-bootstrap] staff self rpc:", rel, String(err).slice(0, 240));
+    }
   }
 }
 
@@ -322,6 +326,7 @@ async function ensureAdminOfficeRpcs(): Promise<void> {
 /** Idempotent RDS bootstrap for staff attendance office tables + admin RPCs. */
 export async function ensureStaffAttendanceOfficesSchema(): Promise<{ ok: true }> {
   if (await bootstrapReady()) {
+    await ensureStaffSelfOfficeRpcs();
     bootstrapped = true;
     return { ok: true };
   }

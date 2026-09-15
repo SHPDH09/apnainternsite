@@ -19,10 +19,6 @@ const STAFF_ATTENDANCE_RPCS: Record<string, string[]> = {
   staff_self_check_out: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
 };
 
-const LAMBDA_AUTH =
-  process.env.LAMBDA_API_URL?.trim()?.replace(/\/$/, "") ||
-  "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
-
 function pgPoolConfig(databaseUrl: string) {
   return {
     connectionString: databaseUrl
@@ -41,26 +37,49 @@ function bearer(req: VercelRequest): string | null {
   return m?.[1]?.trim() || null;
 }
 
-async function verifySession(token: string): Promise<{ sub: string } | null> {
+async function verifySession(token: string): Promise<{ sub: string; email?: string } | null> {
   try {
-    const res = await fetch(`${LAMBDA_AUTH}/auth/v1/user`, {
+    const jwt = await import("jsonwebtoken");
+    const secret =
+      process.env.LOCAL_JWT_SECRET ||
+      process.env.JWT_SECRET ||
+      "ezyintern-local-dev-secret-change-me";
+    const payload = jwt.default.verify(token, secret, { issuer: "ezyintern-local" }) as jwt.JwtPayload;
+    if (payload?.sub) {
+      return {
+        sub: String(payload.sub),
+        email: payload.email ? String(payload.email) : undefined,
+      };
+    }
+  } catch {
+    /* fall through to Lambda auth */
+  }
+
+  const lambdaAuth =
+    process.env.LAMBDA_API_URL?.trim()?.replace(/\/$/, "") ||
+    "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
+
+  try {
+    const res = await fetch(`${lambdaAuth}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
-    const user = (await res.json().catch(() => null)) as { id?: string; sub?: string } | null;
+    const user = (await res.json().catch(() => null)) as { id?: string; sub?: string; email?: string } | null;
     const sub = user?.id || user?.sub;
-    return sub ? { sub: String(sub) } : null;
+    return sub
+      ? { sub: String(sub), email: user?.email ? String(user.email) : undefined }
+      : null;
   } catch {
     return null;
   }
 }
 
-async function applyStaffOfficeSql(databaseUrl: string): Promise<void> {
+async function applyStaffOfficeSql(databaseUrl: string, rpcName: string): Promise<void> {
   const pg = await import("pg");
-  const { applyStaffOfficeBootstrap } = await import("./staffOfficeApply.js");
+  const { applyStaffOfficeBootstrapForRpc } = await import("./staffOfficeApply.js");
   const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
   try {
-    await applyStaffOfficeBootstrap(pool);
+    await applyStaffOfficeBootstrapForRpc(pool, rpcName);
   } finally {
     await pool.end();
   }
@@ -71,15 +90,18 @@ async function callStaffOfficeRpc(
   fnName: string,
   argOrder: string[],
   args: Record<string, unknown>,
-  userId: string
+  session: { sub: string; email?: string }
 ): Promise<unknown> {
   const pg = await import("pg");
   const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true)`, [userId]);
+    await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true)`, [session.sub]);
     await client.query(`SELECT set_config('request.jwt.claim.role', 'authenticated', true)`);
+    if (session.email) {
+      await client.query(`SELECT set_config('request.jwt.claim.email', $1, true)`, [session.email]);
+    }
     const values = argOrder.map((k) => (k in args ? args[k] : null));
     const rpcSql =
       argOrder.length === 0
@@ -136,8 +158,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    await applyStaffOfficeSql(databaseUrl);
-    const data = await callStaffOfficeRpc(databaseUrl, name, argOrder, args, session.sub);
+    await applyStaffOfficeSql(databaseUrl, name);
+    const data = await callStaffOfficeRpc(databaseUrl, name, argOrder, args, session);
     return res.status(200).json({ data, error: null });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
