@@ -20,6 +20,9 @@ export default function Blog() {
       try {
         const rows = await fetchPublicBlogPosts(supabase);
         if (!cancelled) setPosts(rows);
+      } catch (err) {
+        console.warn("[Blog] public fetch failed:", err);
+        if (!cancelled) setPosts([]);
       } finally {
         if (!cancelled) setLoading(false);
       }

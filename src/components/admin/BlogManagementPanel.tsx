@@ -289,10 +289,19 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
 
       if (editor.id) {
         await updateBlogPost(client, editor.id, payload);
-        toast.success("Blog post updated.");
+        toast.success(editor.status === "published" ? "Blog post published." : "Blog post updated.");
       } else {
-        await createBlogPost(client, userId, payload);
-        toast.success("Blog post created.");
+        const created = await createBlogPost(client, userId, payload);
+        setEditor((e) => ({
+          ...e,
+          id: created.id,
+          slug: created.slug,
+          cover_image_url: created.cover_image_url || e.cover_image_url,
+          cover_image_path: created.cover_image_path || e.cover_image_path,
+        }));
+        toast.success(
+          editor.status === "published" ? "Blog post published." : "Blog post created."
+        );
       }
       setEditorOpen(false);
       await reload();
