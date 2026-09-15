@@ -1,5 +1,6 @@
 /**
  * POST /api/staff-office-rpc — staff office admin RPCs on RDS (Vercel-safe, no aws/* imports).
+ * Production: Cloudflare proxies here to Vercel; SQL is bundled in staffOfficeSqlBundled.ts.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import jwt from "jsonwebtoken";
