@@ -37,7 +37,7 @@ function isMissingRpcError(msg: string): boolean {
 }
 
 function isApiUnavailableError(msg: string): boolean {
-  return /404|503|not configured|fetch failed|Failed to fetch|network/i.test(msg);
+  return /404|500|503|not configured|fetch failed|Failed to fetch|network|FUNCTION_INVOCATION/i.test(msg);
 }
 
 async function staffOfficeRpcViaApi<T>(
