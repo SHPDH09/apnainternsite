@@ -1,5 +1,5 @@
 /** Vercel-safe staff office RDS bootstrap + RPC (loaded dynamically from staff-office-rpc). */
-const STAFF_OFFICE_RPCS: Record<string, string[]> = {
+const STAFF_ATTENDANCE_RPCS: Record<string, string[]> = {
   admin_list_staff_attendance_offices: ["p_active_only"],
   admin_upsert_staff_attendance_office: [
     "p_id",
@@ -17,9 +17,10 @@ const STAFF_OFFICE_RPCS: Record<string, string[]> = {
   admin_assign_staff_office: ["p_employee_id", "p_office_id"],
   admin_remove_staff_office_assignment: ["p_employee_id"],
   admin_list_staff_office_assignments: [],
+  staff_self_attendance_status: [],
+  staff_self_check_in: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
+  staff_self_check_out: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
 };
-
-const REQUIRED_RPCS = Object.keys(STAFF_OFFICE_RPCS);
 
 function pgPoolConfig(databaseUrl: string) {
   return {
