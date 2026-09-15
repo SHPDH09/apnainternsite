@@ -1,5 +1,8 @@
 export type OtpPurpose = "login" | "password_reset" | "security";
 
+const HOSTINGER_SMTP_HOST = "smtp.hostinger.com";
+const HOSTINGER_SMTP_USER = "info@apnaintern.in";
+
 const COPY: Record<OtpPurpose, { subject: string; headline: string; lead: string }> = {
   login: {
     subject: "Apna Intern — Your sign-in verification code",
@@ -62,27 +65,33 @@ export interface OtpSmtpEnv {
 function normalizeWorkerSmtpPassword(raw: string): string {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return "";
-  // Gmail/Hostinger app password pasted as "abcd efgh ijkl mnop"
   if (/^[a-z0-9]{4}(\s[a-z0-9]{4}){3}$/i.test(trimmed)) {
     return trimmed.replace(/\s+/g, "");
   }
-  // Keep @ and special chars (e.g. Raunak@12583, Hostinger app passwords)
   return trimmed;
+}
+
+function resolveWorkerSmtpHost(env: OtpSmtpEnv): string {
+  const raw = String(env.SMTP_HOST || HOSTINGER_SMTP_HOST).trim().toLowerCase();
+  if (raw.includes("mail-manager") || raw.includes("apnamail")) return HOSTINGER_SMTP_HOST;
+  return raw || HOSTINGER_SMTP_HOST;
+}
+
+function resolveWorkerSmtpUser(env: OtpSmtpEnv): string {
+  const raw = String(env.SMTP_USER || HOSTINGER_SMTP_USER).trim();
+  if (raw.startsWith("inp-") || raw.startsWith("AKIA")) return HOSTINGER_SMTP_USER;
+  return raw || HOSTINGER_SMTP_USER;
 }
 
 export async function sendOtpViaHostinger(
   env: OtpSmtpEnv,
   to: string,
   otp: string,
-  purpose: OtpPurpose
+  purpose: OtpPurpose,
 ): Promise<void> {
   const pass = normalizeWorkerSmtpPassword(env.SMTP_PASS || "");
-  const user = String(
-    env.SMTP_USER || "inp-3u5sedrqj7kqwjazxwmph2th",
-  ).trim();
-  const host = String(
-    env.SMTP_HOST || "brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com",
-  ).trim();
+  const user = resolveWorkerSmtpUser(env);
+  const host = resolveWorkerSmtpHost(env);
   const port = Number(env.SMTP_PORT || 587);
   const fromAddress = String(env.MAIL_FROM_ADDRESS || "info@apnaintern.in").trim();
 

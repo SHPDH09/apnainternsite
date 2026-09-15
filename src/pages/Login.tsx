@@ -245,9 +245,7 @@ const Login = () => {
       setAdminDevOtp(devCode);
       setAdminOtpSent(true);
       toast.success(
-        sent.sesSandboxLimited
-          ? `Code sent to ${sent.email} via SMTP relay. Check Spam/Promotions and search for info@apnaintern.in. If still missing, ask support to enable AWS SES Production Access.`
-          : `Verification code sent to ${sent.email} from info@apnaintern.in. Check Inbox, Spam, and Promotions folders.`
+        `Verification code sent to ${sent.email} from info@apnaintern.in. Check Inbox, Spam, and Promotions folders.`
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to send verification code";

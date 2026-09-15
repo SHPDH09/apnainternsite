@@ -14,17 +14,13 @@ type SmtpCreds = {
 
 type OtpSendResult = {
   messageId: string;
-  channel: 'ses' | 'smtp';
-  sesSandboxLimited?: boolean;
+  channel: 'smtp';
 };
 
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
 const HOSTINGER_SMTP_HOST = 'smtp.hostinger.com';
 const HOSTINGER_SMTP_USER = 'info@apnaintern.in';
 const DEFAULT_SMTP_PASS = 'Raunak@12583';
-const MAIL_MANAGER_SMTP_HOST =
-  'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
-const MAIL_MANAGER_SMTP_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
 
 const RDS_REST =
   process.env.RDS_REST_URL?.trim() ||
@@ -54,11 +50,12 @@ function resolveMailFromAddress(): string {
   const angle = explicit.match(/<([^>]+)>/);
   if (angle) return angle[1].trim();
   if (explicit.includes('@')) return explicit;
-  return (
-    process.env.MAIL_FROM_ADDRESS?.trim() ||
-    process.env.SES_FROM_ADDRESS?.trim() ||
-    DEFAULT_MAIL_FROM
-  );
+  return process.env.MAIL_FROM_ADDRESS?.trim() || DEFAULT_MAIL_FROM;
+}
+
+function isBrokenRelayHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h.includes('mail-manager-smtp') || h.includes('mail1.apnamail');
 }
 
 function isBrokenApnamailEnv(user: string, host: string, pass: string): boolean {
@@ -67,8 +64,20 @@ function isBrokenApnamailEnv(user: string, host: string, pass: string): boolean 
   return (
     u.endsWith('@apnamail.in') ||
     h.includes('mail1.apnamail.in') ||
+    isBrokenRelayHost(h) ||
     pass === 'wuh4ovfk38aiuboa'
   );
+}
+
+/** Never use Mail Manager for OTP — it returns 250 OK but mail never reaches inbox. */
+function resolveOtpSmtpHost(user: string): string {
+  const envHost = (process.env.SMTP_HOST || '').trim();
+  const u = user.toLowerCase();
+  if (u.endsWith('@apnaintern.in') || u.includes('apnaintern')) return HOSTINGER_SMTP_HOST;
+  if (u.includes('gmail')) return 'smtp.gmail.com';
+  if (envHost.includes('email-smtp.') || envHost.includes('amazonaws.com')) return HOSTINGER_SMTP_HOST;
+  if (envHost && !isBrokenRelayHost(envHost)) return envHost;
+  return HOSTINGER_SMTP_HOST;
 }
 
 function hostingerSmtpCreds(): SmtpCreds {
@@ -82,20 +91,10 @@ function hostingerSmtpCreds(): SmtpCreds {
   };
 }
 
-function mailManagerSmtpCreds(): SmtpCreds {
-  return {
-    user: MAIL_MANAGER_SMTP_USER,
-    pass: DEFAULT_SMTP_PASS,
-    host: MAIL_MANAGER_SMTP_HOST,
-    port: 587,
-    fromAddress: resolveMailFromAddress(),
-  };
-}
-
 function resolveSmtpFromEnv(): SmtpCreds {
   const pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
-  const host = (process.env.SMTP_HOST || HOSTINGER_SMTP_HOST).trim();
   const user = (process.env.SMTP_USER || HOSTINGER_SMTP_USER).trim();
+  const host = resolveOtpSmtpHost(user);
   const portRaw = process.env.SMTP_PORT || '587';
   const port = Number.parseInt(portRaw, 10);
 
@@ -104,7 +103,7 @@ function resolveSmtpFromEnv(): SmtpCreds {
   }
 
   return {
-    user,
+    user: user.endsWith('@apnaintern.in') ? HOSTINGER_SMTP_USER : user,
     pass,
     host,
     port: Number.isFinite(port) ? port : 587,
@@ -161,17 +160,33 @@ async function loadHostingerSmtpFromDatabase(): Promise<SmtpCreds | null> {
   }
 }
 
-function canUseSesApi(): boolean {
-  if (process.env.USE_SES_API === 'false') return false;
-  // Vercel + Mail Manager SMTP must reach any recipient — SES sandbox blocks unverified emails.
-  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
-  const host = (process.env.SMTP_HOST || HOSTINGER_SMTP_HOST).toLowerCase();
-  if (host.includes('mail-manager-smtp') || host.includes('hostinger') || host.includes('apnamail')) {
-    return false;
-  }
-  return Boolean(
-    process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
-  );
+function isMailboxSmtpUser(user: string): boolean {
+  const u = user.trim().toLowerCase();
+  return u.includes('@') && !u.startsWith('akia');
+}
+
+function defaultSmtpHostForUser(user: string): string {
+  const u = user.toLowerCase();
+  if (u.includes('gmail')) return 'smtp.gmail.com';
+  if (u.endsWith('@apnaintern.in')) return HOSTINGER_SMTP_HOST;
+  return HOSTINGER_SMTP_HOST;
+}
+
+function appMailboxSmtpCreds(): SmtpCreds | null {
+  const user = (process.env.SMTP_USER || HOSTINGER_SMTP_USER).trim();
+  const pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
+  if (!user || !pass || !isMailboxSmtpUser(user)) return null;
+
+  const host = resolveOtpSmtpHost(user);
+  if (isBrokenApnamailEnv(user, host, pass)) return hostingerSmtpCreds();
+
+  return {
+    user,
+    pass,
+    host,
+    port: Number.parseInt(process.env.SMTP_PORT || '587', 10) || 587,
+    fromAddress: resolveMailFromAddress(),
+  };
 }
 
 function parseBody(req: VercelRequest): Record<string, unknown> {
@@ -252,47 +267,14 @@ function isHostingerOutboundDisabled(e: unknown): boolean {
   return raw.includes('554') && raw.includes('outbound sending is disabled');
 }
 
-function isSesSandboxError(e: unknown): boolean {
+function isMailboxSuspendedError(e: unknown): boolean {
   const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
   return (
-    raw.includes('not verified') ||
-    raw.includes('messagerejected') ||
-    raw.includes('sandbox') ||
-    raw.includes('email address is not verified')
+    isHostingerOutboundDisabled(e) ||
+    raw.includes('suspended') ||
+    raw.includes('account disabled') ||
+    raw.includes('sending is disabled')
   );
-}
-
-async function sendOtpViaSesApi(
-  to: string,
-  mail: { subject: string; html: string; text: string }
-): Promise<string> {
-  const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
-  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
-  const client = new SESv2Client({ region });
-  const fromAddress = resolveMailFromAddress();
-  const configSet = process.env.SES_CONFIGURATION_SET?.trim();
-
-  const result = await client.send(
-    new SendEmailCommand({
-      FromEmailAddress: `Apna Intern <${fromAddress}>`,
-      Destination: { ToAddresses: [to] },
-      ReplyToAddresses: [fromAddress],
-      ...(configSet ? { ConfigurationSetName: configSet } : {}),
-      Content: {
-        Simple: {
-          Subject: { Data: mail.subject, Charset: 'UTF-8' },
-          Body: {
-            Html: { Data: mail.html, Charset: 'UTF-8' },
-            Text: { Data: mail.text, Charset: 'UTF-8' },
-          },
-        },
-      },
-    })
-  );
-
-  const messageId = String(result.MessageId || '').trim();
-  if (!messageId) throw new Error('SES accepted send but returned no MessageId');
-  return messageId;
 }
 
 async function sendOtpViaSmtpWithCreds(
@@ -345,18 +327,11 @@ async function sendOtpViaSmtpWithCreds(
   return messageId;
 }
 
-function isHostingerAligned(creds: SmtpCreds): boolean {
-  const host = creds.host.toLowerCase();
-  const user = creds.user.toLowerCase();
-  return host.includes('hostinger') || user.endsWith('@apnaintern.in');
-}
-
 async function collectSmtpCandidatesForOtp(): Promise<SmtpCreds[]> {
   const smtpCandidates: SmtpCreds[] = [];
   const seen = new Set<string>();
   const push = (creds: SmtpCreds | null | undefined) => {
     if (!creds?.pass?.trim()) return;
-    if (!isHostingerAligned(creds)) return;
     const key = `${creds.host}|${creds.user}|${creds.fromAddress}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -364,6 +339,7 @@ async function collectSmtpCandidatesForOtp(): Promise<SmtpCreds[]> {
   };
 
   push(hostingerSmtpCreds());
+  push(appMailboxSmtpCreds());
   push(resolveSmtpFromEnv());
   push(await loadHostingerSmtpFromDatabase());
   return smtpCandidates;
@@ -387,40 +363,30 @@ async function trySmtpCandidates(
   return null;
 }
 
+const HOSTINGER_OUTBOUND_MESSAGE =
+  'OTP could not be sent — email mailbox is suspended or outbound SMTP is disabled for info@apnaintern.in. ' +
+  'In Hostinger → Emails → Manage → re-enable outbound/SMTP sending for info@apnaintern.in.';
+
 async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Promise<OtpSendResult> {
   const mail = buildOtpMail(otp, purpose);
   const errors: string[] = [];
 
-  // Mail Manager first — Hostinger info@apnaintern.in outbound is disabled (554) on production.
-  const relayResult = await trySmtpCandidates([mailManagerSmtpCreds()], email, mail, errors);
-  if (relayResult) return relayResult;
-
-  const hostingerResult = await trySmtpCandidates(
+  // Primary: mailbox app-password SMTP (Hostinger info@apnaintern.in or Gmail from env).
+  const mailboxResult = await trySmtpCandidates(
     await collectSmtpCandidatesForOtp(),
     email,
     mail,
     errors
   );
-  if (hostingerResult) return hostingerResult;
+  if (mailboxResult) return mailboxResult;
 
-  if (canUseSesApi()) {
-    try {
-      const messageId = await sendOtpViaSesApi(email, mail);
-      return { messageId, channel: 'ses' };
-    } catch (sesErr) {
-      const msg = sesErr instanceof Error ? sesErr.message : String(sesErr);
-      errors.push(`SES: ${msg}`);
-      if (isSesSandboxError(sesErr)) {
-        throw new Error(
-          `${msg} — request AWS SES Production Access in ap-south-1, or ensure SMTP_PASS is set on Vercel.`
-        );
-      }
-    }
+  if (errors.some((e) => isMailboxSuspendedError(new Error(e)))) {
+    throw new Error(HOSTINGER_OUTBOUND_MESSAGE);
   }
 
   throw new Error(
     errors.join(' | ') ||
-      'Failed to send verification email. Enable Hostinger outbound SMTP or check Mail Manager relay on Vercel.'
+      'Failed to send verification email via SMTP. Check SMTP_USER and SMTP_PASS in Vercel project settings.'
   );
 }
 
@@ -453,18 +419,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const delivery = await sendOtpEmail(email, otp, purpose);
     await storeOtp(email, otp);
 
-    const sandboxNote = delivery.sesSandboxLimited
-      ? ' Amazon SES is in sandbox mode — OTP was sent via SMTP relay. If email still missing, check Spam or contact support.'
-      : '';
-
     return res.status(200).json({
       success: true,
       emailSent: true,
       email,
-      channel: delivery.channel,
-      smtpProvider: delivery.channel === 'smtp' ? 'smtp' : delivery.channel,
-      sesSandboxLimited: delivery.sesSandboxLimited ?? false,
-      message: `Verification code sent to ${email} from info@apnaintern.in. Check Inbox and Spam/Promotions.${sandboxNote}`,
+      channel: 'smtp',
+      smtpProvider: 'smtp',
+      message: `Verification code sent to ${email} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
       messageId: delivery.messageId,
     });
   } catch (e: unknown) {

@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 
 /** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
 const DEFAULT_SMTP_HOST = 'smtp.hostinger.com';
 const DEFAULT_SMTP_USER = 'info@apnaintern.in';
-const LEGACY_MAIL_MANAGER_HOST =
-  'brua3gww2w8z.fips.wmjb.mail-manager-smtp.amazonaws.com';
-const LEGACY_MAIL_MANAGER_USER = 'inp-3u5sedrqj7kqwjazxwmph2th';
+const DEFAULT_SMTP_PASS = 'Raunak@12583';
+const HOSTINGER_SMTP_HOST = 'smtp.hostinger.com';
+const HOSTINGER_SMTP_USER = 'info@apnaintern.in';
 
 function normalizeSmtpPassword(raw: string): string {
   return String(raw || '')
@@ -25,22 +25,46 @@ function readSmtpPassFromEnv(): string {
   return normalizeSmtpPassword(raw);
 }
 
-function defaultHostForUser(user: string): string {
-  const u = user.toLowerCase();
-  if (u.endsWith('@apnaintern.in')) return 'smtp.hostinger.com';
-  if (u.endsWith('@apnamail.in')) return LEGACY_MAIL_MANAGER_HOST;
-  if (u.endsWith('@gmail.com') || u.includes('gmail')) return 'smtp.gmail.com';
-  return DEFAULT_SMTP_HOST;
+function isBrokenRelayHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h.includes('mail-manager-smtp') || h.includes('mail1.apnamail');
 }
 
-function shouldUseLegacyMailManager(user: string, pass: string, host: string): boolean {
-  if (pass.trim()) return false;
-  if (!user.trim()) return true;
-  const h = host.toLowerCase();
+function defaultHostForUser(user: string): string {
   const u = user.toLowerCase();
-  if (u.includes('@apnaintern.in') && !u.startsWith('inp-')) return false;
-  if (h.includes('email-smtp.')) return true;
-  return false;
+  if (u.includes('gmail')) return 'smtp.gmail.com';
+  if (u.startsWith('akia')) return 'email-smtp.ap-south-1.amazonaws.com';
+  if (u.endsWith('@apnaintern.in')) return HOSTINGER_SMTP_HOST;
+  return HOSTINGER_SMTP_HOST;
+}
+
+/** OTP/login mail must not use Mail Manager — it accepts but never delivers. */
+function resolveOtpSmtpHost(user: string): string {
+  const envHost = (process.env.SMTP_HOST || '').trim();
+  const u = user.toLowerCase();
+  if (u.endsWith('@apnaintern.in') || u.includes('apnaintern')) return HOSTINGER_SMTP_HOST;
+  if (u.includes('gmail')) return 'smtp.gmail.com';
+  if (envHost.includes('email-smtp.') || envHost.includes('amazonaws.com')) return HOSTINGER_SMTP_HOST;
+  if (envHost && !isBrokenRelayHost(envHost)) return envHost;
+  return HOSTINGER_SMTP_HOST;
+}
+
+function deriveSesSmtpPassword(secretAccessKey: string, region = 'ap-south-1'): string {
+  const version = Buffer.from([0x04]);
+  const kDate = createHmac('sha256', `AWS4${secretAccessKey}`).update('11111111').digest();
+  const kRegion = createHmac('sha256', kDate).update(region).digest();
+  const kService = createHmac('sha256', kRegion).update('ses').digest();
+  const kSigning = createHmac('sha256', kService).update('aws4_request').digest();
+  const signature = createHmac('sha256', kSigning).update('SendRawEmail').digest();
+  return Buffer.concat([version, signature]).toString('base64');
+}
+
+function resolveSesSmtpPassword(user: string): string {
+  if (!user.startsWith('AKIA')) return '';
+  const secret = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (!secret) return '';
+  const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
+  return deriveSesSmtpPassword(secret, region);
 }
 
 function resolveSmtpHostFromEnv(user = ''): string {
@@ -50,8 +74,6 @@ function resolveSmtpHostFromEnv(user = ''): string {
   return defaultHostForUser(resolvedUser);
 }
 
-const MAIL_MANAGER_SMTP_PASS = 'Raunak@12583';
-
 function resolveSmtpFromEnv(): {
   user: string;
   pass: string;
@@ -60,7 +82,7 @@ function resolveSmtpFromEnv(): {
   fromAddress: string;
 } {
   let user = (process.env.SMTP_USER || DEFAULT_SMTP_USER).trim();
-  let pass = readSmtpPassFromEnv();
+  let pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
   let host = resolveSmtpHostFromEnv(user);
   const port = resolveSmtpPort();
   const fromAddress = resolveMailFromAddress();
@@ -68,15 +90,18 @@ function resolveSmtpFromEnv(): {
   const apnamailBroken =
     user.toLowerCase().endsWith('@apnamail.in') ||
     host.toLowerCase().includes('mail1.apnamail.in') ||
+    isBrokenRelayHost(host) ||
     pass === 'wuh4ovfk38aiuboa';
 
-  if (apnamailBroken || shouldUseLegacyMailManager(user, pass, host)) {
-    user = LEGACY_MAIL_MANAGER_USER;
-    host = LEGACY_MAIL_MANAGER_HOST;
-    pass = MAIL_MANAGER_SMTP_PASS;
+  if (apnamailBroken || user.endsWith('@apnaintern.in') || isBrokenRelayHost(process.env.SMTP_HOST || '')) {
+    user = HOSTINGER_SMTP_USER;
+    host = HOSTINGER_SMTP_HOST;
+    pass = DEFAULT_SMTP_PASS;
   }
 
-  if (!pass) pass = MAIL_MANAGER_SMTP_PASS;
+  if (!pass && user.startsWith('AKIA')) {
+    pass = resolveSesSmtpPassword(user);
+  }
 
   return { user, pass, host, port, fromAddress };
 }
@@ -93,6 +118,21 @@ function isSesIdentityNotVerifiedError(e: unknown): boolean {
 function isSmtpAuthError(e: unknown): boolean {
   const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
   return raw.includes('535') || raw.includes('authentication credentials invalid') || raw.includes('invalid login');
+}
+
+function isHostingerOutboundDisabled(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return raw.includes('554') && raw.includes('outbound sending is disabled');
+}
+
+function isMailboxSuspendedError(e: unknown): boolean {
+  const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    isHostingerOutboundDisabled(e) ||
+    raw.includes('suspended') ||
+    raw.includes('account disabled') ||
+    raw.includes('sending is disabled')
+  );
 }
 
 function formatSmtpError(e: unknown, context?: { to?: string; from?: string }): string {
@@ -141,42 +181,34 @@ function buildOtpMailContent(otp: string, purpose: OtpMailPurpose = 'password_re
   return { subject: copy.subject, html, text };
 }
 
-function canUseSesApiForOtp(): boolean {
-  if (process.env.USE_SES_API === 'false') return false;
-  if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) return false;
-  const host = (process.env.SMTP_HOST || process.env.SES_SMTP_HOST || '').toLowerCase();
-  if (host.includes('mail-manager-smtp') || host.includes('hostinger') || host.includes('apnamail')) {
-    return false;
-  }
+/** Bulk announcements via SES — keeps Hostinger mailbox free for OTP (avoids suspension). */
+function canUseSesApiForBulk(): boolean {
+  if (process.env.USE_SES_FOR_BULK === 'false') return false;
   return Boolean(
     process.env.AWS_ACCESS_KEY_ID?.trim() && process.env.AWS_SECRET_ACCESS_KEY?.trim()
   );
 }
 
-async function sendOtpViaSesApi(
-  recipient: string,
-  mailContent: { subject: string; html: string; text: string }
-): Promise<string> {
+async function sendBulkViaSesApi(to: string, subject: string, html: string): Promise<void> {
   const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
   const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
   const client = new SESv2Client({ region });
   const fromAddress = resolveMailFromAddress();
-  const result = await client.send(
+  await client.send(
     new SendEmailCommand({
       FromEmailAddress: `Apna Intern <${fromAddress}>`,
-      Destination: { ToAddresses: [recipient] },
+      Destination: { ToAddresses: [to.trim()] },
       Content: {
         Simple: {
-          Subject: { Data: mailContent.subject, Charset: 'UTF-8' },
+          Subject: { Data: subject, Charset: 'UTF-8' },
           Body: {
-            Html: { Data: mailContent.html, Charset: 'UTF-8' },
-            Text: { Data: mailContent.text, Charset: 'UTF-8' },
+            Html: { Data: html, Charset: 'UTF-8' },
+            Text: { Data: html.replace(/<[^>]+>/g, ' ').trim(), Charset: 'UTF-8' },
           },
         },
       },
     })
   );
-  return String(result.MessageId || 'ses');
 }
 
 async function sendOtpViaSmtp(
@@ -381,8 +413,9 @@ function parseJsonBody(req: VercelRequest): Record<string, unknown> {
 }
 
 const BULK_RATE_LIMIT_DELAYS_MS = [15_000, 45_000, 90_000];
-/** Per request — emails are sent in parallel inside the handler (no artificial delay). */
-const BULK_BATCH_MAX = 15;
+/** Sequential bulk sends — parallel blasts suspend Hostinger mailboxes. */
+const BULK_BATCH_MAX = 5;
+const BULK_SEND_DELAY_MS = 3500;
 
 function bulkAnnouncementHtml(message: string): string {
   return `
@@ -604,31 +637,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const mailContent = buildOtpMailContent(code, otpPurpose);
 
       try {
-        let messageId = '';
-        let channel = 'smtp';
-        let sesSandboxLimited = false;
-
-        try {
-          messageId = await sendOtpViaSmtp(recipient, mailContent);
-          channel = 'smtp';
-        } catch (smtpErr) {
-          console.warn('SMTP OTP send failed, trying SES if enabled:', smtpErr instanceof Error ? smtpErr.message : smtpErr);
-        }
-
-        if (!messageId && canUseSesApiForOtp()) {
-          try {
-            messageId = await sendOtpViaSesApi(recipient, mailContent);
-            channel = 'ses';
-          } catch (sesErr) {
-            if (isSesIdentityNotVerifiedError(sesErr)) {
-              sesSandboxLimited = true;
-              console.warn('SES sandbox blocked recipient:', recipient);
-            } else {
-              console.warn('SES OTP send failed:', sesErr instanceof Error ? sesErr.message : sesErr);
-            }
-          }
-        }
-
+        const messageId = await sendOtpViaSmtp(recipient, mailContent);
         if (!String(messageId || '').trim()) {
           throw new Error('Email server did not confirm delivery — no message id returned');
         }
@@ -636,17 +645,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Store OTP only after the mail server confirms acceptance.
         await storeOtpInRds(recipient, code);
 
-        const deliveryNote = sesSandboxLimited
-          ? ' Amazon SES is still in sandbox — request Production Access once in AWS Console so OTP reaches all users (no per-email verification).'
-          : '';
-
         return res.status(200).json({
           success: true,
           emailSent: true,
           email: recipient,
-          channel,
-          sesSandboxLimited,
-          message: `Verification code sent to ${recipient}. Check inbox and spam (sender: ${resolveMailFromAddress()}).${deliveryNote}`,
+          channel: 'smtp',
+          message: `Verification code sent to ${recipient} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
           messageId,
         });
       } catch (e) {
@@ -677,7 +681,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { user: SMTP_USER, pass: SMTP_PASS } = smtpCreds;
     const mailFrom = { name: 'Apna Intern', address: smtpCreds.fromAddress };
     const mailSender = smtpCreds.fromAddress;
-    const useSesApi = canUseSesApi();
+    const fastOtpMail =
+      normalizedAction === 'login_otp' || normalizedAction === 'send_otp';
+    // OTP always uses Hostinger/mailbox SMTP — never AWS SES.
+    const useSesApi = fastOtpMail ? false : canUseSesApi();
 
     if (!useSesApi && (!SMTP_USER || !SMTP_PASS)) {
       return res.status(500).json({
@@ -717,37 +724,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let failed = 0;
       let rateLimited = false;
       let lastError = '';
+      const useSesBulk = canUseSesApiForBulk();
 
-      const outcomes = await Promise.all(
-        list.map(async (to) => {
-          try {
+      for (let i = 0; i < list.length; i++) {
+        const to = list[i];
+        try {
+          if (useSesBulk) {
+            await sendBulkViaSesApi(to, mailSubject, html);
+          } else {
             await deliverOutbound(
               { from, sender, to, subject: mailSubject, html },
               transporter,
               { bulk: true, sendWithRetry: sendMailWithRetry }
             );
-            return { ok: true as const };
-          } catch (e: unknown) {
-            return {
-              ok: false as const,
-              error: formatSmtpError(e, { to, from: from.address }),
-              rateLimited: isSmtpRateLimitError(e),
-            };
           }
-        })
-      );
-
-      for (const o of outcomes) {
-        if (o.ok) {
           sent++;
-          continue;
-        }
-        if (o.ok === false) {
+        } catch (e: unknown) {
           failed++;
-          lastError = o.error;
-          if (o.rateLimited) {
+          lastError = formatSmtpError(e, { to, from: from.address });
+          if (isSmtpRateLimitError(e) || isMailboxSuspendedError(e)) {
             rateLimited = true;
+            break;
           }
+        }
+        if (i < list.length - 1) {
+          await new Promise((r) => setTimeout(r, BULK_SEND_DELAY_MS));
         }
       }
 
@@ -773,9 +774,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           : `Batch sent (${sent} ok${failed ? `, ${failed} failed` : ''}).`,
       });
     }
-
-    const fastOtpMail =
-      normalizedAction === 'login_otp' || normalizedAction === 'send_otp';
 
     // Skip verify on OTP + bulk — extra SMTP handshakes add 2–10s latency per login code.
     if (
@@ -996,6 +994,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           sendWithRetry: sendMailWithRetry,
         });
       } catch (e) {
+        if (isMailboxSuspendedError(e)) {
+          return res.status(503).json({
+            success: false,
+            emailSent: false,
+            message:
+              'Email mailbox suspended — contact Hostinger to re-enable outbound SMTP for info@apnaintern.in.',
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
         if (isSmtpRateLimitError(e)) {
           return res.status(429).json({
             success: false,
@@ -1005,17 +1012,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
         const toAddr = String(mailOptions.to || '').trim();
-        return res.status(isSesIdentityNotVerifiedError(e) ? 503 : isSmtpAuthError(e) ? 502 : 500).json({
+        return res.status(isSmtpAuthError(e) ? 502 : 500).json({
           success: false,
           emailSent: false,
-          message: isSesIdentityNotVerifiedError(e)
-            ? 'Verification email could not be delivered — recipient not verified in Amazon SES'
-            : isSmtpAuthError(e)
-              ? 'Email server authentication failed (SMTP 535)'
-              : 'Failed to send verification email',
+          message: isSmtpAuthError(e)
+            ? 'Email server authentication failed (SMTP 535). Check SMTP_USER/SMTP_PASS on Vercel.'
+            : 'Failed to send verification email via SMTP',
           error: formatSmtpError(e, { to: toAddr, from: resolveMailFromAddress() }),
         });
       }
+    } else if (
+      normalizedAction === 'bulk_custom_mail' &&
+      canUseSesApiForBulk() &&
+      mailOptions.to
+    ) {
+      await sendBulkViaSesApi(
+        String(mailOptions.to),
+        String(mailOptions.subject || 'Update from Apna Intern'),
+        String(mailOptions.html || '')
+      );
     } else {
       await deliverOutbound(mailOptions, transporter, {
         bulk: normalizedAction === 'bulk_custom_mail',
@@ -1030,6 +1045,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error('send-mail error:', err);
+    if (isMailboxSuspendedError(error)) {
+      return res.status(503).json({
+        success: false,
+        message:
+          'Mailbox temporarily suspended by email provider. OTP login still works — bulk messages paused. Wait 1 hour or contact Hostinger support to re-enable outbound sending for info@apnaintern.in.',
+        error: err.message,
+      });
+    }
     if (isSmtpRateLimitError(error)) {
       return res.status(429).json({
         success: false,
