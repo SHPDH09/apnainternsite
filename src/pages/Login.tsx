@@ -22,13 +22,14 @@ import { SiteNav } from "@/components/SiteNav";
 import { SiteFooter } from "@/components/SiteFooter";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveDashboardPath } from "@/lib/resolveDashboardPath";
-import {
-  attemptStudentPasswordLoginBeforeOtp,
-  signInStudentWithPassword,
-} from "@/lib/studentAuthLogin";
-import { requestStudentLoginOtp, signInStudentWithOtp } from "@/lib/studentOtpLogin";
+import { signInStudentWithPassword } from "@/lib/studentAuthLogin";
 import { establishAdminAuthSession } from "@/lib/adminAuthSession";
-import { requestAdminLoginOtp, verifyAdminLoginOtp } from "@/lib/adminLoginOtp";
+import {
+  requestAdminLoginOtp,
+  requiresAdminLoginOtp,
+  verifyAdminLoginOtp,
+} from "@/lib/adminLoginOtp";
+import { fetchRolesForUser } from "@/lib/portalAuth";
 import { isLocalDevEnvironment } from "@/lib/isLocalDev";
 import { finishPortalLoginAfterAuth } from "@/lib/finishPortalLogin";
 import {
@@ -68,7 +69,7 @@ const Login = () => {
   // /cybercafe/login is partner portal login (no student-sign-out flow).
   const isAdminLoginRoute =
     location.pathname === ADMIN_LOGIN_PATH || isCyberCafeLoginRoute;
-  /** /admin/login only — staff & super-admin OTP gate (not cyber café). */
+  /** /admin/login — email OTP only for admin / super_admin roles (not staff). */
   const isStaffPortalLogin = location.pathname === ADMIN_LOGIN_PATH;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -78,16 +79,7 @@ const Login = () => {
   const [loginLoading, setLoginLoading] = useState(false);
   const isStudentLoginRoute = location.pathname === STUDENT_LOGIN_PATH;
 
-  /** Student portal: password first; email OTP only after password fails. */
-  const [studentLoginStep, setStudentLoginStep] = useState<"password" | "otp">("password");
-  const [studentOtpEmail, setStudentOtpEmail] = useState("");
-  const [studentOtp, setStudentOtp] = useState("");
-  const [studentOtpSending, setStudentOtpSending] = useState(false);
-  const [studentOtpSent, setStudentOtpSent] = useState(false);
-  const [studentOtpVerified, setStudentOtpVerified] = useState(false);
-  const [studentOtpError, setStudentOtpError] = useState(false);
-
-  /** Admin portal: password verified → email OTP before session is kept. */
+  /** Admin portal: password verified → email OTP before session is kept (admin/super_admin only). */
   const [adminLoginStep, setAdminLoginStep] = useState<"password" | "otp">("password");
   const [adminPendingEmail, setAdminPendingEmail] = useState("");
   const [adminPendingPassword, setAdminPendingPassword] = useState("");
@@ -291,67 +283,6 @@ const Login = () => {
     }
   };
 
-  const sendStudentLoginOtp = async (targetEmail: string) => {
-    setStudentOtpSending(true);
-    try {
-      const sent = await requestStudentLoginOtp(supabase, targetEmail);
-      if (!sent.ok) throw sent.error;
-      setStudentOtpEmail(sent.email);
-      if (typeof window !== "undefined" && window.location.hostname === "localhost") {
-        const devOtp = sessionStorage.getItem("student_login_otp");
-        if (devOtp) toast.info(`Dev login code: ${devOtp}`);
-      }
-      setStudentOtpSent(true);
-      toast.success(
-        `Login code sent to ${sent.email} from info@apnaintern.in. Check Inbox, Spam, and Promotions.`
-      );
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to send login code";
-      toast.error(msg);
-    } finally {
-      setStudentOtpSending(false);
-    }
-  };
-
-  const offerStudentOtpFallback = (normalizedEmail: string) => {
-    setStudentOtpEmail(normalizedEmail);
-    setStudentOtp("");
-    setStudentOtpSent(false);
-    setStudentLoginStep("otp");
-    toast.message(
-      "Password did not match. Tap Send login code to get a one-time code by email (no email sent until you tap)."
-    );
-  };
-
-  const handleStudentOtpVerify = async () => {
-    if (studentOtp.length !== 6) {
-      toast.error("Enter the 6-digit code from your email");
-      return;
-    }
-    if (!captchaVerified) {
-      toast.error("Please verify you are human");
-      return;
-    }
-    setStudentOtpError(false);
-    setStudentOtpVerified(false);
-    setLoginLoading(true);
-    try {
-      const signIn = await signInStudentWithOtp(supabase, studentOtpEmail, studentOtp);
-      if (!signIn.ok) {
-        setStudentOtpError(true);
-        throw signIn.error;
-      }
-      setStudentOtpVerified(true);
-      await waitForOtpVerifiedAnimation();
-      await completeAuthAndNavigate();
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Login failed";
-      toast.error(msg);
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) { toast.error("Please enter credentials"); return; }
@@ -438,20 +369,17 @@ const Login = () => {
       }
 
       if (isStudentLoginRoute) {
-        const attempt = await attemptStudentPasswordLoginBeforeOtp(
-          supabase,
-          normalizedEmail,
-          password
-        );
-        if (attempt.status === "ok") {
-          await completeAuthAndNavigate();
-          return;
+        const signIn = await signInStudentWithPassword(supabase, normalizedEmail, password);
+        if (!signIn.ok) {
+          const msg = String(signIn.error.message || "");
+          throw new Error(
+            msg.includes("invalid login credentials") || msg.includes("invalid credentials")
+              ? "Invalid credentials. Use the exact email and password from your registration email."
+              : msg
+          );
         }
-        if (attempt.status === "otp") {
-          offerStudentOtpFallback(normalizedEmail);
-          return;
-        }
-        throw attempt.error;
+        await completeAuthAndNavigate();
+        return;
       }
 
       if (isStaffPortalLogin) {
@@ -463,6 +391,11 @@ const Login = () => {
               ? "Invalid credentials. Check your email and password."
               : msg
           );
+        }
+        const roles = await fetchRolesForUser(supabase, signIn.session.user.id);
+        if (!requiresAdminLoginOtp(roles, normalizedEmail)) {
+          await completeAuthAndNavigate();
+          return;
         }
         await supabase.auth.signOut();
         setAdminPendingEmail(normalizedEmail);
@@ -778,12 +711,14 @@ const Login = () => {
       ? "Use the email and College Admin ID from your invitation email"
       : isReferralLoginRoute
         ? "Enter the email and login ID from your invitation to see who registered with your referral link."
-        : isAdminLoginRoute
-          ? "For administrators, sub-admins, staff, and cyber café partners"
-          : "For enrolled students (intern dashboard)";
+        : isStaffPortalLogin
+          ? "Admin accounts: password then email OTP. Staff sign in with password only."
+          : isAdminLoginRoute
+            ? "For cyber café partners and authorised portal accounts"
+            : "For enrolled students (intern dashboard) — email and password only";
 
   const loginBadge = isStaffPortalLogin
-    ? "Staff OTP verification"
+    ? "Admin OTP verification"
     : isStudentLoginRoute
       ? "Student secure access"
       : "Apna Intern portal";
@@ -834,80 +769,6 @@ const Login = () => {
                   setAdminOtpError(false);
                 }}
               />
-            ) : isStudentLoginRoute && studentLoginStep === "otp" ? (
-              studentOtpSent ? (
-                <LoginOtpVerification
-                  headline="Email login code"
-                  description={
-                    <>
-                      Enter the <strong>6-digit code</strong> sent to{" "}
-                      <span className="font-semibold text-slate-900">{studentOtpEmail || email}</span>.
-                    </>
-                  }
-                  otp={studentOtp}
-                  onOtpChange={(value) => {
-                    setStudentOtp(value);
-                    setStudentOtpVerified(false);
-                    setStudentOtpError(false);
-                  }}
-                  onVerify={() => void handleStudentOtpVerify()}
-                  loading={loginLoading}
-                  verified={studentOtpVerified}
-                  verifying={loginLoading && !studentOtpVerified}
-                  error={studentOtpError}
-                  sending={studentOtpSending}
-                  captchaVerified={captchaVerified}
-                  verifyingCaptcha={verifyingCaptcha}
-                  onVerifyCaptcha={handleVerifyCaptcha}
-                  onResend={() => void sendStudentLoginOtp(studentOtpEmail || email)}
-                  onBack={() => {
-                    setStudentLoginStep("password");
-                    setStudentOtp("");
-                    setStudentOtpSent(false);
-                    setStudentOtpVerified(false);
-                    setStudentOtpError(false);
-                  }}
-                />
-              ) : (
-                <div className="space-y-5 animate-fade-in-up">
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-slate-700 leading-relaxed">
-                    Password sign-in did not work for{" "}
-                    <span className="font-semibold text-slate-900">{studentOtpEmail || email}</span>. Tap below to
-                    email a one-time login code.
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Email</Label>
-                    <Input
-                      type="email"
-                      className="h-12 bg-slate-50 border-none shadow-inner rounded-xl pl-4"
-                      value={studentOtpEmail || email}
-                      onChange={(e) => setStudentOtpEmail(e.target.value.trim().toLowerCase())}
-                      placeholder="you@example.com"
-                      required
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-xl shadow-glow"
-                    disabled={studentOtpSending || !(studentOtpEmail || email).includes("@")}
-                    onClick={() => void sendStudentLoginOtp(studentOtpEmail || email)}
-                  >
-                    {studentOtpSending ? <Loader2 className="size-5 animate-spin mr-2" /> : null}
-                    Send login code to email
-                  </Button>
-                  <button
-                    type="button"
-                    className="w-full text-xs font-bold text-slate-500 hover:underline"
-                    onClick={() => {
-                      setStudentLoginStep("password");
-                      setStudentOtp("");
-                      setStudentOtpSent(false);
-                    }}
-                  >
-                    Back to password sign-in
-                  </button>
-                </div>
-              )
             ) : (
               <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-2">

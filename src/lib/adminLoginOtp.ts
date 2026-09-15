@@ -1,5 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deliverOtpEmail } from "@/lib/requestOtpDelivery";
+import { isOwnerAdminEmail } from "@/lib/supabaseEnv";
+
+/** Email OTP gate applies only to admin / super_admin — not staff, students, or other portals. */
+export function requiresAdminLoginOtp(
+  roles: string[],
+  email?: string | null
+): boolean {
+  if (email && isOwnerAdminEmail(email)) return true;
+  return roles.includes("admin") || roles.includes("super_admin");
+}
 
 const OTP_SEND_COOLDOWN_MS = 60_000;
 const OTP_SEND_LAST_KEY = "ezyintern_admin_login_otp_last_send";
