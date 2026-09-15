@@ -51,6 +51,8 @@ const ALLOWED_TABLES = new Set([
   "staff_office_assignments",
   "staff_salary_setup",
   "staff_salary_slips",
+  "staff_salary_holidays",
+  "staff_paid_leave_grants",
   "staff_auth_sessions",
   "staff_activity_log",
 ]);

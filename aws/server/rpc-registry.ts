@@ -312,6 +312,26 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: [],
     auth: "admin",
   },
+  admin_list_staff_salary_holidays: {
+    args: ["p_salary_month"],
+    auth: "admin",
+  },
+  admin_upsert_staff_salary_holiday: {
+    args: ["p_holiday_date", "p_name", "p_is_paid", "p_id"],
+    auth: "admin",
+  },
+  admin_delete_staff_salary_holiday: {
+    args: ["p_id"],
+    auth: "admin",
+  },
+  admin_upsert_staff_paid_leave_grant: {
+    args: ["p_employee_id", "p_salary_month", "p_extra_paid_days", "p_reason"],
+    auth: "admin",
+  },
+  admin_list_staff_paid_leave_grants: {
+    args: ["p_salary_month"],
+    auth: "admin",
+  },
   admin_generate_staff_salary: {
     args: ["p_employee_id", "p_salary_month"],
     auth: "admin",

@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Banknote,
   Calculator,
+  CalendarDays,
   CheckCircle2,
+  Gift,
   IndianRupee,
   Loader2,
+  Plus,
   Settings2,
+  Trash2,
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -43,14 +47,21 @@ import { adminCardClass } from "@/components/admin/ui/adminStyles";
 import type { AdminStaffProfile } from "@/lib/staffProfile";
 import {
   calcGrossFromSetup,
+  deleteStaffSalaryHoliday,
   formatSalaryMonth,
   generateStaffSalary,
+  listStaffPaidLeaveGrants,
+  listStaffSalaryHolidays,
   listStaffSalarySetups,
   listStaffSalarySlips,
   markStaffSalaryPaid,
   PAYMENT_MODE_LABELS,
   SALARY_STATUS_LABELS,
+  upsertStaffPaidLeaveGrant,
+  upsertStaffSalaryHoliday,
   upsertStaffSalarySetup,
+  type StaffPaidLeaveGrant,
+  type StaffSalaryHoliday,
   type StaffSalaryPaymentMode,
   type StaffSalarySetupRow,
   type StaffSalarySlipRow,
@@ -92,6 +103,13 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
   const [paymentReference, setPaymentReference] = useState("");
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [holidays, setHolidays] = useState<StaffSalaryHoliday[]>([]);
+  const [grants, setGrants] = useState<StaffPaidLeaveGrant[]>([]);
+  const [breakdownSlip, setBreakdownSlip] = useState<StaffSalarySlipRow | null>(null);
+  const [holidayForm, setHolidayForm] = useState({ date: "", name: "", is_paid: true });
+  const [grantEmployee, setGrantEmployee] = useState("");
+  const [grantDays, setGrantDays] = useState("1");
+  const [grantReason, setGrantReason] = useState("");
 
   const [form, setForm] = useState({
     basic_salary: "",
@@ -102,6 +120,9 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
     tax_deduction: "",
     other_deductions: "",
     working_days_per_month: "26",
+    paid_leaves_per_month: "1",
+    standard_hours_per_day: "8",
+    overtime_multiplier: "1.5",
     payment_mode: "bank_transfer" as StaffSalaryPaymentMode,
     payment_notes: "",
   });
@@ -121,12 +142,16 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [setupRows, slipRows] = await Promise.all([
+      const [setupRows, slipRows, holidayRows, grantRows] = await Promise.all([
         listStaffSalarySetups(),
         listStaffSalarySlips({ salaryMonth }),
+        listStaffSalaryHolidays(salaryMonth),
+        listStaffPaidLeaveGrants(salaryMonth),
       ]);
       setSetups(setupRows);
       setSlips(slipRows);
+      setHolidays(holidayRows);
+      setGrants(grantRows);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Could not load salary data");
     } finally {
@@ -150,6 +175,9 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
       tax_deduction: existing ? String(existing.tax_deduction) : "",
       other_deductions: existing ? String(existing.other_deductions) : "",
       working_days_per_month: existing ? String(existing.working_days_per_month) : "26",
+      paid_leaves_per_month: existing ? String(existing.paid_leaves_per_month ?? 1) : "1",
+      standard_hours_per_day: existing ? String(existing.standard_hours_per_day ?? 8) : "8",
+      overtime_multiplier: existing ? String(existing.overtime_multiplier ?? 1.5) : "1.5",
       payment_mode: existing?.payment_mode || "bank_transfer",
       payment_notes: existing?.payment_notes || "",
     });
@@ -175,6 +203,9 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
         taxDeduction: Number(form.tax_deduction || 0),
         otherDeductions: Number(form.other_deductions || 0),
         workingDaysPerMonth: Number(form.working_days_per_month || 26),
+        paidLeavesPerMonth: Number(form.paid_leaves_per_month || 1),
+        standardHoursPerDay: Number(form.standard_hours_per_day || 8),
+        overtimeMultiplier: Number(form.overtime_multiplier || 1.5),
         paymentMode: form.payment_mode,
         paymentNotes: form.payment_notes,
         updatedBy: currentUserId,
@@ -259,7 +290,8 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
           <Wallet className="size-5 text-emerald-600" /> Account — Staff Salary
         </h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Step 1: Payment setup → Step 2: Generate salary → Step 3: Track payout status
+          Auto-calculates leave, half-day, festival holidays, paid leave grants, absent deductions &amp;
+          overtime from attendance + approved leave requests.
         </p>
       </div>
 
@@ -270,6 +302,9 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
           </TabsTrigger>
           <TabsTrigger value="generate" className="gap-1.5">
             <Calculator className="size-3.5" /> 2. Generate Salary
+          </TabsTrigger>
+          <TabsTrigger value="auto-rules" className="gap-1.5">
+            <CalendarDays className="size-3.5" /> Auto Rules
           </TabsTrigger>
           <TabsTrigger value="status" className="gap-1.5">
             <CheckCircle2 className="size-3.5" /> 3. Salary Status
@@ -414,6 +449,215 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
           </Card>
         </TabsContent>
 
+        <TabsContent value="auto-rules" className="mt-4 space-y-4">
+          <Card className={cn(adminCardClass, "p-4 space-y-4")}>
+            <div className="flex flex-wrap items-end gap-3 justify-between">
+              <div>
+                <h4 className="font-bold text-sm">Festival / company holidays</h4>
+                <p className="text-xs text-muted-foreground">Paid holidays auto-count for all staff in salary month.</p>
+              </div>
+              <Input
+                type="month"
+                value={salaryMonth}
+                onChange={(e) => setSalaryMonth(e.target.value)}
+                className="w-[11rem]"
+              />
+            </div>
+            <div className="grid sm:grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
+              <div className="space-y-1">
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={holidayForm.date}
+                  onChange={(e) => setHolidayForm((p) => ({ ...p, date: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Holiday name</Label>
+                <Input
+                  value={holidayForm.name}
+                  onChange={(e) => setHolidayForm((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. Diwali"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm pb-2">
+                <input
+                  type="checkbox"
+                  checked={holidayForm.is_paid}
+                  onChange={(e) => setHolidayForm((p) => ({ ...p, is_paid: e.target.checked }))}
+                />
+                Paid
+              </label>
+              <Button
+                className="gap-1"
+                disabled={busy}
+                onClick={() => {
+                  void (async () => {
+                    if (!holidayForm.date || !holidayForm.name.trim()) {
+                      toast.error("Date and name required");
+                      return;
+                    }
+                    setBusy(true);
+                    try {
+                      await upsertStaffSalaryHoliday({
+                        holidayDate: holidayForm.date,
+                        name: holidayForm.name,
+                        isPaid: holidayForm.is_paid,
+                      });
+                      toast.success("Holiday saved");
+                      setHolidayForm({ date: "", name: "", is_paid: true });
+                      await load();
+                    } catch (e: unknown) {
+                      toast.error(e instanceof Error ? e.message : "Could not save holiday");
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+              >
+                <Plus className="size-4" /> Add
+              </Button>
+            </div>
+            <div className="rounded-lg border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Paid</TableHead>
+                    <TableHead className="w-16" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {holidays.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-6 text-muted-foreground text-sm">
+                        No holidays for this month
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {holidays.map((h) => (
+                    <TableRow key={h.id}>
+                      <TableCell>{h.holiday_date}</TableCell>
+                      <TableCell>{h.name}</TableCell>
+                      <TableCell>{h.is_paid ? "Yes" : "No"}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-red-500"
+                          onClick={() => {
+                            void (async () => {
+                              try {
+                                await deleteStaffSalaryHoliday(h.id);
+                                toast.success("Removed");
+                                await load();
+                              } catch (e: unknown) {
+                                toast.error(e instanceof Error ? e.message : "Delete failed");
+                              }
+                            })();
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+
+          <Card className={cn(adminCardClass, "p-4 space-y-4")}>
+            <div>
+              <h4 className="font-bold text-sm flex items-center gap-2">
+                <Gift className="size-4 text-emerald-600" /> Extra paid leave grant
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                Add extra paid leave days for a specific employee (on top of monthly quota in setup).
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-3 items-end">
+              <div className="space-y-1">
+                <Label>Employee</Label>
+                <Select value={grantEmployee} onValueChange={setGrantEmployee}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select staff" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staff.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.full_name || s.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Extra paid days</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={grantDays}
+                  onChange={(e) => setGrantDays(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Reason</Label>
+                <Input value={grantReason} onChange={(e) => setGrantReason(e.target.value)} placeholder="Optional" />
+              </div>
+            </div>
+            <Button
+              disabled={busy || !grantEmployee}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  try {
+                    await upsertStaffPaidLeaveGrant({
+                      employeeId: grantEmployee,
+                      salaryMonth,
+                      extraPaidDays: Number(grantDays || 0),
+                      reason: grantReason,
+                    });
+                    toast.success("Paid leave grant saved");
+                    setGrantReason("");
+                    await load();
+                  } catch (e: unknown) {
+                    toast.error(e instanceof Error ? e.message : "Grant failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              Save paid leave grant
+            </Button>
+            {grants.length > 0 && (
+              <div className="rounded-lg border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Extra paid days</TableHead>
+                      <TableHead>Reason</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {grants.map((g) => (
+                      <TableRow key={g.id}>
+                        <TableCell>{staffNameById.get(g.employee_id) || g.employee_id}</TableCell>
+                        <TableCell>{g.extra_paid_days}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{g.reason || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
         <TabsContent value="status" className="mt-4 space-y-4">
           <Card className={cn(adminCardClass, "p-4 flex flex-wrap items-end gap-4")}>
             <div className="space-y-1.5">
@@ -438,7 +682,8 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                   <TableHead>Month</TableHead>
                   <TableHead>Present</TableHead>
                   <TableHead>Absent</TableHead>
-                  <TableHead>Gross</TableHead>
+                  <TableHead>Festival</TableHead>
+                  <TableHead>OT</TableHead>
                   <TableHead>Net</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Action</TableHead>
@@ -447,14 +692,14 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
               <TableBody>
                 {loading && (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center">
+                    <TableCell colSpan={9} className="py-10 text-center">
                       <Loader2 className="size-5 animate-spin inline" />
                     </TableCell>
                   </TableRow>
                 )}
                 {!loading && slips.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                       No salary records for {formatSalaryMonth(`${salaryMonth}-01`)}
                     </TableCell>
                   </TableRow>
@@ -468,7 +713,14 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                       <TableCell>{formatSalaryMonth(slip.salary_month)}</TableCell>
                       <TableCell>{slip.present_days}</TableCell>
                       <TableCell>{slip.absent_days}</TableCell>
-                      <TableCell>{money(slip.gross_amount)}</TableCell>
+                      <TableCell>{slip.festival_days ?? 0}</TableCell>
+                      <TableCell className="text-xs">
+                        {Number(slip.overtime_hours || 0) > 0 ? (
+                          <span className="text-emerald-700">+{money(slip.overtime_amount || 0)}</span>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
                       <TableCell className="font-semibold">{money(slip.net_amount)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={STATUS_BADGE[slip.status]}>
@@ -476,24 +728,29 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {slip.status === "generated" ? (
-                          <Button
-                            size="sm"
-                            className="gap-1"
-                            onClick={() => {
-                              setPayRefSlip(slip);
-                              setPaymentReference("");
-                              setPayRefOpen(true);
-                            }}
-                          >
-                            <Banknote className="size-3.5" />
-                            Mark paid
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => setBreakdownSlip(slip)}>
+                            Details
                           </Button>
-                        ) : slip.payment_reference ? (
-                          <span className="text-xs text-muted-foreground">{slip.payment_reference}</span>
-                        ) : (
-                          "—"
-                        )}
+                          {slip.status === "generated" ? (
+                            <Button
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => {
+                                setPayRefSlip(slip);
+                                setPaymentReference("");
+                                setPayRefOpen(true);
+                              }}
+                            >
+                              <Banknote className="size-3.5" />
+                              Paid
+                            </Button>
+                          ) : slip.payment_reference ? (
+                            <span className="text-xs text-muted-foreground self-center">
+                              {slip.payment_reference}
+                            </span>
+                          ) : null}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -585,6 +842,35 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                 onChange={(e) => setForm((p) => ({ ...p, working_days_per_month: e.target.value }))}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label>Paid leaves / month</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.paid_leaves_per_month}
+                onChange={(e) => setForm((p) => ({ ...p, paid_leaves_per_month: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Standard hours / day</Label>
+              <Input
+                type="number"
+                min={1}
+                step={0.5}
+                value={form.standard_hours_per_day}
+                onChange={(e) => setForm((p) => ({ ...p, standard_hours_per_day: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Overtime multiplier</Label>
+              <Input
+                type="number"
+                min={1}
+                step={0.1}
+                value={form.overtime_multiplier}
+                onChange={(e) => setForm((p) => ({ ...p, overtime_multiplier: e.target.value }))}
+              />
+            </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Payment mode</Label>
               <Select
@@ -627,6 +913,47 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
               Save payment setup
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!breakdownSlip} onOpenChange={(o) => !o && setBreakdownSlip(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Salary breakdown</DialogTitle>
+            <DialogDescription>
+              {breakdownSlip
+                ? `${staffNameById.get(breakdownSlip.employee_id)} — ${formatSalaryMonth(breakdownSlip.salary_month)}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {breakdownSlip && (
+            <div className="space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <span className="text-muted-foreground">Gross</span>
+                <span className="text-right font-medium">{money(breakdownSlip.gross_amount)}</span>
+                <span className="text-muted-foreground">Present (incl. paid leave)</span>
+                <span className="text-right">{breakdownSlip.present_days}</span>
+                <span className="text-muted-foreground">Absent</span>
+                <span className="text-right">{breakdownSlip.absent_days}</span>
+                <span className="text-muted-foreground">Festival holidays</span>
+                <span className="text-right">{breakdownSlip.festival_days ?? 0}</span>
+                <span className="text-muted-foreground">Paid leave used</span>
+                <span className="text-right">{breakdownSlip.leave_days}</span>
+                <span className="text-muted-foreground">Unpaid leave</span>
+                <span className="text-right">{breakdownSlip.unpaid_leave_days ?? 0}</span>
+                <span className="text-muted-foreground">Half days</span>
+                <span className="text-right">{breakdownSlip.half_days}</span>
+                <span className="text-muted-foreground">Half-day deduction</span>
+                <span className="text-right text-red-600">-{money(breakdownSlip.half_day_deduction || 0)}</span>
+                <span className="text-muted-foreground">Attendance deduction</span>
+                <span className="text-right text-red-600">-{money(breakdownSlip.attendance_deduction)}</span>
+                <span className="text-muted-foreground">Overtime ({breakdownSlip.overtime_hours ?? 0}h)</span>
+                <span className="text-right text-emerald-700">+{money(breakdownSlip.overtime_amount || 0)}</span>
+                <span className="text-muted-foreground font-semibold">Net pay</span>
+                <span className="text-right font-bold text-emerald-700">{money(breakdownSlip.net_amount)}</span>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
