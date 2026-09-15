@@ -24,6 +24,7 @@ import ensureDashboardServiceKeys from "../../api/ensure-dashboard-service-keys"
 import ensureProjectReportTemplates from "../../api/ensure-project-report-templates";
 import ensurePartnerApplications from "../../api/ensure-partner-applications";
 import ensureStaffAttendanceOffices from "../../api/ensure-staff-attendance-offices";
+import staffOfficeRpc from "../../api/staff-office-rpc";
 import partnerApplicationSubmit from "../../api/partner-application-submit";
 import adminPartnerRegister from "../../api/admin-partner-register";
 import rdsApplyAll from "./rds-apply-all-route.js";
@@ -239,6 +240,7 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/ensure-project-report-templates", handler: ensureProjectReportTemplates },
     { method: "post", path: "/api/ensure-partner-applications", handler: ensurePartnerApplications },
     { method: "post", path: "/api/ensure-staff-attendance-offices", handler: ensureStaffAttendanceOffices },
+    { method: "post", path: "/api/staff-office-rpc", handler: staffOfficeRpc },
     { method: "post", path: "/api/partner-application-submit", handler: partnerApplicationSubmit },
     { method: "post", path: "/api/admin-partner-register", handler: adminPartnerRegister },
     { method: "post", path: "/api/rds-apply-all", handler: rdsApplyAll },

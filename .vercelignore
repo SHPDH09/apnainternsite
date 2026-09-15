@@ -16,6 +16,7 @@ api/**
 !api/ensure-partner-applications.ts
 !api/ensure-project-report-templates.ts
 !api/ensure-staff-attendance-offices.ts
+!api/staff-office-rpc.ts
 !api/rds-apply-all.ts
 !api/lib/**
 

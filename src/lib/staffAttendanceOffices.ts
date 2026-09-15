@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type StaffAttendanceOffice = {
   id: string;
@@ -28,53 +27,68 @@ function rpcErrorMessage(error: { message?: string; details?: string; hint?: str
   return [error.message, error.details, error.hint].filter(Boolean).join(" — ") || "Request failed";
 }
 
-function isStaffOfficeRpcMissing(msg: string): boolean {
-  return /admin_(list|upsert|delete)_staff_attendance_office|admin_(assign|remove)_staff_office|admin_list_staff_office_assignments|does not exist on RDS|42883|could not find the function/i.test(
-    msg
-  );
-}
-
-async function readAccessToken(client: SupabaseClient): Promise<string | null> {
-  const { data } = await client.auth.getSession();
+async function readAccessToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
 }
 
-/** Create staff office tables + admin RPCs on RDS when missing. Never throws. */
-async function tryBootstrapStaffAttendanceOffices(client: SupabaseClient = supabase): Promise<void> {
-  if (typeof window === "undefined") return;
-  try {
-    const token = await readAccessToken(client);
-    if (!token) return;
-    const origin = window.location.origin.replace(/\/$/, "");
-    await fetch(`${origin}/api/ensure-staff-attendance-offices`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    });
-  } catch {
-    /* optional bootstrap */
+/** Vercel direct RDS RPC — applies missing functions then executes (production fix). */
+async function staffOfficeRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+  if (typeof window === "undefined") {
+    throw new Error("Staff office RPC requires browser session");
   }
+
+  const token = await readAccessToken();
+  if (!token) throw new Error("Not signed in");
+
+  const origin = window.location.origin.replace(/\/$/, "");
+  const res = await fetch(`${origin}/api/staff-office-rpc`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name, args }),
+  });
+
+  const json = (await res.json().catch(() => ({}))) as {
+    data?: T;
+    error?: { message?: string };
+  };
+
+  if (!res.ok || json.error) {
+    throw new Error(json.error?.message || `Staff office RPC failed (${res.status})`);
+  }
+
+  return json.data as T;
 }
 
-async function withStaffOfficeBootstrap<T>(run: () => Promise<T>): Promise<T> {
+async function legacyStaffOfficeRpc<T>(
+  name: string,
+  args: Record<string, unknown>
+): Promise<T> {
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) throw new Error(rpcErrorMessage(error));
+  return data as T;
+}
+
+async function callStaffOfficeRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
   try {
-    return await run();
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (!isStaffOfficeRpcMissing(msg)) throw e;
-    await tryBootstrapStaffAttendanceOffices();
-    return await run();
+    return await staffOfficeRpc<T>(name, args);
+  } catch (vercelErr) {
+    const msg = vercelErr instanceof Error ? vercelErr.message : String(vercelErr);
+    if (!/404|503|not configured|Method not allowed|fetch/i.test(msg)) {
+      throw vercelErr;
+    }
+    return legacyStaffOfficeRpc<T>(name, args);
   }
 }
 
 export async function listStaffAttendanceOffices(activeOnly = false): Promise<StaffAttendanceOffice[]> {
-  await tryBootstrapStaffAttendanceOffices();
-  return withStaffOfficeBootstrap(async () => {
-    const { data, error } = await supabase.rpc("admin_list_staff_attendance_offices", {
-      p_active_only: activeOnly,
-    });
-    if (error) throw new Error(rpcErrorMessage(error));
-    return (Array.isArray(data) ? data : []) as StaffAttendanceOffice[];
+  const data = await callStaffOfficeRpc<StaffAttendanceOffice[]>("admin_list_staff_attendance_offices", {
+    p_active_only: activeOnly,
   });
+  return Array.isArray(data) ? data : [];
 }
 
 export async function upsertStaffAttendanceOffice(input: {
@@ -89,41 +103,27 @@ export async function upsertStaffAttendanceOffice(input: {
   requireGeo?: boolean;
   isActive?: boolean;
 }): Promise<StaffAttendanceOffice> {
-  await tryBootstrapStaffAttendanceOffices();
-  return withStaffOfficeBootstrap(async () => {
-    const { data, error } = await supabase.rpc("admin_upsert_staff_attendance_office", {
-      p_id: input.id ?? null,
-      p_name: input.name.trim(),
-      p_address: input.address?.trim() || null,
-      p_latitude: input.latitude,
-      p_longitude: input.longitude,
-      p_radius_meters: input.radiusMeters,
-      p_max_gps_accuracy_m: input.maxGpsAccuracyM ?? 100,
-      p_require_face: input.requireFace ?? true,
-      p_require_geo: input.requireGeo ?? true,
-      p_is_active: input.isActive ?? true,
-    });
-
-    if (error) throw new Error(rpcErrorMessage(error));
-    return data as StaffAttendanceOffice;
+  return callStaffOfficeRpc<StaffAttendanceOffice>("admin_upsert_staff_attendance_office", {
+    p_id: input.id ?? null,
+    p_name: input.name.trim(),
+    p_address: input.address?.trim() || null,
+    p_latitude: input.latitude,
+    p_longitude: input.longitude,
+    p_radius_meters: input.radiusMeters,
+    p_max_gps_accuracy_m: input.maxGpsAccuracyM ?? 100,
+    p_require_face: input.requireFace ?? true,
+    p_require_geo: input.requireGeo ?? true,
+    p_is_active: input.isActive ?? true,
   });
 }
 
 export async function deleteStaffAttendanceOffice(id: string): Promise<void> {
-  await tryBootstrapStaffAttendanceOffices();
-  return withStaffOfficeBootstrap(async () => {
-    const { error } = await supabase.rpc("admin_delete_staff_attendance_office", { p_id: id });
-    if (error) throw new Error(rpcErrorMessage(error));
-  });
+  await callStaffOfficeRpc("admin_delete_staff_attendance_office", { p_id: id });
 }
 
 export async function listStaffOfficeAssignments(): Promise<StaffOfficeAssignment[]> {
-  await tryBootstrapStaffAttendanceOffices();
-  return withStaffOfficeBootstrap(async () => {
-    const { data, error } = await supabase.rpc("admin_list_staff_office_assignments");
-    if (error) throw new Error(rpcErrorMessage(error));
-    return (Array.isArray(data) ? data : []) as StaffOfficeAssignment[];
-  });
+  const data = await callStaffOfficeRpc<StaffOfficeAssignment[]>("admin_list_staff_office_assignments");
+  return Array.isArray(data) ? data : [];
 }
 
 export async function assignStaffOffice(input: {
@@ -132,23 +132,14 @@ export async function assignStaffOffice(input: {
   assignedBy?: string | null;
 }): Promise<StaffOfficeAssignment> {
   void input.assignedBy;
-  await tryBootstrapStaffAttendanceOffices();
-  return withStaffOfficeBootstrap(async () => {
-    const { data, error } = await supabase.rpc("admin_assign_staff_office", {
-      p_employee_id: input.employeeId,
-      p_office_id: input.officeId,
-    });
-    if (error) throw new Error(rpcErrorMessage(error));
-    return data as StaffOfficeAssignment;
+  return callStaffOfficeRpc<StaffOfficeAssignment>("admin_assign_staff_office", {
+    p_employee_id: input.employeeId,
+    p_office_id: input.officeId,
   });
 }
 
 export async function removeStaffOfficeAssignment(employeeId: string): Promise<void> {
-  await tryBootstrapStaffAttendanceOffices();
-  return withStaffOfficeBootstrap(async () => {
-    const { error } = await supabase.rpc("admin_remove_staff_office_assignment", {
-      p_employee_id: employeeId,
-    });
-    if (error) throw new Error(rpcErrorMessage(error));
+  await callStaffOfficeRpc("admin_remove_staff_office_assignment", {
+    p_employee_id: employeeId,
   });
 }

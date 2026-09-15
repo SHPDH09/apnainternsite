@@ -4,6 +4,7 @@ const VERCEL_ENSURE_API_PATHS = new Set([
   "/api/ensure-staff-attendance-offices",
   "/api/ensure-partner-applications",
   "/api/ensure-project-report-templates",
+  "/api/staff-office-rpc",
   "/api/rds-apply-all",
 ]);
 
