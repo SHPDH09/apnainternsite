@@ -277,6 +277,10 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
     auth: "auth",
   },
+  admin_list_staff_attendance_offices: {
+    args: ["p_active_only"],
+    auth: "admin",
+  },
   admin_upsert_staff_attendance_office: {
     args: [
       "p_id",

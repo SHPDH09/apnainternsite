@@ -28,11 +28,11 @@ function rpcErrorMessage(error: { message?: string; details?: string; hint?: str
 }
 
 export async function listStaffAttendanceOffices(activeOnly = false): Promise<StaffAttendanceOffice[]> {
-  let q = supabase.from("staff_attendance_offices").select("*").order("name");
-  if (activeOnly) q = q.eq("is_active", true);
-  const { data, error } = await q;
+  const { data, error } = await supabase.rpc("admin_list_staff_attendance_offices", {
+    p_active_only: activeOnly,
+  });
   if (error) throw new Error(rpcErrorMessage(error));
-  return (data || []) as StaffAttendanceOffice[];
+  return (Array.isArray(data) ? data : []) as StaffAttendanceOffice[];
 }
 
 export async function upsertStaffAttendanceOffice(input: {

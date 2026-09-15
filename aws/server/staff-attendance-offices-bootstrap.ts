@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { query } from "./db.js";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const ENSURE_SQL = "aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql";
 const OFFICES_SQL = "aws/scripts/82-rds-staff-attendance-offices.sql";
 const ADMIN_RPC_SQL = "aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql";
 
@@ -151,6 +152,20 @@ export async function ensureStaffAttendanceOfficesSchema(): Promise<{ ok: true }
   await ensureCoreTables();
 
   try {
+    await runSqlFile(ENSURE_SQL);
+  } catch (err) {
+    const msg = String((err as { message?: string })?.message || err || "");
+    console.warn("[staff-attendance-offices-bootstrap] ensure sql:", msg.slice(0, 240));
+  }
+
+  try {
+    await runSqlFile(ADMIN_RPC_SQL);
+  } catch (err) {
+    const msg = String((err as { message?: string })?.message || err || "");
+    console.warn("[staff-attendance-offices-bootstrap] admin rpc sql:", msg.slice(0, 240));
+  }
+
+  try {
     await runSqlFile(OFFICES_SQL);
   } catch (err) {
     const msg = String((err as { message?: string })?.message || err || "");
@@ -161,13 +176,6 @@ export async function ensureStaffAttendanceOfficesSchema(): Promise<{ ok: true }
 
   // Re-run core DDL in case full script failed mid-way.
   await ensureCoreTables();
-
-  try {
-    await runSqlFile(ADMIN_RPC_SQL);
-  } catch (err) {
-    const msg = String((err as { message?: string })?.message || err || "");
-    console.warn("[staff-attendance-offices-bootstrap] admin rpc sql:", msg.slice(0, 240));
-  }
 
   if (!(await schemaReady())) {
     throw new Error("staff_attendance_offices / staff_office_assignments could not be created");

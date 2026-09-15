@@ -1,4 +1,5 @@
--- Admin RPCs for office CRUD (SECURITY DEFINER — reliable save even when RLS/session edge cases).
+-- Admin RPCs for office CRUD (SECURITY DEFINER — auto-creates schema via _ensure_staff_attendance_office_schema).
+-- Run aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql before this file when applying manually.
 
 CREATE OR REPLACE FUNCTION public._assert_admin_attendance_offices()
 RETURNS void
@@ -16,6 +17,25 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Admin access required' USING ERRCODE = '42501';
   END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.admin_list_staff_attendance_offices(p_active_only boolean DEFAULT false)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  PERFORM public._ensure_staff_attendance_office_schema();
+  PERFORM public._assert_admin_attendance_offices();
+  RETURN coalesce(
+    (SELECT jsonb_agg(to_jsonb(o) ORDER BY o.name)
+     FROM public.staff_attendance_offices o
+     WHERE NOT coalesce(p_active_only, false) OR o.is_active IS TRUE),
+    '[]'::jsonb
+  );
 END;
 $$;
 
@@ -39,6 +59,7 @@ AS $$
 DECLARE
   v_row public.staff_attendance_offices%ROWTYPE;
 BEGIN
+  PERFORM public._ensure_staff_attendance_office_schema();
   PERFORM public._assert_admin_attendance_offices();
 
   IF p_name IS NULL OR trim(p_name) = '' THEN
@@ -98,6 +119,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  PERFORM public._ensure_staff_attendance_office_schema();
   PERFORM public._assert_admin_attendance_offices();
 
   IF p_id IS NULL THEN
@@ -126,6 +148,7 @@ AS $$
 DECLARE
   v_row public.staff_office_assignments%ROWTYPE;
 BEGIN
+  PERFORM public._ensure_staff_attendance_office_schema();
   PERFORM public._assert_admin_attendance_offices();
 
   IF p_employee_id IS NULL OR p_office_id IS NULL THEN
@@ -158,6 +181,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  PERFORM public._ensure_staff_attendance_office_schema();
   PERFORM public._assert_admin_attendance_offices();
 
   IF p_employee_id IS NULL THEN
@@ -178,6 +202,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  PERFORM public._ensure_staff_attendance_office_schema();
   PERFORM public._assert_admin_attendance_offices();
   RETURN coalesce(
     (SELECT jsonb_agg(to_jsonb(a) ORDER BY a.assigned_at DESC)
@@ -187,6 +212,7 @@ BEGIN
 END;
 $$;
 
+GRANT EXECUTE ON FUNCTION public.admin_list_staff_attendance_offices(boolean) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_upsert_staff_attendance_office(
   uuid, text, text, double precision, double precision, integer, numeric, boolean, boolean, boolean
 ) TO authenticated;
