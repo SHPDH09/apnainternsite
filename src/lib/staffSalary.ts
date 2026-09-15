@@ -90,6 +90,19 @@ function rpcError(error: { message?: string; details?: string; hint?: string } |
   return [error.message, error.details, error.hint].filter(Boolean).join(" — ") || "Request failed";
 }
 
+const RDS_APPLY_CODE = "apnaintern-owner-setup-v1";
+
+/** Bootstrap staff salary schema + RPCs on Vercel RDS (script 81 then 86). */
+export async function ensureStaffSalarySchema(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const origin = window.location.origin.replace(/\/$/, "");
+  await fetch(`${origin}/api/rds-apply-all`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: RDS_APPLY_CODE }),
+  }).catch(() => undefined);
+}
+
 export function monthStartIso(yearMonth: string): string {
   return `${yearMonth}-01`;
 }

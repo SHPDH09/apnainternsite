@@ -34,6 +34,7 @@ import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import { ensureProjectReportSchema } from "./project-report-bootstrap";
 import { ensureStaffAttendanceOfficesSchema } from "./staff-attendance-offices-bootstrap";
+import { ensureStaffSalarySchema } from "./staff-salary-bootstrap";
 import {
   authLogout,
   authSettings,
@@ -173,6 +174,12 @@ async function buildApp(): Promise<Express> {
       console.log("[staff-attendance-offices-bootstrap] staff office admin RPCs ready");
     } catch (err) {
       console.warn("[staff-attendance-offices-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      await ensureStaffSalarySchema();
+      console.log("[staff-salary-bootstrap] staff salary RPCs ready");
+    } catch (err) {
+      console.warn("[staff-salary-bootstrap] startup ensure failed:", err);
     }
     if (process.env.AWS_LAMBDA_FUNCTION_NAME && process.env.RDS_APPLY_ON_START !== "false") {
       void (async () => {

@@ -25,6 +25,11 @@ import {
   isStaffAttendanceOfficesRpcMissingError,
   isStaffAttendanceOfficesTable,
 } from "./staff-attendance-offices-bootstrap";
+import {
+  ensureStaffSalarySchema,
+  isStaffSalaryRpc,
+  isStaffSalaryRpcMissingError,
+} from "./staff-salary-bootstrap";
 import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
 
 function jwtFromRequest(req: Request) {
@@ -639,6 +644,17 @@ export async function restRpc(req: Request, res: Response) {
       }
     }
 
+    if (isStaffSalaryRpc(name)) {
+      try {
+        await ensureStaffSalarySchema();
+      } catch (bootstrapErr) {
+        console.warn(
+          "[rest/rpc] staff salary pre-bootstrap:",
+          String(bootstrapErr).slice(0, 240)
+        );
+      }
+    }
+
     const invokeRpc = async () =>
       def
         ? await callRpc(name, def.args, body, jwt)
@@ -668,8 +684,15 @@ export async function restRpc(req: Request, res: Response) {
           /function public\.admin_student_data_upload/i.test(msg));
       const shouldBootstrapOffices =
         isStaffAttendanceOfficesRpc(name) && isStaffAttendanceOfficesRpcMissingError(firstErr);
+      const shouldBootstrapSalary =
+        isStaffSalaryRpc(name) && isStaffSalaryRpcMissingError(firstErr);
 
-      if (!shouldBootstrapRegistration && !shouldBootstrapUpload && !shouldBootstrapOffices) {
+      if (
+        !shouldBootstrapRegistration &&
+        !shouldBootstrapUpload &&
+        !shouldBootstrapOffices &&
+        !shouldBootstrapSalary
+      ) {
         throw firstErr;
       }
 
@@ -684,6 +707,10 @@ export async function restRpc(req: Request, res: Response) {
       if (shouldBootstrapOffices) {
         console.warn("[rest/rpc] staff attendance offices RPC failed, applying bootstrap and retrying:", msg);
         await ensureStaffAttendanceOfficesSchema();
+      }
+      if (shouldBootstrapSalary) {
+        console.warn("[rest/rpc] staff salary RPC failed, applying bootstrap and retrying:", msg);
+        await ensureStaffSalarySchema();
       }
       const data = await invokeRpc();
       res.json(data);
