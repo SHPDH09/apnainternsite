@@ -2,19 +2,13 @@
 import {
   STAFF_OFFICE_REQUIRED_RPCS,
   STAFF_SALARY_REQUIRED_RPCS,
+  STAFF_SELF_OFFICE_REQUIRED_RPCS,
   staffOfficeAdminRpcSql,
   staffOfficeEnsureSchemaSql,
   staffOfficeSelfAttendanceRpcSql,
   staffSalaryAdvancedSql,
   staffSalaryBaseSql,
 } from "./staffOfficeSqlChunks.js";
-
-const STAFF_SELF_OFFICE_REQUIRED_RPCS = [
-  "_staff_office_for_employee",
-  "staff_self_attendance_status",
-  "staff_self_check_in",
-  "staff_self_check_out",
-];
 
 type Queryable = { query: (sql: string, values?: unknown[]) => Promise<{ rows: Record<string, boolean>[] }> };
 

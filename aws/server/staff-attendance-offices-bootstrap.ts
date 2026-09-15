@@ -7,6 +7,7 @@ const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const ENSURE_SQL = "aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql";
 const ADMIN_RPC_SQL = "aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql";
 const ADMIN_RPC_HOTFIX_SQL = "aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql";
+const STAFF_ATTENDANCE_HELPER_SQL = "aws/scripts/84-rds-staff-attendance-helpers.sql";
 const STAFF_SELF_RPC_SQL = "aws/scripts/88-rds-staff-office-self-attendance-rpc.sql";
 const OFFICES_SQL = "aws/scripts/82-rds-staff-attendance-offices.sql";
 
@@ -21,6 +22,8 @@ const OFFICE_RPCS = [
 ] as const;
 
 const STAFF_SELF_RPCS = [
+  "_haversine_meters",
+  "_ist_minutes_now",
   "_staff_office_for_employee",
   "staff_self_attendance_status",
   "staff_self_check_in",
@@ -62,6 +65,8 @@ export function isStaffAttendanceOfficesRpcMissingError(err: unknown): boolean {
     /relation .*staff_attendance_offices.* does not exist/i.test(msg) ||
     /relation .*staff_office_assignments.* does not exist/i.test(msg) ||
     /staff_self_attendance_status does not exist/i.test(msg) ||
+    /_ist_minutes_now does not exist/i.test(msg) ||
+    /_haversine_meters does not exist/i.test(msg) ||
     /_staff_office_for_employee does not exist/i.test(msg) ||
     /staff_self_check_(in|out) does not exist/i.test(msg)
   );
@@ -296,12 +301,14 @@ async function applyAdminOfficeRpcSql(): Promise<boolean> {
   return applied;
 }
 
-/** Apply ensure + admin RPC SQL (85 then 83). Required for office save/list. */
+/** Apply helper + self RPC SQL (84 then 88). Required before staff check-in/out. */
 async function ensureStaffSelfOfficeRpcs(): Promise<void> {
-  try {
-    await runSqlFile(STAFF_SELF_RPC_SQL);
-  } catch (err) {
-    console.warn("[staff-attendance-offices-bootstrap] staff self rpc:", String(err).slice(0, 240));
+  for (const rel of [STAFF_ATTENDANCE_HELPER_SQL, STAFF_SELF_RPC_SQL]) {
+    try {
+      await runSqlFile(rel);
+    } catch (err) {
+      console.warn("[staff-attendance-offices-bootstrap] staff self rpc:", rel, String(err).slice(0, 240));
+    }
   }
 }
 
@@ -322,6 +329,7 @@ async function ensureAdminOfficeRpcs(): Promise<void> {
 /** Idempotent RDS bootstrap for staff attendance office tables + admin RPCs. */
 export async function ensureStaffAttendanceOfficesSchema(): Promise<{ ok: true }> {
   if (await bootstrapReady()) {
+    await ensureStaffSelfOfficeRpcs();
     bootstrapped = true;
     return { ok: true };
   }
