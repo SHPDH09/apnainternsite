@@ -39,7 +39,10 @@ function emitChunks(constName, fnName, sql) {
 
 const ensureSql = readSql("aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql");
 const adminSql = readSql("aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql");
-const selfSql = readSql("aws/scripts/88-rds-staff-office-self-attendance-rpc.sql");
+const selfSql =
+  readSql("aws/scripts/88-rds-staff-office-self-attendance-rpc.sql") +
+  "\n\n" +
+  readSql("aws/scripts/89-rds-staff-office-employee-id-resolve.sql");
 const salaryBaseSql = readSql("aws/scripts/81-rds-staff-salary-account.sql");
 const salaryAdvancedSql = readSql("aws/scripts/86-rds-staff-salary-advanced.sql");
 
@@ -63,6 +66,7 @@ export const STAFF_OFFICE_REQUIRED_RPCS = [
 ];
 export const STAFF_SELF_OFFICE_REQUIRED_RPCS = [
   "_staff_office_for_employee",
+  "_staff_attendance_employee_id",
   "staff_self_attendance_status",
   "staff_self_check_in",
   "staff_self_check_out",
