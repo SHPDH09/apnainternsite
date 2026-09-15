@@ -42,10 +42,12 @@ let databaseUrl =
   process.env.AWS_RDS_URL?.trim();
 
 if (!databaseUrl) {
-  const host = process.env.AWS_RDS_HOST?.trim();
-  const user = process.env.AWS_RDS_USER?.trim();
+  const host =
+    process.env.AWS_RDS_HOST?.trim() ||
+    "ezyintern-staging-db.c5makww6eq8y.ap-south-1.rds.amazonaws.com";
+  const user = process.env.AWS_RDS_USER?.trim() || "ezyintern";
   const pass = process.env.AWS_RDS_PASSWORD?.trim();
-  const db = process.env.AWS_RDS_DATABASE?.trim() || "postgres";
+  const db = process.env.AWS_RDS_DATABASE?.trim() || "ezyintern";
   const port = process.env.AWS_RDS_PORT?.trim() || "5432";
   if (host && user && pass) {
     databaseUrl = `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${host}:${port}/${db}?sslmode=require`;
