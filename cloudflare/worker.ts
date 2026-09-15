@@ -6,7 +6,7 @@
 import { tryHandleOtpDeliver } from "./otpDeliver";
 import { resolveOtpPurpose } from "./otpMail";
 import { tryProxyEnsureApiToVercel } from "./ensureVercelProxy";
-import { proxyOtpDeliverToVercel } from "./otpVercelFallback";
+import { proxyOtpDeliverToVercel, proxyRequestToVercel } from "./otpVercelFallback";
 
 export interface Env {
   ASSETS: Fetcher;
@@ -74,6 +74,37 @@ type SendMailBody = {
   email?: string;
   purpose?: string;
 };
+
+/** RDS bootstrap/RPC actions live on Vercel send-mail (DATABASE_URL), not Lambda. */
+async function tryHandleVercelSendMailActions(
+  request: Request,
+  env: Env,
+): Promise<Response | null> {
+  if (request.method !== "POST" || !isSendMailPath(new URL(request.url).pathname)) {
+    return null;
+  }
+
+  let body: SendMailBody & { name?: string; rpc?: string };
+  try {
+    body = (await request.clone().json()) as SendMailBody & { name?: string; rpc?: string };
+  } catch {
+    return null;
+  }
+
+  const action = String(body.action || body.type || "")
+    .trim()
+    .toLowerCase();
+  const vercelSendMailActions = new Set([
+    "staff_office_rpc",
+    "ensure_staff_attendance_offices",
+    "ensure_blog_cms",
+    "ensure_project_report_templates",
+    "save_project_report_template",
+  ]);
+  if (!vercelSendMailActions.has(action)) return null;
+
+  return proxyRequestToVercel(request, env);
+}
 
 async function tryHandleOtpSendMail(request: Request, env: Env): Promise<Response | null> {
   if (request.method !== "POST" || !isSendMailPath(new URL(request.url).pathname)) {
@@ -153,6 +184,8 @@ export default {
     if (shouldProxy(url.pathname)) {
       const ensureResponse = await tryProxyEnsureApiToVercel(request, env);
       if (ensureResponse) return ensureResponse;
+      const vercelSendMailResponse = await tryHandleVercelSendMailActions(request, env);
+      if (vercelSendMailResponse) return vercelSendMailResponse;
       const otpDeliverResponse = await tryHandleOtpDeliver(request, env);
       if (otpDeliverResponse) return otpDeliverResponse;
       const otpResponse = await tryHandleOtpSendMail(request, env);
