@@ -124,6 +124,7 @@ import {
   mergeStaffPermissions,
   type StaffPermissions,
 } from "@/lib/staffPermissions";
+import { STAFF_SERVICE_NAV, staffTabLabel } from "@/lib/staffServiceNav";
 import {
   logStaffActivity,
   revokeStaffSession,
@@ -155,8 +156,24 @@ import {
   StaffReferralsPanel,
   StaffCollegeRostersPanel,
   StaffEmployeeAttendanceStandalonePanel,
+  StaffManagementServicePanel,
   StaffSettingsPanel,
   StaffNotificationsServicePanel,
+  StaffStudentDataUploadPanel,
+  StaffProjectReportPanel,
+  StaffCheckPaymentPanel,
+  StaffUnpaidStudentsPanel,
+  StaffLeadAssignmentPanel,
+  StaffPartnerApplicationsPanel,
+  StaffGalleryPanel,
+  StaffBlogPanel,
+  StaffHomeCmsPanel,
+  StaffConsentFormPanel,
+  StaffPopupsPanel,
+  StaffContactDetailsPanel,
+  StaffWhatsAppLinksPanel,
+  StaffServiceKeysPanel,
+  StaffCourseLeadsPanel,
 } from "@/components/staff/StaffServicePanels";
 import { StaffStudentDirectoryPanel } from "@/components/staff/StaffStudentDirectoryPanel";
 import type { StudentDirectoryStudent } from "@/components/admin/StudentDirectoryActionsMenu";
@@ -1002,30 +1019,7 @@ const StaffDashboard = () => {
     await executeTransferLead(lead, password);
   };
 
-  const services = [
-    { id: "can_manage_students" as const, label: "Students", icon: Users, color: "text-blue-500", bg: "bg-blue-50", tab: "students" },
-    { id: "can_view_payments" as const, label: "Payments", icon: CreditCard, color: "text-emerald-500", bg: "bg-emerald-50", tab: "payments" },
-    { id: "can_manage_leads" as const, label: "Assigned Leads", icon: Target, color: "text-orange-500", bg: "bg-orange-50", tab: "leads" },
-    { id: "can_manage_notifications" as const, label: "Notifications", icon: Bell, color: "text-purple-500", bg: "bg-purple-50", tab: "notifications" },
-    { id: "can_manage_assignments" as const, label: "Assignments", icon: CheckSquare, color: "text-cyan-600", bg: "bg-cyan-50", tab: "assignments" },
-    { id: "can_manage_communications" as const, label: "Communications", icon: Mail, color: "text-indigo-500", bg: "bg-indigo-50", tab: "comms" },
-    { id: "can_manage_classes" as const, label: "Live Classes", icon: Video, color: "text-red-500", bg: "bg-red-50", tab: "classes" },
-    { id: "can_manage_certificates" as const, label: "Certificates", icon: Award, color: "text-amber-600", bg: "bg-amber-50", tab: "certificates" },
-    { id: "can_manage_institutions" as const, label: "Academic Partners", icon: GraduationCap, color: "text-slate-600", bg: "bg-slate-100", tab: "institutions" },
-    { id: "can_manage_engineering" as const, label: "Engineering Directory", icon: Wrench, color: "text-teal-600", bg: "bg-teal-50", tab: "engineering" },
-    { id: "can_manage_engineering" as const, label: "Eng. Management", icon: Cog, color: "text-teal-700", bg: "bg-teal-50", tab: "engineering-management" },
-    { id: "can_manage_non_engineering" as const, label: "Non-Tech Management", icon: BookOpen, color: "text-sky-600", bg: "bg-sky-50", tab: "non-engineering-management" },
-    { id: "can_manage_attendance" as const, label: "Attendance Tracking", icon: CheckSquare, color: "text-violet-600", bg: "bg-violet-50", tab: "attendance" },
-    { id: "can_manage_id_cards" as const, label: "ID Cards", icon: KeyRound, color: "text-yellow-600", bg: "bg-yellow-50", tab: "id-cards" },
-    { id: "can_manage_uploads" as const, label: "Learning Materials", icon: BookOpen, color: "text-fuchsia-600", bg: "bg-fuchsia-50", tab: "uploads" },
-    { id: "can_manage_fees" as const, label: "Fees Management", icon: Store, color: "text-green-600", bg: "bg-green-50", tab: "fees" },
-    { id: "can_manage_courses" as const, label: "Course Management", icon: BookOpen, color: "text-indigo-600", bg: "bg-indigo-50", tab: "courses" },
-    { id: "can_manage_cybercafe" as const, label: "Cyber Cafes", icon: Store, color: "text-orange-600", bg: "bg-orange-50", tab: "cybercafe" },
-    { id: "can_manage_referrals" as const, label: "Referrals", icon: Target, color: "text-pink-600", bg: "bg-pink-50", tab: "referrals" },
-    { id: "can_manage_college_rosters" as const, label: "College Rosters", icon: Briefcase, color: "text-cyan-600", bg: "bg-cyan-50", tab: "college-rosters" },
-    { id: "can_manage_employee_attendance" as const, label: "Employee Attendance", icon: CheckCircle2, color: "text-rose-600", bg: "bg-rose-50", tab: "employee-attendance" },
-    { id: "can_manage_settings" as const, label: "Site Settings", icon: Lock, color: "text-slate-700", bg: "bg-slate-200", tab: "settings" },
-  ];
+  const services = STAFF_SERVICE_NAV;
 
   useEffect(() => {
     if (loading || !permissions) return;
@@ -1404,7 +1398,7 @@ const StaffDashboard = () => {
                 ? "Salary Slips"
               : activeTab === "requests"
                 ? "Requests"
-                : services.find((s) => s.tab === activeTab)?.label || "Staff Portal";
+                : staffTabLabel(activeTab);
 
   const enabledModuleCount = services.filter((service) => hasStaffPerm(permissions, service.id)).length;
 
@@ -2070,8 +2064,62 @@ const StaffDashboard = () => {
           {activeTab === "employee-attendance" && hasStaffPerm(permissions, "can_manage_employee_attendance") && (
             <StaffEmployeeAttendanceStandalonePanel currentUserId={currentUserId} isActive={activeTab === "employee-attendance"} />
           )}
+          {activeTab === "student-data-upload" && hasStaffPerm(permissions, "can_manage_student_data_upload") && (
+            <StaffStudentDataUploadPanel isActive={activeTab === "student-data-upload"} />
+          )}
+          {activeTab === "staff-management" && hasStaffPerm(permissions, "can_manage_staff") && (
+            <StaffManagementServicePanel
+              currentUserId={currentUserId}
+              isActive={activeTab === "staff-management"}
+            />
+          )}
+          {activeTab === "project-report-generate" && hasStaffPerm(permissions, "can_manage_project_reports") && (
+            <StaffProjectReportPanel
+              currentUserId={currentUserId}
+              isActive={activeTab === "project-report-generate"}
+            />
+          )}
+          {activeTab === "check-payment" && hasStaffPerm(permissions, "can_check_payments") && (
+            <StaffCheckPaymentPanel isActive={activeTab === "check-payment"} />
+          )}
+          {activeTab === "unpaid-students" && hasStaffPerm(permissions, "can_manage_unpaid_students") && (
+            <StaffUnpaidStudentsPanel isActive={activeTab === "unpaid-students"} />
+          )}
+          {activeTab === "lead-assignment" && hasStaffPerm(permissions, "can_assign_leads") && (
+            <StaffLeadAssignmentPanel isActive={activeTab === "lead-assignment"} />
+          )}
+          {activeTab === "course-leads" && hasStaffPerm(permissions, "can_manage_course_leads") && (
+            <StaffCourseLeadsPanel isActive={activeTab === "course-leads"} />
+          )}
+          {activeTab === "partner-applications" && hasStaffPerm(permissions, "can_manage_partner_applications") && (
+            <StaffPartnerApplicationsPanel isActive={activeTab === "partner-applications"} />
+          )}
+          {activeTab === "gallery" && hasStaffPerm(permissions, "can_manage_gallery") && (
+            <StaffGalleryPanel currentUserId={currentUserId} isActive={activeTab === "gallery"} />
+          )}
+          {activeTab === "blog" && hasStaffPerm(permissions, "can_manage_blog") && (
+            <StaffBlogPanel currentUserId={currentUserId} isActive={activeTab === "blog"} />
+          )}
+          {activeTab === "home-cms" && hasStaffPerm(permissions, "can_manage_home_cms") && (
+            <StaffHomeCmsPanel currentUserId={currentUserId} isActive={activeTab === "home-cms"} />
+          )}
+          {activeTab === "consult-letter" && hasStaffPerm(permissions, "can_manage_consent_forms") && (
+            <StaffConsentFormPanel currentUserId={currentUserId} isActive={activeTab === "consult-letter"} />
+          )}
+          {activeTab === "popups" && hasStaffPerm(permissions, "can_manage_popups") && (
+            <StaffPopupsPanel currentUserId={currentUserId} isActive={activeTab === "popups"} />
+          )}
+          {activeTab === "contact-details" && hasStaffPerm(permissions, "can_manage_contact_details") && (
+            <StaffContactDetailsPanel isActive={activeTab === "contact-details"} />
+          )}
+          {activeTab === "whatsapp-links" && hasStaffPerm(permissions, "can_manage_whatsapp_links") && (
+            <StaffWhatsAppLinksPanel isActive={activeTab === "whatsapp-links"} />
+          )}
+          {activeTab === "keys" && hasStaffPerm(permissions, "can_manage_service_keys") && (
+            <StaffServiceKeysPanel currentUserId={currentUserId} isActive={activeTab === "keys"} />
+          )}
           {activeTab === "settings" && hasStaffPerm(permissions, "can_manage_settings") && (
-            <StaffSettingsPanel isActive={activeTab === "settings"} />
+            <StaffSettingsPanel currentUserId={currentUserId} isActive={activeTab === "settings"} />
           )}
           {activeTab === "profile" && (
             <StaffProfilePanel

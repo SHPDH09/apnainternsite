@@ -25,8 +25,29 @@ import { FeesManagementPanel } from "@/components/admin/FeesManagementPanel";
 import { CourseManagementPanel } from "@/components/admin/CourseManagementPanel";
 import { ReferralsPanel } from "@/components/admin/ReferralsPanel";
 import { CollegeRostersPanel } from "@/components/admin/CollegeRostersPanel";
-import { EmployeeAttendancePanel, type StaffEmployeeOption } from "@/components/admin/EmployeeAttendancePanel";
+import { StaffAttendanceAdminPanel } from "@/components/admin/StaffAttendanceAdminPanel";
+import { StaffManagementPanel } from "@/components/admin/StaffManagementPanel";
+import { CommsCenterPanel } from "@/components/admin/CommsCenterPanel";
+import { CybercafeManagementPanel } from "@/components/admin/CybercafeManagementPanel";
+import { InstitutionsManagementPanel } from "@/components/admin/InstitutionsManagementPanel";
+import { DocumentCustomizationPanel } from "@/components/admin/DocumentCustomizationPanel";
+import { StudentDataUploadPanel } from "@/components/admin/StudentDataUploadPanel";
+import { AutoGenerateProjectReportPanel } from "@/components/admin/AutoGenerateProjectReportPanel";
+import { CheckPaymentPanel } from "@/components/admin/CheckPaymentPanel";
+import { UnpaidStudentsDirectoryPanel } from "@/components/admin/UnpaidStudentsDirectoryPanel";
+import { LeadAssignmentPanel } from "@/components/admin/LeadAssignmentPanel";
+import { PartnerApplicationsPanel } from "@/components/admin/PartnerApplicationsPanel";
+import { GalleryManagementPanel } from "@/components/admin/GalleryManagementPanel";
+import { BlogManagementPanel } from "@/components/admin/BlogManagementPanel";
+import { HomeCmsManagementPanel } from "@/components/admin/HomeCmsManagementPanel";
+import { ConsultLetterManagementPanel } from "@/components/admin/ConsultLetterManagementPanel";
+import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
+import { ContactDetailsManagementPanel } from "@/components/admin/ContactDetailsManagementPanel";
+import { WhatsAppLinksManagementPanel } from "@/components/admin/WhatsAppLinksManagementPanel";
+import { StudentServiceKeysPanel } from "@/components/admin/StudentServiceKeysPanel";
 import { StudentAttendancePanel } from "@/components/admin/StudentAttendancePanel";
+import AIAssignmentBuilder from "@/components/AIAssignmentBuilder";
+import type { AdminStaffProfile } from "@/lib/staffProfile";
 import type { StudentDirectoryStudent } from "@/components/admin/StudentDirectoryActionsMenu";
 import EngineeringManagement from "@/pages/EngineeringManagement";
 import NonEngineeringManagement from "@/pages/NonEngineeringManagement";
@@ -54,8 +75,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { sendBulkCustomMail } from "@/lib/bulkCustomMailSend";
-import { toastBulkMailResult } from "@/lib/bulkMailResultFeedback";
 
 type Catalog = {
   unis: { id: string; name: string }[];
@@ -111,6 +130,7 @@ export function StaffAssignmentsPanel({
 }) {
   const { catalog, ready } = useStaffCatalog(isActive);
   const [assignments, setAssignments] = useState<any[]>([]);
+  const [aiBuilderOpen, setAiBuilderOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     const { data, error } = await supabase
@@ -134,16 +154,27 @@ export function StaffAssignmentsPanel({
   }
 
   return (
-    <AssignmentManagementPanel
-      assignments={assignments}
-      unis={catalog.unis}
-      colleges={catalog.colleges}
-      domains={catalog.domains}
-      currentUserId={currentUserId || undefined}
-      onRefresh={refresh}
-      onOpenAiBuilder={() => toast.message("AI builder is available in the full Admin panel")}
-      isActive={isActive}
-    />
+    <>
+      <AssignmentManagementPanel
+        assignments={assignments}
+        unis={catalog.unis}
+        colleges={catalog.colleges}
+        domains={catalog.domains}
+        currentUserId={currentUserId || undefined}
+        onRefresh={refresh}
+        onOpenAiBuilder={() => setAiBuilderOpen(true)}
+        isActive={isActive}
+      />
+      <AIAssignmentBuilder
+        open={aiBuilderOpen}
+        onClose={() => setAiBuilderOpen(false)}
+        onSaved={() => void refresh()}
+        currentUserId={currentUserId || undefined}
+        unis={catalog.unis}
+        colleges={catalog.colleges}
+        domains={catalog.domains}
+      />
+    </>
   );
 }
 
@@ -376,257 +407,11 @@ export function StaffEngineeringPanel({
 }
 
 export function StaffInstitutionsPanel({ isActive }: { isActive: boolean }) {
-  const { catalog, ready } = useStaffCatalog(isActive);
-
-  if (!ready) {
-    return (
-      <div className="py-16 text-center text-muted-foreground">
-        <Loader2 className="size-6 animate-spin inline" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-black flex items-center gap-2">
-          <Building2 className="size-5 text-primary" /> Academic Partners
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1">Universities and colleges in the system.</p>
-      </div>
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Card className="p-4 border-none shadow-elegant overflow-hidden">
-          <h3 className="font-bold mb-3">Universities ({catalog.unis.length})</h3>
-          <div className="max-h-96 overflow-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {catalog.unis.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell>{u.name}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </Card>
-        <Card className="p-4 border-none shadow-elegant overflow-hidden">
-          <h3 className="font-bold mb-3">Colleges ({catalog.colleges.length})</h3>
-          <div className="max-h-96 overflow-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {catalog.colleges.slice(0, 500).map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell>{c.name}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
+  return <InstitutionsManagementPanel isActive={isActive} />;
 }
 
 export function StaffCommsPanel({ isActive }: { isActive: boolean }) {
-  const { catalog, ready } = useStaffCatalog(isActive);
-  const { students, loading: studentsLoading } = useModuleStudentsLight(supabase, isActive);
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
-  const [uniFilter, setUniFilter] = useState("all");
-  const [collegeFilter, setCollegeFilter] = useState("all");
-  const [domainFilter, setDomainFilter] = useState("all");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [sending, setSending] = useState(false);
-  const [progress, setProgress] = useState(0);
-
-  const filtered = useMemo(() => {
-    return students.filter((s) => {
-      if (uniFilter !== "all" && String(s.university_name || "") !== uniFilter) return false;
-      if (collegeFilter !== "all" && String(s.college_name || "") !== collegeFilter) return false;
-      if (domainFilter !== "all" && String(s.internship_domain || "") !== domainFilter) return false;
-      return Boolean(String(s.email || "").trim());
-    });
-  }, [students, uniFilter, collegeFilter, domainFilter]);
-
-  if (!isActive) return null;
-
-  if (!ready) {
-    return (
-      <div className="py-16 text-center text-muted-foreground">
-        <Loader2 className="size-6 animate-spin inline" />
-      </div>
-    );
-  }
-
-  const selectAllFiltered = () => {
-    setSelectedIds(filtered.map((s) => String(s.id)));
-    toast.success(`Selected ${filtered.length} student(s)`);
-  };
-
-  const send = async () => {
-    const targets = filtered
-      .filter((s) => selectedIds.includes(String(s.id)))
-      .map((s) => String(s.email || "").trim())
-      .filter(Boolean);
-    if (!subject.trim() || !body.trim() || !targets.length) {
-      toast.error("Subject, message, and at least one selected recipient are required");
-      return;
-    }
-    setSending(true);
-    setProgress(0);
-    try {
-      const result = await sendBulkCustomMail(targets, subject, body, (done) => setProgress(done));
-      toastBulkMailResult(result, targets.length, {
-        onFullSuccess: () => {
-          setSubject("");
-          setBody("");
-          setSelectedIds([]);
-        },
-      });
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Send failed");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <div className="grid lg:grid-cols-3 gap-6">
-      <Card className="lg:col-span-2 p-6 border-none shadow-elegant space-y-4">
-        <div>
-          <h2 className="text-xl font-black flex items-center gap-2">
-            <Mail className="size-5 text-primary" /> Communications Center
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Same student pool as Admin ({studentsLoading ? "…" : students.length} enrolled).
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Label>Email Subject</Label>
-          <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Enter email subject" />
-        </div>
-        <div className="space-y-2">
-          <Label>Message Content (text / basic HTML)</Label>
-          <Textarea rows={10} value={body} onChange={(e) => setBody(e.target.value)} />
-        </div>
-        <div className="flex items-center justify-between pt-2 border-t">
-          <div className="text-sm">
-            <span className="text-muted-foreground">Recipients selected: </span>
-            <span className="font-bold text-primary">{selectedIds.length}</span>
-            {sending && (
-              <span className="text-muted-foreground ml-2">
-                Sending {progress}/{selectedIds.length}…
-              </span>
-            )}
-          </div>
-          <Button onClick={() => void send()} disabled={sending} className="font-bold">
-            {sending && <Loader2 className="size-4 animate-spin mr-2" />}
-            Send Bulk Email
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="p-5 border-none shadow-elegant space-y-4">
-        <h3 className="font-bold flex items-center gap-2">
-          <Users className="size-4 text-primary" /> Target Selection
-        </h3>
-        <div className="space-y-2">
-          <Label className="text-[10px] uppercase font-black text-muted-foreground">University</Label>
-          <Select
-            value={uniFilter}
-            onValueChange={(v) => {
-              setUniFilter(v);
-              setCollegeFilter("all");
-              setSelectedIds([]);
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Universities</SelectItem>
-              {catalog.unis.map((u) => (
-                <SelectItem key={u.id} value={u.name}>
-                  {u.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-[10px] uppercase font-black text-muted-foreground">College</Label>
-          <Select
-            value={collegeFilter}
-            onValueChange={(v) => {
-              setCollegeFilter(v);
-              setSelectedIds([]);
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Colleges</SelectItem>
-              {catalog.colleges.slice(0, 400).map((c) => (
-                <SelectItem key={c.id} value={c.name}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-[10px] uppercase font-black text-muted-foreground">Domain</Label>
-          <Select
-            value={domainFilter}
-            onValueChange={(v) => {
-              setDomainFilter(v);
-              setSelectedIds([]);
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Domains</SelectItem>
-              {catalog.domains.map((d) => (
-                <SelectItem key={d.id} value={d.name}>
-                  {d.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Matching with email: <span className="font-bold text-foreground">{filtered.length}</span>
-        </p>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" className="font-bold" onClick={selectAllFiltered}>
-            Select all filtered
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelectedIds([])}
-          >
-            Clear
-          </Button>
-        </div>
-      </Card>
-    </div>
-  );
+  return <CommsCenterPanel isActive={isActive} />;
 }
 
 export function StaffIdCardsPanel({ isActive }: { isActive: boolean }) {
@@ -691,7 +476,9 @@ export function StaffEmployeeAttendanceStandalonePanel({
   currentUserId: string | null;
   isActive: boolean;
 }) {
-  const [employees, setEmployees] = useState<StaffEmployeeOption[]>([]);
+  const [employees, setEmployees] = useState<
+    { id: string; email: string; full_name: string | null }[]
+  >([]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -701,13 +488,7 @@ export function StaffEmployeeAttendanceStandalonePanel({
           .from("admin_staff")
           .select("id,email,full_name")
           .order("full_name");
-        setEmployees(
-          (data || []).map((s) => ({
-            id: s.id,
-            email: s.email,
-            full_name: s.full_name,
-          }))
-        );
+        setEmployees((data || []) as typeof employees);
       } catch {
         /* ignore */
       }
@@ -715,7 +496,7 @@ export function StaffEmployeeAttendanceStandalonePanel({
   }, [isActive]);
 
   return (
-    <EmployeeAttendancePanel
+    <StaffAttendanceAdminPanel
       employees={employees}
       currentUserId={currentUserId}
       isActive={isActive}
@@ -723,69 +504,199 @@ export function StaffEmployeeAttendanceStandalonePanel({
   );
 }
 
-export function StaffSettingsPanel({ isActive }: { isActive: boolean }) {
-  const [config, setConfig] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
+export function StaffManagementServicePanel({
+  currentUserId,
+  isActive,
+}: {
+  currentUserId: string | null;
+  isActive: boolean;
+}) {
+  const [staff, setStaff] = useState<AdminStaffProfile[]>([]);
+
+  const refresh = useCallback(async () => {
+    const { data } = await supabase
+      .from("admin_staff")
+      .select("*")
+      .order("created_at", { ascending: false });
+    setStaff((data || []) as AdminStaffProfile[]);
+  }, []);
 
   useEffect(() => {
     if (!isActive) return;
-    setLoading(true);
-    (async () => {
-      try {
-        const { data } = await supabase.from("site_config").select("key,value").order("key");
-        const map: Record<string, string> = {};
-        for (const row of data || []) {
-          map[row.key] = String(row.value ?? "");
-        }
-        setConfig(map);
-      } catch {
-        /* ignore */
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [isActive]);
+    void refresh();
+  }, [isActive, refresh]);
+
+  const handleDeleteStaff = async (staffId: string) => {
+    if (!confirm("Remove this staff member?")) return;
+    const { error } = await supabase.from("admin_staff").delete().eq("id", staffId);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Staff removed");
+    await refresh();
+  };
 
   if (!isActive) return null;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-black flex items-center gap-2">
-          <Settings className="size-5 text-primary" /> System Settings
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Read-only view of site configuration. Contact an admin to make changes.
-        </p>
-      </div>
-      <Card className="p-4 border-none shadow-elegant overflow-hidden">
-        {loading ? (
-          <div className="py-16 text-center text-muted-foreground">
-            <Loader2 className="size-6 animate-spin inline" />
-          </div>
-        ) : Object.keys(config).length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">No configuration entries found.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Key</TableHead>
-                <TableHead>Value</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Object.entries(config).map(([key, value]) => (
-                <TableRow key={key}>
-                  <TableCell className="font-mono text-xs font-bold">{key}</TableCell>
-                  <TableCell className="text-sm break-all">{value || "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
-    </div>
+    <StaffManagementPanel
+      staff={staff}
+      currentUserId={currentUserId}
+      isActive={isActive}
+      onRefresh={refresh}
+      onDeleteStaff={handleDeleteStaff}
+    />
   );
+}
+
+export function StaffSettingsPanel({
+  isActive,
+  currentUserId,
+}: {
+  isActive: boolean;
+  currentUserId: string | null;
+}) {
+  if (!isActive) return null;
+  return (
+    <DocumentCustomizationPanel
+      client={supabase}
+      currentUserId={currentUserId}
+      isActive={isActive}
+    />
+  );
+}
+
+export function StaffStudentDataUploadPanel({ isActive }: { isActive: boolean }) {
+  if (!isActive) return null;
+  return <StudentDataUploadPanel client={supabase} />;
+}
+
+export function StaffProjectReportPanel({
+  currentUserId,
+  isActive,
+}: {
+  currentUserId: string | null;
+  isActive: boolean;
+}) {
+  const { catalog, ready } = useStaffCatalog(isActive);
+  if (!isActive) return null;
+  if (!ready) {
+    return (
+      <div className="py-16 text-center text-muted-foreground">
+        <Loader2 className="size-6 animate-spin inline" />
+      </div>
+    );
+  }
+  return (
+    <AutoGenerateProjectReportPanel
+      unis={catalog.unis}
+      domains={catalog.domains}
+      currentUserId={currentUserId}
+      isActive={isActive}
+    />
+  );
+}
+
+export function StaffCheckPaymentPanel({ isActive }: { isActive: boolean }) {
+  if (!isActive) return null;
+  return <CheckPaymentPanel />;
+}
+
+export function StaffUnpaidStudentsPanel({ isActive }: { isActive: boolean }) {
+  if (!isActive) return null;
+  return <UnpaidStudentsDirectoryPanel client={supabase} />;
+}
+
+export function StaffLeadAssignmentPanel({ isActive }: { isActive: boolean }) {
+  if (!isActive) return null;
+  return <LeadAssignmentPanel client={supabase} isActive={isActive} />;
+}
+
+export function StaffPartnerApplicationsPanel({ isActive }: { isActive: boolean }) {
+  if (!isActive) return null;
+  return <PartnerApplicationsPanel />;
+}
+
+export function StaffGalleryPanel({
+  currentUserId,
+  isActive,
+}: {
+  currentUserId: string | null;
+  isActive: boolean;
+}) {
+  if (!isActive) return null;
+  return <GalleryManagementPanel client={supabase} currentUserId={currentUserId} />;
+}
+
+export function StaffBlogPanel({
+  currentUserId,
+  isActive,
+}: {
+  currentUserId: string | null;
+  isActive: boolean;
+}) {
+  if (!isActive) return null;
+  return <BlogManagementPanel client={supabase} currentUserId={currentUserId} />;
+}
+
+export function StaffHomeCmsPanel({
+  currentUserId,
+  isActive,
+}: {
+  currentUserId: string | null;
+  isActive: boolean;
+}) {
+  if (!isActive) return null;
+  return <HomeCmsManagementPanel client={supabase} currentUserId={currentUserId} />;
+}
+
+export function StaffConsentFormPanel({
+  currentUserId,
+  isActive,
+}: {
+  currentUserId: string | null;
+  isActive: boolean;
+}) {
+  if (!isActive) return null;
+  return <ConsultLetterManagementPanel client={supabase} currentUserId={currentUserId} />;
+}
+
+export function StaffPopupsPanel({
+  currentUserId,
+  isActive,
+}: {
+  currentUserId: string | null;
+  isActive: boolean;
+}) {
+  if (!isActive) return null;
+  return <PopupManagementPanel client={supabase} currentUserId={currentUserId} />;
+}
+
+export function StaffContactDetailsPanel({ isActive }: { isActive: boolean }) {
+  if (!isActive) return null;
+  return <ContactDetailsManagementPanel client={supabase} />;
+}
+
+export function StaffWhatsAppLinksPanel({ isActive }: { isActive: boolean }) {
+  if (!isActive) return null;
+  return <WhatsAppLinksManagementPanel client={supabase} />;
+}
+
+export function StaffServiceKeysPanel({
+  currentUserId,
+  isActive,
+}: {
+  currentUserId: string | null;
+  isActive: boolean;
+}) {
+  if (!isActive) return null;
+  return <StudentServiceKeysPanel client={supabase} currentUserId={currentUserId} isActive={isActive} />;
+}
+
+export function StaffCourseLeadsPanel({ isActive }: { isActive: boolean }) {
+  if (!isActive) return null;
+  return <CourseManagementPanel onLogAction={async () => {}} />;
 }
 
 export function StaffEngineeringManagementPanel({ isActive }: { isActive: boolean }) {
@@ -810,101 +721,6 @@ export function StaffAttendanceTrackingPanel({
 }
 
 export function StaffCybercafePanel({ isActive }: { isActive: boolean }) {
-  const [cafes, setCafes] = useState<
-    Array<{ id: string; shop_name: string; email: string; status: string; phone?: string | null }>
-  >([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!isActive) return;
-    setLoading(true);
-    (async () => {
-      try {
-        const { data, error } = await supabase
-          .from("cybercafe_profiles")
-          .select("id, shop_name, email, status, phone")
-          .order("created_at", { ascending: false })
-          .limit(200);
-        if (error) throw error;
-        setCafes((data || []) as typeof cafes);
-      } catch (e: unknown) {
-        toast.error(e instanceof Error ? e.message : "Failed to load cyber cafes");
-        setCafes([]);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [isActive]);
-
-  const setStatus = async (id: string, status: string) => {
-    try {
-      const { error } = await supabase.from("cybercafe_profiles").update({ status }).eq("id", id);
-      if (error) throw error;
-      setCafes((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
-      toast.success(`Marked ${status}`);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Update failed");
-    }
-  };
-
-  if (!isActive) return null;
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-black flex items-center gap-2">
-          <Store className="size-5 text-primary" /> Cyber Cafes
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1">Review and approve partner cyber café accounts.</p>
-      </div>
-      <Card className="border-none shadow-elegant overflow-hidden">
-        {loading ? (
-          <div className="py-16 text-center text-muted-foreground">
-            <Loader2 className="size-6 animate-spin inline" />
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Shop</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {cafes.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center py-12 text-muted-foreground">
-                    No cyber cafes found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                cafes.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-semibold text-sm">{c.shop_name}</TableCell>
-                    <TableCell className="text-xs">{c.email}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="capitalize">
-                        {c.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => void setStatus(c.id, "approved")}>
-                        Approve
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-8 text-xs text-destructive" onClick={() => void setStatus(c.id, "rejected")}>
-                        Reject
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
-    </div>
-  );
+  return <CybercafeManagementPanel isActive={isActive} />;
 }
 
