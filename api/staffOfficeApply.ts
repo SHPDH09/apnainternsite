@@ -1,8 +1,10 @@
 /** Apply staff office schema + admin RPCs to RDS (ensure tables exist before %ROWTYPE RPCs). */
 import {
+  STAFF_FACE_REGISTER_REQUIRED_RPCS,
   STAFF_OFFICE_REQUIRED_RPCS,
   STAFF_SALARY_REQUIRED_RPCS,
   STAFF_SELF_OFFICE_REQUIRED_RPCS,
+  staffFaceRegisterRpcSql,
   staffOfficeAdminRpcSql,
   staffOfficeEnsureSchemaSql,
   staffOfficeSelfAttendanceRpcSql,
@@ -10,10 +12,16 @@ import {
   staffSalaryBaseSql,
 } from "./staffOfficeSqlChunks.js";
 
-type Queryable = { query: (sql: string, values?: unknown[]) => Promise<{ rows: Record<string, boolean>[] }> };
+type Queryable = {
+  query: (
+    sql: string,
+    values?: unknown[]
+  ) => Promise<{ rows: Record<string, boolean>[] }>;
+};
+
+const STAFF_FACE_REGISTER_RPC_NAMES = new Set(["staff_register_face"]);
 
 const STAFF_SELF_RPC_NAMES = new Set([
-  "staff_register_face",
   "staff_self_attendance_status",
   "staff_self_check_in",
   "staff_self_check_out",
@@ -27,6 +35,17 @@ const STAFF_OFFICE_ADMIN_RPC_NAMES = new Set([
   "admin_remove_staff_office_assignment",
   "admin_list_staff_office_assignments",
 ]);
+
+async function rpcExists(pool: Queryable, name: string): Promise<boolean> {
+  const { rows } = await pool.query<{ ok: boolean }>(
+    `SELECT EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = $1
+    ) AS ok`,
+    [name]
+  );
+  return Boolean(rows[0]?.ok);
+}
 
 async function assertRpcs(pool: Queryable, names: string[]): Promise<void> {
   if (!names.length) return;
@@ -45,14 +64,42 @@ async function assertRpcs(pool: Queryable, names: string[]): Promise<void> {
 
 /** Fast path for staff self attendance — no salary SQL on every status poll. */
 export async function applyStaffSelfOfficeBootstrap(pool: Queryable): Promise<void> {
+  const ready =
+    (await rpcExists(pool, "staff_self_attendance_status")) &&
+    (await rpcExists(pool, "staff_self_check_in")) &&
+    (await rpcExists(pool, "_staff_attendance_employee_id"));
+  if (ready) return;
+
   await pool.query(staffOfficeEnsureSchemaSql());
   await pool.query("SELECT public._ensure_staff_attendance_office_schema()");
   await pool.query(staffOfficeSelfAttendanceRpcSql());
   await assertRpcs(pool, STAFF_SELF_OFFICE_REQUIRED_RPCS);
 }
 
+/** Lightweight bootstrap for one-time face registration (script 90). */
+export async function applyStaffFaceRegisterBootstrap(pool: Queryable): Promise<void> {
+  const ready =
+    (await rpcExists(pool, "staff_register_face")) &&
+    (await rpcExists(pool, "_staff_attendance_employee_id"));
+  if (ready) return;
+
+  await pool.query(staffOfficeEnsureSchemaSql());
+  await pool.query("SELECT public._ensure_staff_attendance_office_schema()");
+
+  if (!(await rpcExists(pool, "_staff_attendance_employee_id"))) {
+    await pool.query(staffOfficeSelfAttendanceRpcSql());
+  }
+
+  await pool.query(staffFaceRegisterRpcSql());
+  await assertRpcs(pool, STAFF_FACE_REGISTER_REQUIRED_RPCS);
+}
+
 /** Admin office CRUD + assignments — no salary SQL. */
 export async function applyStaffOfficeAdminBootstrap(pool: Queryable): Promise<void> {
+  const ready = (await rpcExists(pool, "admin_list_staff_attendance_offices")) &&
+    (await rpcExists(pool, "admin_assign_staff_office"));
+  if (ready) return;
+
   await pool.query(staffOfficeEnsureSchemaSql());
   await pool.query("SELECT public._ensure_staff_attendance_office_schema()");
   await pool.query(staffOfficeAdminRpcSql());
@@ -65,17 +112,22 @@ export async function applyStaffOfficeBootstrap(pool: Queryable): Promise<void> 
   await pool.query("SELECT public._ensure_staff_attendance_office_schema()");
   await pool.query(staffOfficeAdminRpcSql());
   await pool.query(staffOfficeSelfAttendanceRpcSql());
+  await pool.query(staffFaceRegisterRpcSql());
   await pool.query(staffSalaryBaseSql());
   await pool.query(staffSalaryAdvancedSql());
 
   await assertRpcs(pool, [
     ...STAFF_OFFICE_REQUIRED_RPCS,
     ...STAFF_SELF_OFFICE_REQUIRED_RPCS,
+    ...STAFF_FACE_REGISTER_REQUIRED_RPCS,
     ...STAFF_SALARY_REQUIRED_RPCS,
   ]);
 }
 
-export function staffOfficeBootstrapForRpc(rpcName: string): "self" | "admin" | "full" {
+export function staffOfficeBootstrapForRpc(
+  rpcName: string
+): "self" | "face_register" | "admin" | "full" {
+  if (STAFF_FACE_REGISTER_RPC_NAMES.has(rpcName)) return "face_register";
   if (STAFF_SELF_RPC_NAMES.has(rpcName)) return "self";
   if (STAFF_OFFICE_ADMIN_RPC_NAMES.has(rpcName)) return "admin";
   return "full";
@@ -83,6 +135,8 @@ export function staffOfficeBootstrapForRpc(rpcName: string): "self" | "admin" | 
 
 export async function applyStaffOfficeBootstrapForRpc(pool: Queryable, rpcName: string): Promise<void> {
   switch (staffOfficeBootstrapForRpc(rpcName)) {
+    case "face_register":
+      return applyStaffFaceRegisterBootstrap(pool);
     case "self":
       return applyStaffSelfOfficeBootstrap(pool);
     case "admin":

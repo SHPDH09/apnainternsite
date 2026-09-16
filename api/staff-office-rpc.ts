@@ -103,11 +103,23 @@ async function callStaffOfficeRpc(
     if (session.email) {
       await client.query(`SELECT set_config('request.jwt.claim.email', $1, true)`, [session.email]);
     }
-    const values = argOrder.map((k) => (k in args ? args[k] : null));
+    const values = argOrder.map((k) => {
+      const v = k in args ? args[k] : null;
+      if (k === "p_face_descriptor" && Array.isArray(v)) {
+        return JSON.stringify(v);
+      }
+      return v;
+    });
+    const argCasts =
+      fnName === "staff_register_face"
+        ? argOrder.map((k, i) =>
+            k === "p_face_descriptor" ? `$${i + 1}::jsonb` : `$${i + 1}`
+          )
+        : argOrder.map((_, i) => `$${i + 1}`);
     const rpcSql =
       argOrder.length === 0
         ? `SELECT public.${fnName}() AS result`
-        : `SELECT public.${fnName}(${argOrder.map((_, i) => `$${i + 1}`).join(", ")}) AS result`;
+        : `SELECT public.${fnName}(${argCasts.join(", ")}) AS result`;
     const { rows } = await client.query<{ result: unknown }>(rpcSql, values);
     await client.query("COMMIT");
     return rows[0]?.result ?? null;

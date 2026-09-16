@@ -29,9 +29,45 @@ export type StaffAttendanceStatusPayload = {
   office: StaffAttendanceOfficePayload | null;
 };
 
+const RDS_APPLY_CODE = "apnaintern-owner-setup-v1";
+
 async function readAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
+}
+
+function rpcErrorMessage(error: { message?: string; details?: string; hint?: string } | null): string {
+  if (!error) return "Unknown error";
+  return [error.message, error.details, error.hint].filter(Boolean).join(" — ") || "Request failed";
+}
+
+function isMissingRpcError(msg: string): boolean {
+  return /does not exist|42883|could not find the function|PGRST202|relation .* does not exist/i.test(msg);
+}
+
+function isApiUnavailableError(msg: string): boolean {
+  return /404|500|503|not configured|fetch failed|Failed to fetch|network|FUNCTION_INVOCATION|service unavailable/i.test(
+    msg
+  );
+}
+
+/** Bootstrap staff office + face register SQL on Vercel RDS before self attendance calls. */
+export async function ensureStaffAttendanceSchema(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const origin = window.location.origin.replace(/\/$/, "");
+  const token = await readAccessToken();
+
+  await fetch(`${origin}/api/rds-apply-all`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: RDS_APPLY_CODE }),
+  }).catch(() => undefined);
+
+  if (!token) return;
+  await fetch(`${origin}/api/ensure-staff-attendance-offices`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => undefined);
 }
 
 /** Old Lambda RPC omits office_assigned; derive it from office.id when present. */
@@ -61,7 +97,7 @@ export function normalizeStaffAttendanceStatus(
 }
 
 /** Staff self attendance must use Vercel /api/staff-office-rpc (per-employee office assignments on RDS). */
-async function callStaffSelfRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+async function staffSelfRpcViaApi<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
   if (typeof window === "undefined") {
     throw new Error("Staff attendance API requires browser session");
   }
@@ -90,6 +126,35 @@ async function callStaffSelfRpc<T>(name: string, args: Record<string, unknown> =
   }
 
   return json.data as T;
+}
+
+async function legacyStaffSelfRpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) throw new Error(rpcErrorMessage(error));
+  return data as T;
+}
+
+async function callStaffSelfRpc<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
+  await ensureStaffAttendanceSchema();
+  try {
+    return await staffSelfRpcViaApi<T>(name, args);
+  } catch (apiErr) {
+    const apiMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (!isApiUnavailableError(apiMsg)) {
+      throw apiErr;
+    }
+    try {
+      return await legacyStaffSelfRpc<T>(name, args);
+    } catch (directErr) {
+      const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
+      if (isMissingRpcError(directMsg)) {
+        throw new Error(
+          "Attendance service is not ready yet. Wait a moment, refresh the page, and try again."
+        );
+      }
+      throw directErr;
+    }
+  }
 }
 
 export async function fetchStaffSelfAttendanceStatus(): Promise<StaffAttendanceStatusPayload> {

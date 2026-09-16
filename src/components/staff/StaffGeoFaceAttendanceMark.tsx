@@ -160,6 +160,9 @@ export function StaffGeoFaceAttendanceMark({
 
     setRegistering(true);
     try {
+      const { ensureStaffAttendanceSchema } = await import("@/lib/staffSelfAttendance");
+      await ensureStaffAttendanceSchema();
+
       const descriptor = await extractFaceDescriptorFromVideo(video);
       const photoBlob = await captureVideoFrameBlob(video);
       const path = `staff-profiles/${staffId}-face-${Date.now()}.jpg`;
