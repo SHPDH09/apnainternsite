@@ -62,7 +62,9 @@ export function loadAwsRdsDatabaseUrl() {
     return `postgresql://${encUser}:${encPass}@${host}:${port}/${db}?sslmode=require`;
   }
 
-  if (fromFile) return fromFile.replace(/^["']|["']$/g, "");
+  if (fromFile && (process.env.FORCE_LOCAL_RDS === "1" || !/127\.0\.0\.1|localhost/.test(fromFile))) {
+    return fromFile.replace(/^["']|["']$/g, "");
+  }
 
   throw new Error(
     "AWS RDS credentials missing.\n" +
