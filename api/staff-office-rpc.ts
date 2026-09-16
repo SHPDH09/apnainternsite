@@ -1,8 +1,13 @@
 /**
  * POST /api/staff-office-rpc — staff office admin RPCs on RDS.
  * Fully self-contained for Vercel (no jwt, no api/lib, no aws/* imports).
+ * staff_register_face accepts optional p_image_base64 to upload photo via Vercel→S3.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+
+const S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || "ap-south-1";
+const LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || "ezyintern-staging-logos";
 
 const STAFF_ATTENDANCE_RPCS: Record<string, string[]> = {
   admin_list_staff_attendance_offices: ["p_active_only"],
@@ -73,6 +78,39 @@ async function verifySession(token: string): Promise<{ sub: string; email?: stri
   } catch {
     return null;
   }
+}
+
+function publicLogoUrl(objectKey: string): string {
+  const key = objectKey.replace(/^\/+/, "");
+  return `https://${LOGOS_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key
+    .split("/")
+    .map((p) => encodeURIComponent(p))
+    .join("/")}`;
+}
+
+function decodeImageBase64(raw: string): Buffer {
+  const trimmed = raw.trim();
+  const data = trimmed.includes(",") ? trimmed.split(",").pop() || "" : trimmed;
+  const buf = Buffer.from(data, "base64");
+  if (buf.length < 64) {
+    throw new Error("Invalid photo data");
+  }
+  return buf;
+}
+
+async function uploadStaffFacePhoto(sessionSub: string, imageBase64: string): Promise<string> {
+  const imageBuffer = decodeImageBase64(imageBase64);
+  const objectKey = `staff-profiles/${sessionSub}-face-${Date.now()}.jpg`;
+  const s3 = new S3Client({ region: S3_REGION });
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: LOGOS_BUCKET,
+      Key: objectKey,
+      Body: imageBuffer,
+      ContentType: "image/jpeg",
+    })
+  );
+  return publicLogoUrl(objectKey);
 }
 
 async function applyStaffOfficeSql(databaseUrl: string, rpcName: string): Promise<void> {
@@ -164,13 +202,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     args?: Record<string, unknown>;
   };
   const name = String(body.name || "").trim();
-  const args = body.args && typeof body.args === "object" ? body.args : {};
+  const args = body.args && typeof body.args === "object" ? { ...body.args } : {};
   const argOrder = STAFF_ATTENDANCE_RPCS[name];
   if (!argOrder) {
     return res.status(400).json({ data: null, error: { message: `Unknown staff attendance RPC: ${name}` } });
   }
 
   try {
+    if (name === "staff_register_face") {
+      const imageBase64 =
+        typeof args.p_image_base64 === "string" ? args.p_image_base64.trim() : "";
+      if (imageBase64) {
+        args.p_photo_url = await uploadStaffFacePhoto(session.sub, imageBase64);
+        delete args.p_image_base64;
+      }
+      if (!args.p_photo_url || !String(args.p_photo_url).trim()) {
+        return res.status(400).json({
+          data: null,
+          error: { message: "Profile photo is required for face registration" },
+        });
+      }
+    }
+
     await applyStaffOfficeSql(databaseUrl, name);
     const data = await callStaffOfficeRpc(databaseUrl, name, argOrder, args, session);
     return res.status(200).json({ data, error: null });
