@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { storageObjectUrlCandidates } from "@/lib/storageUrl";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,10 @@ export function StorageImage({
     [bucket, path, url]
   );
   const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    setIdx(0);
+  }, [bucket, path, url]);
   const src = candidates[idx] || url?.trim() || "";
 
   if (!src) {
