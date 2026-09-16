@@ -18,6 +18,13 @@ import {
 } from "@/lib/storageUrl";
 import { StudentLogbookDocument } from "@/components/student/StudentLogbookDocument";
 import { StudentAttendanceReportDocument } from "@/components/student/StudentAttendanceReportDocument";
+import { ProjectReportUploadDialog } from "@/components/student/ProjectReportUploadDialog";
+import type { ProjectReportMode } from "@/lib/projectReportDomainContent";
+import {
+  getStudentProjectReportMergedUrl,
+  getStudentProjectReportUploadUrl,
+  saveStudentProjectReport,
+} from "@/lib/studentProjectReport";
 import { createElement } from "react";
 
 export type StudentDocumentId =
@@ -39,11 +46,14 @@ export type StudentDocumentMeta = {
 
 type AttendanceRecord = { marked_at?: string | null };
 
+type UniversityRow = { name: string; logo_url?: string | null };
+
 type Options = {
   userId: string;
   profile: Record<string, unknown> | null;
   attendanceRecords: AttendanceRecord[];
   projectReports: LearningMaterialRow[];
+  universities?: UniversityRow[];
   hasCertificate: boolean;
   onOpenAcceptanceLetter: () => void;
   onOpenCertificate: () => void;
@@ -61,6 +71,7 @@ export function useStudentDocumentActions({
   profile,
   attendanceRecords,
   projectReports,
+  universities = [],
   hasCertificate,
   onOpenAcceptanceLetter,
   onOpenCertificate,
@@ -71,6 +82,8 @@ export function useStudentDocumentActions({
   const consentInputRef = useRef<HTMLInputElement>(null);
   const [downloading, setDownloading] = useState<StudentDocumentId | null>(null);
   const [uploadingConsent, setUploadingConsent] = useState(false);
+  const [uploadingProject, setUploadingProject] = useState(false);
+  const [projectUploadOpen, setProjectUploadOpen] = useState(false);
   const [previewId, setPreviewId] = useState<StudentDocumentId | null>(null);
   const [documentIssueDate, setDocumentIssueDate] = useState(() => formatDocumentIssueDate());
 
@@ -86,7 +99,16 @@ export function useStudentDocumentActions({
       : projectReport?.file_url
         ? [projectReport.file_url]
         : [];
-  const projectReady = projectUrlCandidates.length > 0;
+  const studentMergedProjectUrl = useMemo(
+    () => getStudentProjectReportMergedUrl(profile),
+    [profile]
+  );
+  const studentProjectUploadUrl = useMemo(
+    () => getStudentProjectReportUploadUrl(profile),
+    [profile]
+  );
+  const projectReady =
+    !!studentMergedProjectUrl || projectUrlCandidates.length > 0 || !!studentProjectUploadUrl;
 
   const documents: StudentDocumentMeta[] = useMemo(
     () => [
@@ -135,13 +157,26 @@ export function useStudentDocumentActions({
         id: "project",
         title: "Project Report",
         description:
-          "Your domain-specific project report, uploaded by the Apna Intern team for your batch.",
+          "Upload your project PDF — pages 1–7 (cover, declaration, certificates) are added automatically with your university logo and domain.",
         ready: projectReady,
-        statusLabel: projectReady ? "Ready" : "Not shared yet",
+        canUpload: true,
+        statusLabel: studentMergedProjectUrl
+          ? "Ready (7 front pages + your report)"
+          : projectUrlCandidates.length > 0
+            ? "Shared by admin"
+            : "Upload your report",
       },
     ],
-    [consentUrl, hasCertificate, projectReady]
+    [consentUrl, hasCertificate, projectReady, projectUrlCandidates.length, studentMergedProjectUrl]
   );
+
+  const resolveProjectReportViewUrl = useCallback(async (): Promise<string | null> => {
+    if (studentMergedProjectUrl) return studentMergedProjectUrl;
+    if (projectUrlCandidates.length > 0) {
+      return pickWorkingStorageUrl(projectUrlCandidates);
+    }
+    return null;
+  }, [projectUrlCandidates, studentMergedProjectUrl]);
 
   const refreshIssueDate = useCallback(() => {
     setDocumentIssueDate(formatDocumentIssueDate());
@@ -202,6 +237,21 @@ export function useStudentDocumentActions({
     consentInputRef.current?.click();
   };
 
+  const handleProjectReportUpload = async (file: File, mode: ProjectReportMode) => {
+    if (!userId) return;
+    setUploadingProject(true);
+    try {
+      await saveStudentProjectReport(supabase, userId, profile, file, mode, universities);
+      toast.success("Project report uploaded. Pages 1–7 were added before your content.");
+      await onProfileUpdated?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not upload project report.");
+      throw e;
+    } finally {
+      setUploadingProject(false);
+    }
+  };
+
   const viewDocument = (id: StudentDocumentId) => {
     switch (id) {
       case "consent":
@@ -224,15 +274,11 @@ export function useStudentDocumentActions({
         setPreviewId("attendance");
         break;
       case "project":
-        if (projectUrlCandidates.length > 0) {
-          void (async () => {
-            const url = await pickWorkingStorageUrl(projectUrlCandidates);
-            if (url) window.open(url, "_blank", "noopener,noreferrer");
-            else toast.error("Could not open project report.");
-          })();
-        } else {
-          toast.info("Project report has not been shared for your profile yet.");
-        }
+        void (async () => {
+          const url = await resolveProjectReportViewUrl();
+          if (url) window.open(url, "_blank", "noopener,noreferrer");
+          else toast.info("Upload your project report PDF first.");
+        })();
         break;
       default:
         break;
@@ -270,21 +316,20 @@ export function useStudentDocumentActions({
         await downloadAttendanceReport();
         break;
       case "project":
-        if (projectUrlCandidates.length > 0) {
-          setDownloading("project");
-          try {
-            await downloadStorageFileWithFallback(
-              projectUrlCandidates,
-              projectReport?.file_name || "Project_Report.pdf"
-            );
-            toast.success("Project report downloaded.");
-          } catch {
-            toast.error("Could not download project report. Please try View instead.");
-          } finally {
-            setDownloading(null);
+        setDownloading("project");
+        try {
+          const url = await resolveProjectReportViewUrl();
+          if (!url) {
+            toast.info("Upload your project report PDF first.");
+            break;
           }
-        } else {
-          toast.info("Project report has not been shared for your profile yet.");
+          const safeName = fields.studentName.replace(/\s+/g, "_").replace(/[^\w.-]/g, "") || "Student";
+          await downloadStorageFileWithFallback([url], `Project_Report_${safeName}.pdf`);
+          toast.success("Project report downloaded.");
+        } catch {
+          toast.error("Could not download project report. Please try View instead.");
+        } finally {
+          setDownloading(null);
         }
         break;
       default:
@@ -294,6 +339,7 @@ export function useStudentDocumentActions({
 
   const uploadDocument = (id: StudentDocumentId) => {
     if (id === "consent") triggerConsentUpload();
+    if (id === "project") setProjectUploadOpen(true);
   };
 
   const hiddenPdfNodes = createElement(
@@ -314,6 +360,15 @@ export function useStudentDocumentActions({
       onChange: (e: { target: HTMLInputElement }) => {
         void handleConsentFileChange(e.target.files?.[0]);
       },
+    }),
+    createElement(ProjectReportUploadDialog, {
+      open: projectUploadOpen,
+      onOpenChange: setProjectUploadOpen,
+      profile,
+      universityName: fields.university,
+      domain: fields.domain,
+      uploading: uploadingProject,
+      onUpload: handleProjectReportUpload,
     })
   );
 
@@ -321,6 +376,7 @@ export function useStudentDocumentActions({
     documents,
     downloading,
     uploadingConsent,
+    uploadingProject,
     previewId,
     setPreviewId,
     viewDocument,
