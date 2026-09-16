@@ -178,12 +178,47 @@ export async function staffSelfCheckIn(input: {
 
 export async function staffRegisterFace(input: {
   faceDescriptor: number[];
-  photoUrl: string;
+  imageBase64: string;
 }): Promise<{ ok: boolean; profile_image_url?: string }> {
-  return callStaffSelfRpc("staff_register_face", {
-    p_face_descriptor: input.faceDescriptor,
-    p_photo_url: input.photoUrl,
+  if (typeof window === "undefined") {
+    throw new Error("Staff attendance API requires browser session");
+  }
+
+  const token = await readAccessToken();
+  if (!token) throw new Error("Not signed in");
+
+  const origin = window.location.origin.replace(/\/$/, "");
+  await ensureStaffAttendanceSchema();
+
+  const res = await fetch(`${origin}/api/staff-register-face`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      faceDescriptor: input.faceDescriptor,
+      imageBase64: input.imageBase64,
+    }),
   });
+
+  const json = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    profile_image_url?: string;
+    message?: string;
+    error?: { message?: string };
+  };
+
+  if (!res.ok || json.ok === false) {
+    throw new Error(
+      json.message || json.error?.message || `Face registration failed (${res.status})`
+    );
+  }
+
+  return {
+    ok: Boolean(json.ok ?? true),
+    profile_image_url: json.profile_image_url,
+  };
 }
 
 export async function staffSelfCheckOut(input: {

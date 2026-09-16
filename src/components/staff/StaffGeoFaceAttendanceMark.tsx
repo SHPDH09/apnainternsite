@@ -31,8 +31,7 @@ import {
   stopStaffCamera,
   verifyStaffFaceMatchFromDescriptor,
 } from "@/lib/staffFaceVerify";
-import { resolveStorageUrl } from "@/lib/storageUrl";
-import { supabase } from "@/integrations/supabase/client";
+import { blobToBase64 } from "@/lib/staffFacePhotoUpload";
 import { staffStatCardClass } from "@/components/staff/staffStyles";
 
 type Props = {
@@ -165,22 +164,15 @@ export function StaffGeoFaceAttendanceMark({
 
       const descriptor = await extractFaceDescriptorFromVideo(video);
       const photoBlob = await captureVideoFrameBlob(video);
-      const path = `staff-profiles/${staffId}-face-${Date.now()}.jpg`;
-      const { error: upErr } = await supabase.storage
-        .from("logos")
-        .upload(path, photoBlob, { upsert: true, contentType: "image/jpeg" });
-      if (upErr) throw upErr;
-
-      const { data } = supabase.storage.from("logos").getPublicUrl(path);
-      const publicUrl = resolveStorageUrl(data.publicUrl) || data.publicUrl;
+      const imageBase64 = await blobToBase64(photoBlob);
 
       const result = await staffRegisterFace({
         faceDescriptor: descriptor,
-        photoUrl: publicUrl,
+        imageBase64,
       });
 
       toast.success("Face registered successfully. You can now mark attendance.");
-      onFaceRegistered?.(result.profile_image_url || publicUrl);
+      onFaceRegistered?.(result.profile_image_url || "");
       await loadStatus();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Face registration failed");
