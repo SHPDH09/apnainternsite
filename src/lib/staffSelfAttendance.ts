@@ -24,6 +24,8 @@ export type StaffAttendanceStatusPayload = {
   check_in_opens_at: string;
   check_out_opens_at: string;
   office_assigned: boolean;
+  face_registered?: boolean;
+  face_descriptor?: number[] | null;
   office: StaffAttendanceOfficePayload | null;
 };
 
@@ -42,7 +44,20 @@ export function normalizeStaffAttendanceStatus(
     typeof raw.office_assigned === "boolean"
       ? raw.office_assigned
       : Boolean(office && typeof office === "object" && "id" in office && office.id);
-  return { ...raw, office_assigned: officeAssigned, office: office ?? null };
+  const faceRegistered =
+    typeof raw.face_registered === "boolean"
+      ? raw.face_registered
+      : Boolean(
+          raw.face_descriptor &&
+            Array.isArray(raw.face_descriptor) &&
+            raw.face_descriptor.length >= 64
+        );
+  return {
+    ...raw,
+    office_assigned: officeAssigned,
+    office: office ?? null,
+    face_registered: faceRegistered,
+  };
 }
 
 /** Staff self attendance must use Vercel /api/staff-office-rpc (per-employee office assignments on RDS). */
@@ -93,6 +108,16 @@ export async function staffSelfCheckIn(input: {
     p_longitude: input.longitude,
     p_face_score: input.faceScore,
     p_gps_accuracy_m: input.gpsAccuracyM ?? null,
+  });
+}
+
+export async function staffRegisterFace(input: {
+  faceDescriptor: number[];
+  photoUrl: string;
+}): Promise<{ ok: boolean; profile_image_url?: string }> {
+  return callStaffSelfRpc("staff_register_face", {
+    p_face_descriptor: input.faceDescriptor,
+    p_photo_url: input.photoUrl,
   });
 }
 

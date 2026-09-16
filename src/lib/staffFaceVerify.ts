@@ -201,7 +201,77 @@ async function descriptorFromImage(
   return detection?.descriptor ?? null;
 }
 
-/** Returns match score 0–1 (higher = better match). */
+/** Capture a JPEG frame from the live camera for profile / face registration upload. */
+export async function captureVideoFrameBlob(
+  video: HTMLVideoElement,
+  quality = 0.92
+): Promise<Blob> {
+  if (video.readyState < 2) {
+    throw new Error("Camera is not ready yet");
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not capture photo from camera");
+  ctx.drawImage(video, 0, 0);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("Could not capture photo from camera"))),
+      "image/jpeg",
+      quality
+    );
+  });
+}
+
+/** Extract face descriptor from live camera (one-time registration). */
+export async function extractFaceDescriptorFromVideo(
+  liveVideo: HTMLVideoElement
+): Promise<number[]> {
+  const faceapi = await ensureFaceModels();
+  if (liveVideo.readyState < 2) {
+    throw new Error("Camera is not ready yet");
+  }
+  const desc = await descriptorFromImage(faceapi, liveVideo);
+  if (!desc) {
+    throw new Error("No face detected. Look at the camera in good lighting.");
+  }
+  return Array.from(desc);
+}
+
+/** Match live face against stored registration descriptor (not profile photo). */
+export async function verifyStaffFaceMatchFromDescriptor(
+  storedDescriptor: number[] | Float32Array,
+  liveVideo: HTMLVideoElement
+): Promise<{ score: number; matched: boolean }> {
+  const faceapi = await ensureFaceModels();
+
+  if (liveVideo.readyState < 2) {
+    throw new Error("Camera is not ready yet");
+  }
+
+  const profileDesc =
+    storedDescriptor instanceof Float32Array
+      ? storedDescriptor
+      : new Float32Array(storedDescriptor);
+
+  if (profileDesc.length < 64) {
+    throw new Error("Face is not registered yet. Complete face registration first.");
+  }
+
+  const liveDesc = await descriptorFromImage(faceapi, liveVideo);
+  if (!liveDesc) {
+    throw new Error("No face detected. Look at the camera in good lighting.");
+  }
+
+  const distance = faceapi.euclideanDistance(profileDesc, liveDesc);
+  const score = Math.max(0, Math.min(1, 1 - distance / MATCH_THRESHOLD));
+  const matched = distance <= MATCH_THRESHOLD;
+
+  return { score: Math.round(score * 1000) / 1000, matched };
+}
+
+/** @deprecated Use verifyStaffFaceMatchFromDescriptor after one-time face registration. */
 export async function verifyStaffFaceMatch(
   profileImageUrl: string,
   liveVideo: HTMLVideoElement

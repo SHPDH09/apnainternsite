@@ -2140,6 +2140,10 @@ const StaffDashboard = () => {
             <StaffOwnAttendancePanel
               isActive={activeTab === "my-attendance"}
               profileImageUrl={staffProfile?.profile_image_url}
+              staffId={staffProfile?.id}
+              onFaceRegistered={(url) => {
+                setStaffProfile((prev) => (prev ? { ...prev, profile_image_url: url } : prev));
+              }}
             />
           )}
           {activeTab === "salary-slips" && (

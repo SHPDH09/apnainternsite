@@ -10,6 +10,7 @@ const ADMIN_RPC_HOTFIX_SQL = "aws/scripts/87-rds-staff-attendance-offices-all-ad
 const STAFF_ATTENDANCE_HELPER_SQL = "aws/scripts/84-rds-staff-attendance-helpers.sql";
 const STAFF_SELF_RPC_SQL = "aws/scripts/88-rds-staff-office-self-attendance-rpc.sql";
 const STAFF_SELF_RPC_FIX_SQL = "aws/scripts/89-rds-staff-office-employee-id-resolve.sql";
+const STAFF_FACE_REGISTER_SQL = "aws/scripts/90-rds-staff-face-register.sql";
 const OFFICES_SQL = "aws/scripts/82-rds-staff-attendance-offices.sql";
 
 const OFFICE_TABLES = new Set(["staff_attendance_offices", "staff_office_assignments"]);
@@ -27,6 +28,8 @@ const STAFF_SELF_RPCS = [
   "_ist_minutes_now",
   "_staff_office_for_employee",
   "_staff_attendance_employee_id",
+  "_staff_row_for_attendance",
+  "staff_register_face",
   "staff_self_attendance_status",
   "staff_self_check_in",
   "staff_self_check_out",
@@ -305,7 +308,12 @@ async function applyAdminOfficeRpcSql(): Promise<boolean> {
 
 /** Apply helper + self RPC SQL (84, 88, 89). Always re-run so CREATE OR REPLACE picks up fixes. */
 async function ensureStaffSelfOfficeRpcs(): Promise<void> {
-  for (const rel of [STAFF_ATTENDANCE_HELPER_SQL, STAFF_SELF_RPC_SQL, STAFF_SELF_RPC_FIX_SQL]) {
+  for (const rel of [
+    STAFF_ATTENDANCE_HELPER_SQL,
+    STAFF_SELF_RPC_SQL,
+    STAFF_SELF_RPC_FIX_SQL,
+    STAFF_FACE_REGISTER_SQL,
+  ]) {
     try {
       await runSqlFile(rel);
     } catch (err) {

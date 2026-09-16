@@ -118,7 +118,7 @@ export function StaffProfilePanel({
       }
       setImageUrl(publicUrl);
       onProfileImageUpdated?.(publicUrl);
-      toast.success("Profile image updated");
+      toast.success("Profile photo updated (attendance still uses your registered face)");
     } catch (e: any) {
       toast.error(e?.message || "Upload failed");
     } finally {
@@ -364,11 +364,15 @@ export function StaffSecurityPanel({ isActive = true, onSignOutCurrent }: Securi
 type OwnAttendanceProps = {
   isActive?: boolean;
   profileImageUrl?: string | null;
+  staffId?: string | null;
+  onFaceRegistered?: (profileImageUrl: string) => void;
 };
 
 export function StaffOwnAttendancePanel({
   isActive = true,
   profileImageUrl,
+  staffId,
+  onFaceRegistered,
 }: OwnAttendanceProps) {
   const [rows, setRows] = useState<EmployeeAttendanceRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -401,12 +405,15 @@ export function StaffOwnAttendancePanel({
           <CalendarDays className="size-5 text-primary" /> My Attendance
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Mark check-in at 10:00 AM and check-out at 6:00 PM with face + location verification.
+          Register your face once, then mark check-in at 10:00 AM and check-out at 6:00 PM with
+          face + location verification.
         </p>
       </div>
       <StaffGeoFaceAttendanceMark
         profileImageUrl={profileImageUrl}
+        staffId={staffId}
         isActive={isActive}
+        onFaceRegistered={onFaceRegistered}
         onMarked={() => void load()}
       />
       <Card className="border-none shadow-elegant overflow-hidden">
