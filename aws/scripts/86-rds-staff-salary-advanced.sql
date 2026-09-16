@@ -418,13 +418,12 @@ BEGIN
     + coalesce(v_setup.tax_deduction, 0)
     + coalesce(v_setup.other_deductions, 0);
 
-  v_per_day := CASE
-    WHEN v_setup.working_days_per_month > 0 THEN v_gross / v_setup.working_days_per_month
-    ELSE 0
-  END;
+  -- Per-day / hourly rates always use calendar-month divisor (30), not working_days_per_month.
+  -- working_days_per_month (default 26) is kept for attendance / leave policy reference only.
+  v_per_day := CASE WHEN v_gross > 0 THEN v_gross / 30 ELSE 0 END;
 
   v_hourly := CASE
-    WHEN v_setup.working_days_per_month > 0 THEN v_gross / (v_setup.working_days_per_month * v_std_hours)
+    WHEN v_gross > 0 THEN v_gross / (30 * v_std_hours)
     ELSE 0
   END;
 
@@ -451,6 +450,7 @@ BEGIN
     'tax_deduction', v_setup.tax_deduction,
     'other_deductions', v_setup.other_deductions,
     'working_days_per_month', v_setup.working_days_per_month,
+    'salary_divisor_days', 30,
     'paid_leaves_per_month', v_setup.paid_leaves_per_month,
     'extra_paid_leave_grant', v_extra_grant,
     'paid_leave_quota_total', v_paid_quota,
