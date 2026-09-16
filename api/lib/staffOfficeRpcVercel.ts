@@ -33,12 +33,12 @@ function pgPoolConfig(databaseUrl: string) {
   };
 }
 
-async function applyStaffOfficeSql(databaseUrl: string): Promise<void> {
+async function applyStaffOfficeSql(databaseUrl: string, rpcName = "admin_list_staff_attendance_offices"): Promise<void> {
   const pg = await import("pg");
-  const { applyStaffOfficeBootstrap } = await import("../staffOfficeApply.js");
+  const { applyStaffOfficeBootstrapForRpc } = await import("../staffOfficeApply.js");
   const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
   try {
-    await applyStaffOfficeBootstrap(pool);
+    await applyStaffOfficeBootstrapForRpc(pool, rpcName);
   } finally {
     await pool.end();
   }
@@ -49,15 +49,18 @@ async function callStaffOfficeRpc(
   fnName: string,
   argOrder: string[],
   args: Record<string, unknown>,
-  userId: string
+  session: { sub: string; email?: string }
 ): Promise<unknown> {
   const pg = await import("pg");
   const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true)`, [userId]);
+    await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true)`, [session.sub]);
     await client.query(`SELECT set_config('request.jwt.claim.role', 'authenticated', true)`);
+    if (session.email) {
+      await client.query(`SELECT set_config('request.jwt.claim.email', $1, true)`, [session.email]);
+    }
     const values = argOrder.map((k) => (k in args ? args[k] : null));
     const rpcSql =
       argOrder.length === 0
@@ -78,22 +81,23 @@ async function callStaffOfficeRpc(
 export async function handleStaffOfficeRpcAction(input: {
   databaseUrl: string;
   userId: string;
+  userEmail?: string;
   name: string;
   args?: Record<string, unknown>;
 }): Promise<unknown> {
   const name = String(input.name || "").trim();
   const argOrder = STAFF_ATTENDANCE_RPCS[name];
   if (!argOrder) throw new Error(`Unknown staff attendance RPC: ${name}`);
-  await applyStaffOfficeSql(input.databaseUrl);
+  await applyStaffOfficeSql(input.databaseUrl, name);
   return callStaffOfficeRpc(
     input.databaseUrl,
     name,
     argOrder,
     input.args || {},
-    input.userId
+    { sub: input.userId, email: input.userEmail }
   );
 }
 
 export async function handleEnsureStaffAttendanceOffices(databaseUrl: string): Promise<void> {
-  await applyStaffOfficeSql(databaseUrl);
+  await applyStaffOfficeSql(databaseUrl, "admin_list_staff_attendance_offices");
 }
