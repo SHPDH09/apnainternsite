@@ -277,7 +277,8 @@ export function NotificationManagementPanel({
         }
         const n = await countNotificationTargets(supabase, filters);
         if (!cancelled) setRecipientCountN(n);
-      } catch {
+      } catch (err) {
+        console.warn("countNotificationTargets:", err);
         if (!cancelled) setRecipientCountN(0);
       }
     })();

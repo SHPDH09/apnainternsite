@@ -332,7 +332,7 @@ export async function createCollegeAdminWithoutServiceRole(
   const collegeIds = [...new Set(params.collegeIds.filter(Boolean))];
   if (collegeIds.length < 1) throw new Error("Add at least one college (tick boxes, then press Add)");
 
-  const existingId = await resolveProfileIdByEmail(sessionSupabase, email);
+  const existingId = await resolveAuthUserIdByEmail(sessionSupabase, email);
   if (existingId) {
     const { data: roles } = await sessionSupabase
       .from("user_roles")
@@ -377,7 +377,7 @@ export async function createCollegeAdminWithoutServiceRole(
   if (error) {
     const msg = error.message || "";
     if (/already registered|already exists/i.test(msg)) {
-      userId = await resolveProfileIdByEmail(sessionSupabase, email);
+      userId = await resolveAuthUserIdByEmail(sessionSupabase, email);
       if (!userId) {
         throw new Error(
           "This email already exists in Auth but has no profile yet. Use a different email or fix the account in Supabase."
