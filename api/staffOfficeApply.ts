@@ -13,6 +13,7 @@ import {
 type Queryable = { query: (sql: string, values?: unknown[]) => Promise<{ rows: Record<string, boolean>[] }> };
 
 const STAFF_SELF_RPC_NAMES = new Set([
+  "staff_register_face",
   "staff_self_attendance_status",
   "staff_self_check_in",
   "staff_self_check_out",

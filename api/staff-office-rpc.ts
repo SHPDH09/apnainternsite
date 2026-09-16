@@ -14,6 +14,7 @@ const STAFF_ATTENDANCE_RPCS: Record<string, string[]> = {
   admin_assign_staff_office: ["p_employee_id", "p_office_id"],
   admin_remove_staff_office_assignment: ["p_employee_id"],
   admin_list_staff_office_assignments: [],
+  staff_register_face: ["p_face_descriptor", "p_photo_url"],
   staff_self_attendance_status: [],
   staff_self_check_in: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
   staff_self_check_out: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
