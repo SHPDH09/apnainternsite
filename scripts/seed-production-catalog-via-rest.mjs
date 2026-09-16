@@ -219,13 +219,6 @@ async function main() {
     console.log("tech:", name);
   }
 
-  // BEU backfill
-  const beu = await findUniversityByName("BEU");
-  if (beu?.id) {
-    await ensureEngConfig(beu.id);
-    console.log("tech: BEU (backfill)");
-  }
-
   const techDomains = parseTechDomainsFromTs();
   const nonTechDomains = parseDomainNamesFromSql("aws/scripts/66-rds-non-technical-internship-domains.sql");
   const allDomains = [...new Set([...techDomains, ...nonTechDomains])];
@@ -235,8 +228,8 @@ async function main() {
     if (await ensureDomain(name)) domainsAdded += 1;
   }
 
-  // Merge technical domains into engineering configs (BEU + Bihar tech + SBTE)
-  for (const name of [...new Set([...TECH_UNIS, "BEU"])]) {
+  // Merge technical domains into engineering configs (Bihar tech + SBTE)
+  for (const name of TECH_UNIS) {
     const uni = await findUniversityByName(name);
     if (!uni?.id) continue;
     const { json: rows } = await rest("GET", "engineering_university_configs", {
