@@ -4,10 +4,12 @@
  * staff_register_face accepts optional p_image_base64 to upload photo via Vercel→S3.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || "ap-south-1";
 const LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || "ezyintern-staging-logos";
+const LAMBDA_API =
+  process.env.LAMBDA_API_URL?.trim()?.replace(/\/$/, "") ||
+  "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
 
 const STAFF_ATTENDANCE_RPCS: Record<string, string[]> = {
   admin_list_staff_attendance_offices: ["p_active_only"],
@@ -98,18 +100,37 @@ function decodeImageBase64(raw: string): Buffer {
   return buf;
 }
 
-async function uploadStaffFacePhoto(sessionSub: string, imageBase64: string): Promise<string> {
+/** Server-side upload via Lambda storage (no @aws-sdk — keeps Vercel bundle small). */
+async function uploadStaffFacePhoto(
+  token: string,
+  sessionSub: string,
+  imageBase64: string
+): Promise<string> {
   const imageBuffer = decodeImageBase64(imageBase64);
   const objectKey = `staff-profiles/${sessionSub}-face-${Date.now()}.jpg`;
-  const s3 = new S3Client({ region: S3_REGION });
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: LOGOS_BUCKET,
-      Key: objectKey,
-      Body: imageBuffer,
-      ContentType: "image/jpeg",
-    })
-  );
+  const storagePath = objectKey
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+
+  const res = await fetch(`${LAMBDA_API}/storage/v1/object/logos/${storagePath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "image/jpeg",
+    },
+    body: imageBuffer,
+  });
+
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => "")).slice(0, 200);
+    throw new Error(
+      res.status === 503 || /service unavailable/i.test(detail)
+        ? "Photo upload is temporarily unavailable. Try again in a moment."
+        : `Photo upload failed (${res.status})${detail ? `: ${detail}` : ""}`
+    );
+  }
+
   return publicLogoUrl(objectKey);
 }
 
@@ -213,7 +234,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const imageBase64 =
         typeof args.p_image_base64 === "string" ? args.p_image_base64.trim() : "";
       if (imageBase64) {
-        args.p_photo_url = await uploadStaffFacePhoto(session.sub, imageBase64);
+        args.p_photo_url = await uploadStaffFacePhoto(token, session.sub, imageBase64);
         delete args.p_image_base64;
       }
       if (!args.p_photo_url || !String(args.p_photo_url).trim()) {
