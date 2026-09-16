@@ -1,5 +1,5 @@
 -- Staff self attendance RPCs: per-employee office lookup via staff_office_assignments.
--- Requires 85 (schema) + 83 (admin RPCs). Run after assignments exist.
+-- Requires 84 (helpers) + 85 (schema) + 83 (admin RPCs). Run after assignments exist.
 
 CREATE OR REPLACE FUNCTION public._staff_office_for_employee(p_employee_id uuid)
 RETURNS TABLE (

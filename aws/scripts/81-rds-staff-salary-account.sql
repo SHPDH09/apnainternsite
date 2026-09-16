@@ -169,10 +169,8 @@ BEGIN
     + coalesce(v_setup.tax_deduction, 0)
     + coalesce(v_setup.other_deductions, 0);
 
-  v_per_day := CASE
-    WHEN v_setup.working_days_per_month > 0 THEN v_gross / v_setup.working_days_per_month
-    ELSE 0
-  END;
+  -- Per-day rate uses gross / 30; working_days_per_month is policy reference (default 26).
+  v_per_day := CASE WHEN v_gross > 0 THEN v_gross / 30 ELSE 0 END;
 
   v_attendance_deduction := round((v_absent * v_per_day)::numeric, 2);
   v_net := greatest(0, round((v_gross - v_fixed_deductions - v_attendance_deduction)::numeric, 2));
@@ -186,6 +184,7 @@ BEGIN
     'tax_deduction', v_setup.tax_deduction,
     'other_deductions', v_setup.other_deductions,
     'working_days_per_month', v_setup.working_days_per_month,
+    'salary_divisor_days', 30,
     'per_day_rate', round(v_per_day::numeric, 2),
     'payment_mode', v_setup.payment_mode
   );

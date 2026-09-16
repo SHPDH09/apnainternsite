@@ -152,7 +152,10 @@ export function StaffGeoFaceAttendanceMark({
     setBusy(true);
     try {
       const pos = await verifyLocation();
-      const { score, matched } = await verifyStaffFaceMatch(avatarUrl, video);
+      const { score, matched } = await verifyStaffFaceMatch(
+        profileImageUrl || avatarUrl,
+        video
+      );
       if (!matched) {
         throw new Error("Face did not match your profile photo. Try again in better light.");
       }

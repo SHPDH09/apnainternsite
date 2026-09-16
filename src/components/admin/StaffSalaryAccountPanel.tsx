@@ -843,6 +843,10 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                 value={form.working_days_per_month}
                 onChange={(e) => setForm((p) => ({ ...p, working_days_per_month: e.target.value }))}
               />
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Attendance / leave policy reference (default 26). Per-day salary deductions use{" "}
+                <strong>gross ÷ 30</strong>, not this number.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Paid leaves / month</Label>
