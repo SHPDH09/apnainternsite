@@ -44,9 +44,8 @@ const selfSql =
   "\n\n" +
   readSql("aws/scripts/88-rds-staff-office-self-attendance-rpc.sql") +
   "\n\n" +
-  readSql("aws/scripts/89-rds-staff-office-employee-id-resolve.sql") +
-  "\n\n" +
-  readSql("aws/scripts/90-rds-staff-face-register.sql");
+  readSql("aws/scripts/89-rds-staff-office-employee-id-resolve.sql");
+const faceRegisterSql = readSql("aws/scripts/90-rds-staff-face-register.sql");
 const salaryBaseSql = readSql("aws/scripts/81-rds-staff-salary-account.sql");
 const salaryAdvancedSql = readSql("aws/scripts/86-rds-staff-salary-advanced.sql");
 
@@ -54,11 +53,12 @@ const body = `/** Bundled staff office + salary SQL for Vercel (generated — ru
 ${emitChunks("STAFF_OFFICE_ENSURE_SCHEMA_CHUNKS", "staffOfficeEnsureSchemaSql", ensureSql)}
 ${emitChunks("STAFF_OFFICE_ADMIN_RPC_CHUNKS", "staffOfficeAdminRpcSql", adminSql)}
 ${emitChunks("STAFF_OFFICE_SELF_RPC_CHUNKS", "staffOfficeSelfAttendanceRpcSql", selfSql)}
+${emitChunks("STAFF_FACE_REGISTER_RPC_CHUNKS", "staffFaceRegisterRpcSql", faceRegisterSql)}
 ${emitChunks("STAFF_SALARY_BASE_CHUNKS", "staffSalaryBaseSql", salaryBaseSql)}
 ${emitChunks("STAFF_SALARY_ADVANCED_CHUNKS", "staffSalaryAdvancedSql", salaryAdvancedSql)}
 /** @deprecated Use ensure + call ensure() + admin RPCs instead of one-shot apply. */
 export function staffOfficeBootstrapSql(): string {
-  return staffOfficeEnsureSchemaSql() + staffOfficeAdminRpcSql() + staffOfficeSelfAttendanceRpcSql();
+  return staffOfficeEnsureSchemaSql() + staffOfficeAdminRpcSql() + staffOfficeSelfAttendanceRpcSql() + staffFaceRegisterRpcSql();
 }
 export const STAFF_OFFICE_REQUIRED_RPCS = [
   "admin_list_staff_attendance_offices",
@@ -73,11 +73,14 @@ export const STAFF_SELF_OFFICE_REQUIRED_RPCS = [
   "_ist_minutes_now",
   "_staff_office_for_employee",
   "_staff_attendance_employee_id",
-  "_staff_row_for_attendance",
-  "staff_register_face",
   "staff_self_attendance_status",
   "staff_self_check_in",
   "staff_self_check_out",
+];
+export const STAFF_FACE_REGISTER_REQUIRED_RPCS = [
+  "_staff_attendance_employee_id",
+  "_staff_row_for_attendance",
+  "staff_register_face",
 ];
 export const STAFF_SALARY_REQUIRED_RPCS = [
   "admin_list_staff_salary_holidays",
