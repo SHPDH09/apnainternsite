@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import type { ReactNode } from "react";
 import ReactGA from "react-ga4";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, useLocation, Navigate } from "react-router-dom";
@@ -49,7 +50,7 @@ import { authConfirmPathWithTokens } from "@/lib/authRedirectGuard";
 function AuthCallbackRedirect() { const { search, hash } = useLocation(); return <Navigate to={authConfirmPathWithTokens(search, hash)} replace />; }
 function Analytics() { const location = useLocation(); useEffect(() => { ReactGA.send({ hitType: "pageview", page: location.pathname }); }, [location]); return null; }
 const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false, refetchOnReconnect: false } } });
-const Protected = ({ roles, children }: { roles: any[]; children: React.ReactNode }) => <ProtectedRoute allowedRoles={roles}>{children}</ProtectedRoute>;
+const Protected = ({ roles, children }: { roles: string[]; children: ReactNode }) => <ProtectedRoute allowedRoles={roles as any}>{children}</ProtectedRoute>;
 
 const App = () => (
   <QueryClientProvider client={queryClient}><TooltipProvider><Toaster /><Sonner /><BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
