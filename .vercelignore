@@ -20,7 +20,6 @@ api/**
 !api/staffOfficeSqlChunks.ts
 !api/staffOfficeApply.ts
 !api/rds-apply-all.ts
-!api/blog-interaction.ts
 !api/lib/**
 
 aws/**
