@@ -57,6 +57,11 @@ export function resetSiteBlogStorageCache(): void {
   fallbackReady = null;
 }
 
+/** Public blog reads should not stay stuck on a stale "table missing" probe from admin CMS. */
+export function setSiteBlogTableAvailableKnown(available: boolean): void {
+  tableAvailable = available;
+}
+
 export async function siteBlogTableAvailable(client: SupabaseClient): Promise<boolean> {
   if (tableAvailable != null) return tableAvailable;
   const { error } = await client.from("site_blog_posts").select("id").limit(1);

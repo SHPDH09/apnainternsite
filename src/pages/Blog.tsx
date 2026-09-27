@@ -50,23 +50,25 @@ export default function Blog() {
           <p className="text-slate-500">No published posts yet. Check back soon.</p>
         </div>
       ) : (
-        <ul className="space-y-6">
+        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {posts.map((post) => (
             <li key={post.id}>
               <Link
                 to={`/blog/${post.slug}`}
-                className="group block overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all hover:border-[#5AA3E6]/30 hover:shadow-lg"
+                className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all hover:border-[#5AA3E6]/30 hover:shadow-lg"
               >
                 {post.cover_image_url ? (
-                  <div className="aspect-[21/9] overflow-hidden bg-slate-100">
+                  <div className="aspect-[16/10] overflow-hidden bg-slate-100">
                     <img
                       src={post.cover_image_url}
                       alt=""
-                      className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                      className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                     />
                   </div>
-                ) : null}
-                <div className="p-5 sm:p-6">
+                ) : (
+                  <div className="aspect-[16/10] bg-gradient-to-br from-[#5AA3E6]/20 to-slate-100" />
+                )}
+                <div className="flex flex-1 flex-col p-5">
                   <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                     {post.is_featured ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[#5AA3E6]/10 px-2 py-0.5 font-semibold text-[#2563eb]">
@@ -76,24 +78,28 @@ export default function Blog() {
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium capitalize">
                       {post.post_type}
                     </span>
+                  </div>
+                  <h2 className="mt-3 line-clamp-2 font-serif text-lg font-bold text-slate-900 group-hover:text-[#2563eb]">
+                    {post.title}
+                  </h2>
+                  {post.excerpt ? (
+                    <p className="mt-2 line-clamp-3 flex-1 text-sm leading-relaxed text-slate-600">
+                      {post.excerpt}
+                    </p>
+                  ) : (
+                    <div className="flex-1" />
+                  )}
+                  <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
                     <span className="inline-flex items-center gap-1">
                       <Calendar className="size-3" />
                       {formatBlogDate(post.published_at || post.scheduled_at || post.created_at)}
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <Clock className="size-3" />
-                      {estimateReadMinutes(post.content)} min read
+                      {estimateReadMinutes(post.content)} min
                     </span>
                   </div>
-                  <h2 className="mt-3 font-serif text-xl font-bold text-slate-900 group-hover:text-[#2563eb] sm:text-2xl">
-                    {post.title}
-                  </h2>
-                  {post.excerpt ? (
-                    <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-slate-600 sm:text-base">
-                      {post.excerpt}
-                    </p>
-                  ) : null}
-                  <p className="mt-3 text-xs font-medium text-slate-400">{post.author_name || "Apna Intern"}</p>
+                  <p className="mt-2 text-xs font-medium text-slate-400">{post.author_name || "Apna Intern"}</p>
                 </div>
               </Link>
             </li>

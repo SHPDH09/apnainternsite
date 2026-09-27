@@ -10,6 +10,7 @@ import {
   siteBlogFallbackAvailable,
   siteBlogTableAvailable,
   resetSiteBlogStorageCache,
+  setSiteBlogTableAvailableKnown,
   updateFallbackBlogPost,
 } from "@/lib/siteBlogFallbackStorage";
 
@@ -280,64 +281,91 @@ async function ensureUniqueSlug(
   return `${slug}-${Date.now()}`;
 }
 
-export async function fetchPublicBlogPosts(
-  client: SupabaseClient,
+function applyPublicBlogListOpts(
+  rows: SiteBlogPost[],
   opts?: { featuredOnly?: boolean; limit?: number; postType?: BlogPostType }
-): Promise<SiteBlogPost[]> {
-  try {
-    await ensureSiteBlogStorage(client);
-  } catch {
-    resetSiteBlogStorageCache();
-  }
+): SiteBlogPost[] {
+  let out = rows;
+  if (opts?.featuredOnly) out = out.filter((p) => p.is_featured);
+  if (opts?.postType) out = out.filter((p) => p.post_type === opts.postType);
+  if (opts?.limit && opts.limit > 0) out = out.slice(0, opts.limit);
+  return out;
+}
 
-  let fallbackRows: SiteBlogPost[] = [];
+async function loadPublicBlogFallbackRows(client: SupabaseClient): Promise<SiteBlogPost[]> {
   try {
-    fallbackRows = sortBlogPosts((await fetchFallbackPublicBlogPosts(client)).map(mapCoverUrl)).filter(
+    return sortBlogPosts((await fetchFallbackPublicBlogPosts(client)).map(mapCoverUrl)).filter(
       isBlogPostPublic
     );
   } catch {
-    fallbackRows = [];
+    return [];
   }
+}
 
-  let tableReady = false;
-  try {
-    tableReady = await siteBlogTableAvailable(client);
-  } catch {
-    tableReady = false;
-  }
-
-  if (!tableReady) {
-    let rows = fallbackRows;
-    if (opts?.featuredOnly) rows = rows.filter((p) => p.is_featured);
-    if (opts?.postType) rows = rows.filter((p) => p.post_type === opts.postType);
-    if (opts?.limit && opts.limit > 0) rows = rows.slice(0, opts.limit);
-    return rows;
-  }
-
+/** Read published posts from RDS without admin bootstrap or stale "table missing" cache. */
+async function queryPublicBlogPostsFromRds(
+  client: SupabaseClient,
+  opts?: { featuredOnly?: boolean; postType?: BlogPostType }
+): Promise<{ rows: SiteBlogPost[] } | { missingTable: true } | null> {
   let query = client.from("site_blog_posts").select(BLOG_SELECT).eq("is_active", true);
   if (opts?.featuredOnly) query = query.eq("is_featured", true);
   if (opts?.postType) query = query.eq("post_type", opts.postType);
 
-  try {
-    const { data, error } = await withBlogStorageRetry(client, () => query);
-    if (error) throw error;
-    let rows = mergeBlogPostsById(fallbackRows, sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl))).filter(
-      isBlogPostPublic
-    );
-    if (opts?.featuredOnly) rows = rows.filter((p) => p.is_featured);
-    if (opts?.postType) rows = rows.filter((p) => p.post_type === opts.postType);
-    if (opts?.limit && opts.limit > 0) rows = rows.slice(0, opts.limit);
-    return rows;
-  } catch (err) {
-    if (isSiteBlogTableMissing(err)) {
-      resetSiteBlogStorageCache();
+  const { data, error } = await query;
+  if (error) {
+    if (isSiteBlogTableMissing(error)) {
+      setSiteBlogTableAvailableKnown(false);
+      return { missingTable: true };
     }
-    let rows = fallbackRows;
-    if (opts?.featuredOnly) rows = rows.filter((p) => p.is_featured);
-    if (opts?.postType) rows = rows.filter((p) => p.post_type === opts.postType);
-    if (opts?.limit && opts.limit > 0) rows = rows.slice(0, opts.limit);
-    return rows;
+    return null;
   }
+  setSiteBlogTableAvailableKnown(true);
+  const rows = sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl)).filter(isBlogPostPublic);
+  return { rows };
+}
+
+export async function fetchPublicBlogPosts(
+  client: SupabaseClient,
+  opts?: { featuredOnly?: boolean; limit?: number; postType?: BlogPostType }
+): Promise<SiteBlogPost[]> {
+  resetSiteBlogStorageCache();
+
+  const fallbackRows = await loadPublicBlogFallbackRows(client);
+
+  const rds = await queryPublicBlogPostsFromRds(client, opts);
+  if (rds && "rows" in rds) {
+    return applyPublicBlogListOpts(
+      mergeBlogPostsById(fallbackRows, rds.rows),
+      opts
+    );
+  }
+
+  if (rds && "missingTable" in rds) {
+    return applyPublicBlogListOpts(fallbackRows, opts);
+  }
+
+  // Transient REST error — merge fallback with a fresh RDS attempt (no table probe cache).
+  resetSiteBlogStorageCache();
+  const retry = await queryPublicBlogPostsFromRds(client, opts);
+  if (retry && "rows" in retry) {
+    return applyPublicBlogListOpts(mergeBlogPostsById(fallbackRows, retry.rows), opts);
+  }
+
+  return applyPublicBlogListOpts(fallbackRows, opts);
+}
+
+function findPublicBlogPostInFallback(
+  client: SupabaseClient,
+  normalizedSlug: string
+): Promise<SiteBlogPost | null> {
+  return fetchFallbackPublicBlogPosts(client)
+    .then((rows) =>
+      rows
+        .map(mapCoverUrl)
+        .find((p) => p.slug.toLowerCase() === normalizedSlug) ?? null
+    )
+    .then((post) => (post && isBlogPostPublic(post) ? post : null))
+    .catch(() => null);
 }
 
 export async function fetchPublicBlogPostBySlug(
@@ -347,55 +375,43 @@ export async function fetchPublicBlogPostBySlug(
   const normalized = slug.trim().toLowerCase();
   if (!normalized) return null;
 
-  try {
-    await ensureSiteBlogStorage(client);
-  } catch {
+  resetSiteBlogStorageCache();
+
+  const { data, error } = await client
+    .from("site_blog_posts")
+    .select(BLOG_SELECT)
+    .eq("is_active", true)
+    .eq("slug", normalized)
+    .maybeSingle();
+
+  if (!error && data) {
+    setSiteBlogTableAvailableKnown(true);
+    const post = mapCoverUrl(data as SiteBlogPost);
+    if (isBlogPostPublic(post)) return post;
+  } else if (error && isSiteBlogTableMissing(error)) {
+    setSiteBlogTableAvailableKnown(false);
+  }
+
+  const fromFallback = await findPublicBlogPostInFallback(client, normalized);
+  if (fromFallback) return fromFallback;
+
+  if (!error && !data) return null;
+
+  if (error && !isSiteBlogTableMissing(error)) {
     resetSiteBlogStorageCache();
-  }
-
-  let tableReady = false;
-  try {
-    tableReady = await siteBlogTableAvailable(client);
-  } catch {
-    tableReady = false;
-  }
-
-  if (!tableReady) {
-    const post = (await fetchFallbackPublicBlogPosts(client))
-      .map(mapCoverUrl)
-      .find((p) => p.slug.toLowerCase() === normalized);
-    return post && isBlogPostPublic(post) ? post : null;
-  }
-
-  const { data, error } = await withBlogStorageRetry(client, () =>
-    client
+    const { data: retryData, error: retryErr } = await client
       .from("site_blog_posts")
       .select(BLOG_SELECT)
       .eq("is_active", true)
       .eq("slug", normalized)
-      .maybeSingle()
-  );
-
-  if (error) {
-    if (isSiteBlogTableMissing(error)) {
-      const post = (await fetchFallbackPublicBlogPosts(client))
-        .map(mapCoverUrl)
-        .find((p) => p.slug.toLowerCase() === normalized);
-      return post && isBlogPostPublic(post) ? post : null;
+      .maybeSingle();
+    if (!retryErr && retryData) {
+      const post = mapCoverUrl(retryData as SiteBlogPost);
+      if (isBlogPostPublic(post)) return post;
     }
-    const post = (await fetchFallbackPublicBlogPosts(client))
-      .map(mapCoverUrl)
-      .find((p) => p.slug.toLowerCase() === normalized);
-    return post && isBlogPostPublic(post) ? post : null;
   }
-  if (!data) {
-    const post = (await fetchFallbackPublicBlogPosts(client))
-      .map(mapCoverUrl)
-      .find((p) => p.slug.toLowerCase() === normalized);
-    return post && isBlogPostPublic(post) ? post : null;
-  }
-  const post = mapCoverUrl(data as SiteBlogPost);
-  return isBlogPostPublic(post) ? post : null;
+
+  return null;
 }
 
 async function locateBlogPost(
