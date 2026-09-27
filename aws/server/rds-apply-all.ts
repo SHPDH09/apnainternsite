@@ -10,6 +10,7 @@ const extraFiles = [
   "supabase/migrations/20260709100000_engineering_university_configs.sql",
   "supabase/hotfix_internship_mode_filtering.sql",
   "supabase/migrations/20260605120000_notification_management.sql",
+  "supabase/migration-admins-premium.sql",
 ] as const;
 
 export type RdsApplyAllResult = {
