@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Razorpay from 'razorpay';
 import { assertStudentRegistrationAvailableServer } from '../lib/registrationAvailability.js';
 import { getServerDb } from '../lib/getServerDb.js';
+import { buildRazorpayOrderCreateBody, RAZORPAY_MERCHANT_DISPLAY_NAME } from '../lib/razorpayBrand.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const reqId = `co_${Date.now()}`;
@@ -84,12 +85,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const amountPaise = Math.round(parsedAmount);
     const receipt = `rcpt_${Date.now()}`;
-    const order = await razorpay.orders.create({
-      amount: amountPaise,
-      currency: 'INR',
-      receipt,
-      payment: { capture: 'automatic' },
-    });
+    const order = await razorpay.orders.create(
+      buildRazorpayOrderCreateBody(amountPaise, receipt, {
+        email: regEmail || undefined,
+        purpose: purpose || "registration",
+      }) as { amount: number; currency: string; receipt: string; payment_capture: number; notes: Record<string, string> }
+    );
 
     const { error: insertError } = await db.from('payment_orders').insert({
       order_id: order.id,
@@ -110,6 +111,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       amount: order.amount,
       currency: order.currency,
       key: razorpayKeyId,
+      merchantName: RAZORPAY_MERCHANT_DISPLAY_NAME,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

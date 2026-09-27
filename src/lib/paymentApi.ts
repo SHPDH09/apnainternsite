@@ -4,7 +4,7 @@
 
 import { getSiteApiOrigin } from "@/lib/siteApi";
 
-function apiPaymentUrl(path: "create-order" | "verify" | "webhook"): string {
+function apiPaymentUrl(path: "create-order" | "verify" | "webhook" | "ensure-captured"): string {
   const origin = getSiteApiOrigin();
   if (origin) return `${origin}/api/payment/${path}`;
   if (typeof window !== "undefined") {
@@ -68,6 +68,14 @@ export async function paymentVerify(body: {
   razorpay_signature: string;
 }): Promise<{ ok: boolean; status: number; data: PaymentJson }> {
   return postPaymentJson("verify", body);
+}
+
+/** Capture legacy (non-order) payments that stayed in authorized state. */
+export async function paymentEnsureCaptured(body: {
+  payment_id: string;
+  amount_paise: number;
+}): Promise<{ ok: boolean; status: number; data: PaymentJson }> {
+  return postPaymentJson("ensure-captured", body, { timeoutMs: 12_000 });
 }
 
 /** Razorpay dashboard webhook URL (point at /api/payment/webhook on your API host). */

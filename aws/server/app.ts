@@ -9,6 +9,7 @@ import forgotPassword from "../../api/auth/forgot-password";
 import debugEnv from "../../api/debug-env";
 import geminiGenerate from "../../api/gemini-generate";
 import createOrder from "../../api/payment/create-order";
+import ensurePaymentCaptured from "../../api/payment/ensure-captured";
 import paymentStatus from "../../api/payment/status";
 import paymentVerify from "../../api/payment/verify";
 import paymentWebhook from "../../api/payment/webhook";
@@ -212,6 +213,7 @@ async function buildApp(): Promise<Express> {
     { method: "all", path: "/api/admin-tasks", handler: adminTasks },
     { method: "post", path: "/api/razorpay-recovery", handler: razorpayRecovery },
     { method: "post", path: "/api/payment/create-order", handler: createOrder },
+    { method: "post", path: "/api/payment/ensure-captured", handler: ensurePaymentCaptured },
     { method: "post", path: "/api/payment/verify", handler: paymentVerify },
     { method: "post", path: "/api/payment/webhook", handler: paymentWebhook },
     { method: "get", path: "/api/payment/status", handler: paymentStatus },

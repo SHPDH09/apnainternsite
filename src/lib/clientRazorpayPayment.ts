@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import { getRazorpayConstructor, loadRazorpayCheckout } from "@/lib/razorpayCheckout";
+import { razorpayCheckoutBaseOptions } from "@/lib/razorpayBrand";
 
 export type PublicPaymentSettings = {
   razorpay_key_id?: string | null;
@@ -212,12 +213,12 @@ export async function runClientRazorpayCheckout(opts: {
     };
 
     const checkoutImage = razorpayCheckoutImageUrl();
+    const brand = razorpayCheckoutBaseOptions(opts.description || "Student Registration Fee");
     rzp = new RazorpayCtor({
       key,
       amount: amountPaise,
       currency: opts.paymentSettings.currency || "INR",
-      name: "Apna Intern",
-      description: opts.description || "Student Registration Fee",
+      ...brand,
       ...(checkoutImage ? { image: checkoutImage } : {}),
       prefill: opts.prefill,
       handler: (response: { razorpay_payment_id?: string }) => {
@@ -245,7 +246,7 @@ export async function runClientRazorpayCheckout(opts: {
         escape: true,
         backdropclose: true,
       },
-      theme: { color: "#4F46E5" },
+      theme: brand.theme,
     });
 
     rzp.on("payment.failed", () => safeResolve({ success: false }));

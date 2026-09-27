@@ -8,7 +8,8 @@ import {
   openRazorpayModal,
 } from "@/lib/clientRazorpayPayment";
 import { getRazorpayConstructor, loadRazorpayCheckout } from "@/lib/razorpayCheckout";
-import { paymentCreateOrder, paymentVerify } from "@/lib/paymentApi";
+import { paymentCreateOrder, paymentEnsureCaptured, paymentVerify } from "@/lib/paymentApi";
+import { razorpayCheckoutBaseOptions } from "@/lib/razorpayBrand";
 
 export type RegistrationPaymentResult =
   | { success: true; mode: "verified"; payment_id: string; amount: number; userId?: string }
@@ -165,7 +166,7 @@ function openRazorpayCheckout(
         escape: true,
         backdropclose: true,
       },
-      theme: { color: "#4F46E5" },
+      theme: razorpayCheckoutBaseOptions().theme,
     });
 
     rzp.on("payment.failed", () => finish({ success: false }));
@@ -225,17 +226,13 @@ export async function runRegistrationRazorpayCheckout(opts: {
   const purpose = String(opts.studentData?.purpose || "").trim().toLowerCase();
   // Prefer legacy (instant) checkout for course add-ons — order API used to 400 on
   // already-registered emails and then a second open() broke Razorpay.
-  const tryOrderApi =
-    ORDER_API_ENABLED &&
-    opts.studentData &&
-    purpose !== "course_purchase" &&
-    purpose !== "internship_upgrade";
+  const tryOrderApi = ORDER_API_ENABLED && Boolean(opts.studentData);
 
   const scriptReady = loadRazorpayCheckout();
 
   if (tryOrderApi) {
     const [orderRes] = await Promise.all([
-      tryCreateOrderWithTimeout({ studentData: opts.studentData, amount: amountPaise }, 1500),
+      tryCreateOrderWithTimeout({ studentData: opts.studentData!, amount: amountPaise }, 3500),
       scriptReady,
     ]);
 
@@ -247,6 +244,7 @@ export async function runRegistrationRazorpayCheckout(opts: {
 
       if (orderId) {
         const checkoutImage = razorpayCheckoutImageUrl();
+        const brand = razorpayCheckoutBaseOptions(description);
         // Order checkout was opened — never open a second (legacy) checkout in the same click.
         // Double open() triggers Razorpay's "browser not supported" alert.
         const checkoutResult = await openRazorpayCheckout(
@@ -255,8 +253,7 @@ export async function runRegistrationRazorpayCheckout(opts: {
             order_id: orderId,
             amount: orderAmount,
             currency,
-            name: "Apna Intern",
-            description,
+            ...brand,
             ...(checkoutImage ? { image: checkoutImage } : {}),
             prefill: opts.prefill,
           },
@@ -279,6 +276,10 @@ export async function runRegistrationRazorpayCheckout(opts: {
               const raw = String(verifyRes.data?.message || "Payment verification failed");
               if (paymentId && status !== 400) {
                 console.warn("[payment] verify API enrollment failed; using client completion:", raw);
+                void paymentEnsureCaptured({
+                  payment_id: paymentId,
+                  amount_paise: orderAmount,
+                }).catch(() => undefined);
                 return {
                   success: true as const,
                   mode: "legacy" as const,
@@ -288,6 +289,11 @@ export async function runRegistrationRazorpayCheckout(opts: {
               }
               throw new Error(raw);
             }
+
+            void paymentEnsureCaptured({
+              payment_id: paymentId,
+              amount_paise: orderAmount,
+            }).catch(() => undefined);
 
             return {
               success: true as const,
@@ -318,5 +324,13 @@ export async function runRegistrationRazorpayCheckout(opts: {
   });
 
   if (!legacy.success) return legacy;
+
+  void paymentEnsureCaptured({
+    payment_id: legacy.payment_id,
+    amount_paise: amountPaise,
+  }).catch((err) => {
+    console.warn("[payment] ensure-captured after legacy checkout:", err);
+  });
+
   return { ...legacy, mode: "legacy" };
 }

@@ -37,6 +37,10 @@ export async function razorpayCreateOrder(
       currency: 'INR',
       receipt,
       payment_capture: 1,
+      notes: {
+        brand: 'Apna Intern',
+        merchant: 'ApnaIntern',
+      },
     }),
   });
 }
