@@ -1,4 +1,5 @@
 -- Blog post view counts + reader lead capture (name, email, phone, college).
+-- Applied via GitHub Actions [rds-apply] on production deploy (2026-09-27).
 
 ALTER TABLE public.site_blog_posts
   ADD COLUMN IF NOT EXISTS view_count bigint NOT NULL DEFAULT 0;
