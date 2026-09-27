@@ -32,6 +32,12 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
   get_registration_universities: { args: [], auth: "public" },
   get_registration_colleges: { args: ["p_university_id"], auth: "public" },
   get_public_payment_config: { args: [], auth: "public" },
+  public_increment_blog_post_view: { args: ["p_post_id"], auth: "public" },
+  public_submit_site_blog_lead: {
+    args: ["p_post_id", "p_full_name", "p_email", "p_phone", "p_college_name"],
+    auth: "public",
+  },
+  public_lookup_blog_lead_autofill: { args: ["p_phone"], auth: "public" },
   verify_certificate_public: {
     args: ["p_query", "p_student_name", "p_roll_number"],
     auth: "public",

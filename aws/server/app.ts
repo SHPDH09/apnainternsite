@@ -26,6 +26,7 @@ import ensurePartnerApplications from "../../api/ensure-partner-applications";
 import ensureStaffAttendanceOffices from "../../api/ensure-staff-attendance-offices";
 import staffOfficeRpc from "../../api/staff-office-rpc";
 import partnerApplicationSubmit from "../../api/partner-application-submit";
+import blogInteraction from "../../api/blog-interaction";
 import adminPartnerRegister from "../../api/admin-partner-register";
 import rdsApplyAll from "./rds-apply-all-route.js";
 import { loadRootEnv } from "./load-env";
@@ -249,6 +250,7 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/ensure-staff-attendance-offices", handler: ensureStaffAttendanceOffices },
     { method: "post", path: "/api/staff-office-rpc", handler: staffOfficeRpc },
     { method: "post", path: "/api/partner-application-submit", handler: partnerApplicationSubmit },
+    { method: "post", path: "/api/blog-interaction", handler: blogInteraction },
     { method: "post", path: "/api/admin-partner-register", handler: adminPartnerRegister },
     { method: "post", path: "/api/rds-apply-all", handler: rdsApplyAll },
     { method: "all", path: "/api/admin-tasks", handler: adminTasks },

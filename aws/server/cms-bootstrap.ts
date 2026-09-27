@@ -191,8 +191,10 @@ async function bootstrapSiteBlogPosts(): Promise<void> {
       sort_order integer NOT NULL DEFAULT 0,
       created_by uuid,
       created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now()
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      view_count bigint NOT NULL DEFAULT 0
     );
+    ALTER TABLE public.site_blog_posts ADD COLUMN IF NOT EXISTS view_count bigint NOT NULL DEFAULT 0;
     CREATE INDEX IF NOT EXISTS idx_site_blog_posts_public
       ON public.site_blog_posts (is_active, status, is_featured DESC, sort_order ASC, published_at DESC NULLS LAST, scheduled_at DESC NULLS LAST);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_site_blog_posts_slug ON public.site_blog_posts (lower(slug));

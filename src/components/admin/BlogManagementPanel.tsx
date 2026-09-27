@@ -62,6 +62,8 @@ import {
   type SiteBlogPost,
 } from "@/lib/siteBlogApi";
 import { cn } from "@/lib/utils";
+import { BlogLeadsPanel } from "@/components/admin/BlogLeadsPanel";
+import { formatBlogViewCount } from "@/lib/siteBlogApi";
 
 type Props = {
   client: SupabaseClient;
@@ -154,6 +156,7 @@ function statusBadgeClass(status: BlogPostStatus): string {
 }
 
 export function BlogManagementPanel({ client, currentUserId }: Props) {
+  const [studioTab, setStudioTab] = useState<"posts" | "leads">("posts");
   const [rows, setRows] = useState<SiteBlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -362,6 +365,15 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
 
   return (
     <div className="space-y-6">
+      <Tabs value={studioTab} onValueChange={(v) => setStudioTab(v as "posts" | "leads")} className="w-full">
+        <TabsList className="mb-4 grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="posts">Posts</TabsTrigger>
+          <TabsTrigger value="leads">Blog leads</TabsTrigger>
+        </TabsList>
+        <TabsContent value="leads" className="mt-0">
+          <BlogLeadsPanel client={client} />
+        </TabsContent>
+        <TabsContent value="posts" className="mt-0 space-y-6">
       <div className={adminHeroClass}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -456,6 +468,10 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
                           Live
                         </Badge>
                       ) : null}
+                      <Badge variant="outline" className="text-slate-600">
+                        <Eye className="mr-1 size-3" />
+                        {formatBlogViewCount(row.view_count)} views
+                      </Badge>
                     </div>
                     <p className="mt-2 truncate font-semibold text-slate-900">{row.title}</p>
                     <p className="text-xs text-slate-500">
@@ -758,6 +774,8 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
