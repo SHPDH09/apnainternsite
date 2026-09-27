@@ -73,4 +73,6 @@ jobs:
             echo "::warning::VERCEL_TOKEN / VERCEL_PROJECT_ID not set — rely on Vercel GitHub auto-deploy"
             exit 0
           fi
+          npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          npx vercel build --prod --token "$VERCEL_TOKEN"
           npx vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN" --yes
