@@ -1,14 +1,40 @@
 /**
  * POST /api/blog-interaction — public blog views + reader lead capture (RDS).
- * Whitelisted on Vercel (not proxied to Lambda).
+ * Whitelisted on Vercel (not proxied to Lambda). Self-contained — no aws/server imports.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { query } from "../aws/server/db.js";
+import type { QueryResultRow } from "pg";
 import { BLOG_ENGAGEMENT_BOOTSTRAP_SQL } from "./lib/blogEngagementBootstrap.js";
 
+let pool: import("pg").Pool | null = null;
 let engagementReady: Promise<void> | null = null;
+
+function pgPoolConfig(databaseUrl: string) {
+  return {
+    connectionString: databaseUrl
+      .replace(/([?&])sslmode=[^&]*/gi, "$1")
+      .replace(/[?&]$/, ""),
+    ssl: /rds\.amazonaws\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+    max: 1,
+    connectionTimeoutMillis: 20000,
+  };
+}
+
+async function getPool(): Promise<import("pg").Pool> {
+  if (pool) return pool;
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL not configured");
+  }
+  const pg = await import("pg");
+  pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
+  return pool;
+}
+
+async function query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) {
+  const p = await getPool();
+  return p.query<T>(text, params);
+}
 
 function normalizePhone(raw: unknown): string {
   const digits = String(raw ?? "").replace(/\D/g, "");
@@ -19,17 +45,7 @@ function normalizePhone(raw: unknown): string {
 async function ensureEngagementSchema(): Promise<void> {
   if (!engagementReady) {
     engagementReady = (async () => {
-      if (!process.env.DATABASE_URL?.trim()) {
-        throw new Error("DATABASE_URL not configured");
-      }
       await query(BLOG_ENGAGEMENT_BOOTSTRAP_SQL);
-      try {
-        const sqlPath = join(process.cwd(), "aws/scripts/91-rds-site-blog-views-leads.sql");
-        const full = readFileSync(sqlPath, "utf8");
-        await query(full);
-      } catch (err) {
-        console.warn("[blog-interaction] full engagement SQL:", err instanceof Error ? err.message : err);
-      }
     })();
   }
   await engagementReady;
@@ -123,8 +139,7 @@ async function lookupAutofill(phoneRaw: unknown): Promise<{
   const row = lead.rows[0];
   if (row) {
     const p = row.payload && typeof row.payload === "object" ? row.payload : {};
-    const name =
-      String(p.full_name || p.name || p.student_name || "").trim();
+    const name = String(p.full_name || p.name || p.student_name || "").trim();
     const email = String(row.email || p.email || "").trim();
     const college = String(p.college_name || p.college || "").trim();
     return { full_name: name, email, college_name: college };
