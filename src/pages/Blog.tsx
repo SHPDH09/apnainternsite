@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Calendar, Clock, Loader2, Sparkles } from "lucide-react";
+import { Calendar, Clock, Eye, Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { BlogReaderShell } from "@/components/blog/BlogReaderShell";
 import {
   estimateReadMinutes,
   fetchPublicBlogPosts,
   formatBlogDate,
+  formatBlogViewCount,
   type SiteBlogPost,
 } from "@/lib/siteBlogApi";
 
@@ -97,6 +98,10 @@ export default function Blog() {
                     <span className="inline-flex items-center gap-1">
                       <Clock className="size-3" />
                       {estimateReadMinutes(post.content)} min
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Eye className="size-3" />
+                      {formatBlogViewCount(post.view_count)} views
                     </span>
                   </div>
                   <p className="mt-2 text-xs font-medium text-slate-400">{post.author_name || "Apna Intern"}</p>

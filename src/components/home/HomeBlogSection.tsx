@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Calendar } from "lucide-react";
-import { formatBlogDate, type SiteBlogPost } from "@/lib/siteBlogApi";
+import { ArrowRight, Calendar, Eye } from "lucide-react";
+import { formatBlogDate, formatBlogViewCount, type SiteBlogPost } from "@/lib/siteBlogApi";
 
 type Props = {
   posts: SiteBlogPost[];
@@ -43,9 +43,15 @@ export function HomeBlogSection({ posts }: Props) {
                 <div className="aspect-[16/10] bg-gradient-to-br from-[#5AA3E6]/20 to-slate-100" />
               )}
               <div className="p-5">
-                <p className="inline-flex items-center gap-1 text-xs text-slate-500">
-                  <Calendar className="size-3" />
-                  {formatBlogDate(post.published_at || post.created_at)}
+                <p className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                  <span className="inline-flex items-center gap-1">
+                    <Calendar className="size-3" />
+                    {formatBlogDate(post.published_at || post.created_at)}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Eye className="size-3" />
+                    {formatBlogViewCount(post.view_count)} views
+                  </span>
                 </p>
                 <h3 className="mt-2 line-clamp-2 font-serif text-lg font-bold text-slate-900 group-hover:text-[#2563eb]">
                   {post.title}

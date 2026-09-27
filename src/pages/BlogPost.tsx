@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Calendar, Clock, Loader2, Tag } from "lucide-react";
+import { Calendar, Clock, Eye, Loader2, Tag } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { BlogLeadCaptureDialog } from "@/components/blog/BlogLeadCaptureDialog";
 import { BlogMarkdownContent } from "@/components/blog/BlogMarkdownContent";
 import { BlogReaderShell } from "@/components/blog/BlogReaderShell";
+import {
+  blogLeadAlreadySubmitted,
+  blogViewRecordedThisSession,
+  fetchBlogPostViewCount,
+  incrementBlogPostView,
+  markBlogViewRecorded,
+} from "@/lib/siteBlogEngagement";
 import {
   estimateReadMinutes,
   fetchPublicBlogPostBySlug,
   formatBlogDate,
+  formatBlogViewCount,
   type SiteBlogPost,
 } from "@/lib/siteBlogApi";
 
@@ -16,6 +25,9 @@ export default function BlogPost() {
   const [post, setPost] = useState<SiteBlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [viewCount, setViewCount] = useState(0);
+  const [leadOpen, setLeadOpen] = useState(false);
+  const [leadUnlocked, setLeadUnlocked] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -27,6 +39,10 @@ export default function BlogPost() {
         if (!row) setNotFound(true);
         else {
           setPost(row);
+          setViewCount(Number(row.view_count ?? 0));
+          const submitted = blogLeadAlreadySubmitted(row.id);
+          setLeadUnlocked(submitted);
+          setLeadOpen(!submitted);
           document.title = `${row.meta_title || row.title} · Apna Intern`;
         }
       } finally {
@@ -37,6 +53,29 @@ export default function BlogPost() {
       cancelled = true;
     };
   }, [slug]);
+
+  useEffect(() => {
+    if (!post?.id) return;
+    let cancelled = false;
+    void (async () => {
+      if (!blogViewRecordedThisSession(post.id)) {
+        const next = await incrementBlogPostView(post.id);
+        if (!cancelled && next > 0) {
+          setViewCount(next);
+          markBlogViewRecorded(post.id);
+        }
+      }
+    })();
+    const poll = setInterval(() => {
+      void fetchBlogPostViewCount(post.id).then((n) => {
+        if (!cancelled && n >= 0) setViewCount(n);
+      });
+    }, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, [post?.id]);
 
   if (loading) {
     return (
@@ -63,10 +102,19 @@ export default function BlogPost() {
   }
 
   const tags = Array.isArray(post.tags) ? post.tags : [];
+  const contentLocked = !leadUnlocked;
 
   return (
     <BlogReaderShell>
-      <article className="blog-article">
+      <BlogLeadCaptureDialog
+        open={leadOpen}
+        onOpenChange={setLeadOpen}
+        client={supabase}
+        postId={post.id}
+        postTitle={post.title}
+        onSubmitted={() => setLeadUnlocked(true)}
+      />
+      <article className={contentLocked ? "blog-article pointer-events-none select-none blur-[2px]" : "blog-article"}>
         {post.cover_image_url ? (
           <div className="-mx-4 mb-8 overflow-hidden rounded-2xl sm:-mx-0 sm:mb-10">
             <img
@@ -86,6 +134,10 @@ export default function BlogPost() {
           <span className="inline-flex items-center gap-1">
             <Clock className="size-3.5" />
             {estimateReadMinutes(post.content)} min read
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Eye className="size-3.5" />
+            {formatBlogViewCount(viewCount)} views
           </span>
         </div>
 

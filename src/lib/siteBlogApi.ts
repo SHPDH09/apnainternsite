@@ -167,6 +167,7 @@ export type SiteBlogPost = {
   is_active: boolean;
   is_featured: boolean;
   sort_order: number;
+  view_count?: number;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -190,8 +191,34 @@ export type SiteBlogPostInput = {
   sort_order?: number;
 };
 
-const BLOG_SELECT =
+const BLOG_SELECT_LEGACY =
   "id, title, slug, excerpt, content, cover_image_url, cover_image_path, author_name, post_type, status, published_at, scheduled_at, meta_title, meta_description, tags, is_active, is_featured, sort_order, created_by, created_at, updated_at";
+
+const BLOG_SELECT =
+  `${BLOG_SELECT_LEGACY.slice(0, BLOG_SELECT_LEGACY.indexOf(", created_by"))}, view_count, created_by, created_at, updated_at`;
+
+function isMissingBlogViewCountColumn(error: unknown): boolean {
+  const msg = blogErrorText(error);
+  return /view_count/i.test(msg) && /column|does not exist|42703/i.test(msg);
+}
+
+async function runBlogSelectQuery<T extends SiteBlogPost | SiteBlogPost[] | null>(
+  client: SupabaseClient,
+  build: (columns: string) => PromiseLike<{ data: T; error: unknown | null }>
+): Promise<{ data: T; error: unknown | null }> {
+  let { data, error } = await build(BLOG_SELECT);
+  if (error && isMissingBlogViewCountColumn(error)) {
+    ({ data, error } = await build(BLOG_SELECT_LEGACY));
+    if (!error && data) {
+      if (Array.isArray(data)) {
+        data = (data as SiteBlogPost[]).map((row) => ({ ...row, view_count: row.view_count ?? 0 })) as T;
+      } else if (data && typeof data === "object") {
+        data = { ...(data as SiteBlogPost), view_count: (data as SiteBlogPost).view_count ?? 0 } as T;
+      }
+    }
+  }
+  return { data, error };
+}
 
 function normalizeTags(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map((t) => String(t).trim()).filter(Boolean);
@@ -307,11 +334,13 @@ async function queryPublicBlogPostsFromRds(
   client: SupabaseClient,
   opts?: { featuredOnly?: boolean; postType?: BlogPostType }
 ): Promise<{ rows: SiteBlogPost[] } | { missingTable: true } | null> {
-  let query = client.from("site_blog_posts").select(BLOG_SELECT).eq("is_active", true);
-  if (opts?.featuredOnly) query = query.eq("is_featured", true);
-  if (opts?.postType) query = query.eq("post_type", opts.postType);
-
-  const { data, error } = await query;
+  const filters = opts;
+  const { data, error } = await runBlogSelectQuery(client, (columns) => {
+    let query = client.from("site_blog_posts").select(columns).eq("is_active", true);
+    if (filters?.featuredOnly) query = query.eq("is_featured", true);
+    if (filters?.postType) query = query.eq("post_type", filters.postType);
+    return query;
+  });
   if (error) {
     if (isSiteBlogTableMissing(error)) {
       setSiteBlogTableAvailableKnown(false);
@@ -377,12 +406,9 @@ export async function fetchPublicBlogPostBySlug(
 
   resetSiteBlogStorageCache();
 
-  const { data, error } = await client
-    .from("site_blog_posts")
-    .select(BLOG_SELECT)
-    .eq("is_active", true)
-    .eq("slug", normalized)
-    .maybeSingle();
+  const { data, error } = await runBlogSelectQuery(client, (columns) =>
+    client.from("site_blog_posts").select(columns).eq("is_active", true).eq("slug", normalized).maybeSingle()
+  );
 
   if (!error && data) {
     setSiteBlogTableAvailableKnown(true);
@@ -399,12 +425,14 @@ export async function fetchPublicBlogPostBySlug(
 
   if (error && !isSiteBlogTableMissing(error)) {
     resetSiteBlogStorageCache();
-    const { data: retryData, error: retryErr } = await client
-      .from("site_blog_posts")
-      .select(BLOG_SELECT)
-      .eq("is_active", true)
-      .eq("slug", normalized)
-      .maybeSingle();
+    const { data: retryData, error: retryErr } = await runBlogSelectQuery(client, (columns) =>
+      client
+        .from("site_blog_posts")
+        .select(columns)
+        .eq("is_active", true)
+        .eq("slug", normalized)
+        .maybeSingle()
+    );
     if (!retryErr && retryData) {
       const post = mapCoverUrl(retryData as SiteBlogPost);
       if (isBlogPostPublic(post)) return post;
@@ -743,6 +771,15 @@ export async function deleteBlogPost(client: SupabaseClient, row: SiteBlogPost):
       if (error && !isSiteBlogTableMissing(error)) throw error;
     }
   }
+}
+
+export function formatBlogViewCount(value?: number | null): string {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 10_000) return `${Math.round(n / 1000)}k`;
+  if (n >= 1_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(Math.floor(n));
 }
 
 export function formatBlogDate(value?: string | null): string {

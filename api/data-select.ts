@@ -24,6 +24,7 @@ const ALLOWED_TABLES = new Set([
   "site_settings",
   "site_popups",
   "site_blog_posts",
+  "site_blog_leads",
   "attendance",
   "classes",
   "learning_materials",
