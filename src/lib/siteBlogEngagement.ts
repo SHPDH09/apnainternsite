@@ -28,7 +28,7 @@ async function postBlogViaSendMail(
     body: JSON.stringify({ action: SEND_MAIL_BLOG_ACTION[action], ...body }),
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!res.ok) {
+  if (!res.ok || json.ok === false || json.success === false) {
     throw new Error(String(json.message || json.error || `HTTP ${res.status}`));
   }
   return json;
@@ -43,7 +43,7 @@ async function postBlogViaInteractionApi(
     body: JSON.stringify(body),
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!res.ok) {
+  if (!res.ok || json.ok === false) {
     throw new Error(String(json.message || json.error || `HTTP ${res.status}`));
   }
   return json;

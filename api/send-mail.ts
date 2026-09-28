@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, randomUUID } from 'node:crypto';
+import { blogEngagementQuery } from './blogEngagementVercel.js';
 
 /** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
@@ -594,8 +595,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(503).json({ ok: false, message: 'DATABASE_URL is not configured on this deployment' });
       }
       try {
-        const { blogEngagementQuery } = await import('./lib/blogEngagementDb.js');
-
         const postId = String(body.post_id || '').trim();
 
         if (normalizedAction === 'blog_increment_view') {

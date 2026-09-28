@@ -92,7 +92,8 @@ export function BlogLeadCaptureDialog({
       onSubmitted();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not submit. Please try again.");
+      const msg = err instanceof Error ? err.message : "Could not submit. Please try again.";
+      setError(msg.trim() || "Could not submit. Please try again.");
     } finally {
       setSubmitting(false);
     }
