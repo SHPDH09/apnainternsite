@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,10 @@ import {
   getOrCreateBlogDeviceId,
   loadStudentBlogAutofill,
   lookupBlogLeadAutofillByPhone,
+  mergeBlogLeadAutofill,
   saveBlogDeviceReaderUnlock,
   submitBlogReaderLead,
+  type BlogLeadAutofillProfile,
 } from "@/lib/siteBlogEngagement";
 
 type Props = {
@@ -28,10 +30,25 @@ type Props = {
   client: SupabaseClient;
   postId: string;
   postTitle: string;
-  /** When true, user must submit — no dismiss without filling the form. */
+  /** When true, overlay/Escape cannot dismiss — Submit and Close buttons still work. */
   requireSubmit?: boolean;
   onSubmitted: () => void;
 };
+
+function applyProfile(
+  setters: {
+    setFullName: (v: string) => void;
+    setEmail: (v: string) => void;
+    setPhone: (v: string) => void;
+    setCollegeName: (v: string) => void;
+  },
+  profile: BlogLeadAutofillProfile
+) {
+  if (profile.full_name) setters.setFullName(profile.full_name);
+  if (profile.email) setters.setEmail(profile.email);
+  if (profile.phone) setters.setPhone(profile.phone);
+  if (profile.college_name) setters.setCollegeName(profile.college_name);
+}
 
 export function BlogLeadCaptureDialog({
   open,
@@ -47,45 +64,82 @@ export function BlogLeadCaptureDialog({
   const [phone, setPhone] = useState("");
   const [collegeName, setCollegeName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [autofillReady, setAutofillReady] = useState(false);
   const [error, setError] = useState("");
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const allowDismissRef = useRef(false);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
+  const setters = { setFullName, setEmail, setPhone, setCollegeName };
+
+  const hydrateAutofill = useCallback(async () => {
     setError("");
+    setAutofillReady(false);
+
+    let merged: BlogLeadAutofillProfile = {
+      full_name: "",
+      email: "",
+      college_name: "",
+      phone: "",
+    };
+
     const saved = getBlogDeviceReaderProfile();
     if (saved) {
-      setFullName(saved.full_name || "");
-      setEmail(saved.email || "");
-      setPhone(saved.phone || "");
-      setCollegeName(saved.college_name || "");
+      merged = mergeBlogLeadAutofill(merged, {
+        full_name: saved.full_name,
+        email: saved.email,
+        college_name: saved.college_name,
+        phone: saved.phone,
+      });
+      applyProfile(setters, merged);
+      setAutofillReady(true);
       return;
     }
-    void (async () => {
-      const fromStudent = await loadStudentBlogAutofill(client);
-      if (fromStudent.full_name) setFullName(fromStudent.full_name);
-      if (fromStudent.email) setEmail(fromStudent.email);
-      if (fromStudent.college_name) setCollegeName(fromStudent.college_name);
-    })();
-  }, [open, client, postId]);
+
+    const fromStudent = await loadStudentBlogAutofill(client);
+    merged = mergeBlogLeadAutofill(merged, fromStudent);
+    applyProfile(setters, merged);
+
+    const digits = (merged.phone || "").replace(/\D/g, "").slice(-10);
+    if (digits.length >= 10) {
+      const fromPhone = await lookupBlogLeadAutofillByPhone(digits);
+      merged = mergeBlogLeadAutofill(merged, { ...fromPhone, phone: digits });
+      applyProfile(setters, merged);
+    }
+
+    setAutofillReady(true);
+    requestAnimationFrame(() => {
+      phoneInputRef.current?.focus();
+    });
+  }, [client]);
 
   useEffect(() => {
     if (!open) return;
+    void hydrateAutofill();
+  }, [open, postId, hydrateAutofill]);
+
+  useEffect(() => {
+    if (!open || !autofillReady) return;
     const digits = phone.replace(/\D/g, "");
     if (digits.length < 10) return;
     if (lookupTimer.current) clearTimeout(lookupTimer.current);
     lookupTimer.current = setTimeout(() => {
       void (async () => {
         const profile = await lookupBlogLeadAutofillByPhone(digits);
-        if (profile.full_name && !fullName.trim()) setFullName(profile.full_name);
-        if (profile.email && !email.trim()) setEmail(profile.email);
-        if (profile.college_name && !collegeName.trim()) setCollegeName(profile.college_name);
+        setFullName((prev) => prev.trim() || profile.full_name);
+        setEmail((prev) => prev.trim() || profile.email);
+        setCollegeName((prev) => prev.trim() || profile.college_name);
       })();
-    }, 450);
+    }, 350);
     return () => {
       if (lookupTimer.current) clearTimeout(lookupTimer.current);
     };
-  }, [phone, open, fullName, email, collegeName]);
+  }, [phone, open, autofillReady]);
+
+  const handleClose = () => {
+    allowDismissRef.current = true;
+    onOpenChange(false);
+  };
 
   const handleSubmit = async () => {
     setError("");
@@ -118,6 +172,7 @@ export function BlogLeadCaptureDialog({
         phone,
         collegeName,
       });
+      allowDismissRef.current = true;
       onSubmitted();
       onOpenChange(false);
     } catch (err) {
@@ -132,7 +187,8 @@ export function BlogLeadCaptureDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next && requireSubmit) return;
+        if (!next && requireSubmit && !allowDismissRef.current) return;
+        allowDismissRef.current = false;
         onOpenChange(next);
       }}
     >
@@ -148,26 +204,36 @@ export function BlogLeadCaptureDialog({
         <DialogHeader>
           <DialogTitle className="font-serif text-xl">Continue reading</DialogTitle>
           <DialogDescription className="text-left leading-relaxed">
-            Share your details to unlock <span className="font-medium text-slate-800">{postTitle}</span>.
-            We pre-fill from your phone when we find your profile — just verify and submit.
+            We auto-fill from your saved profile or browser when possible — check the fields and tap Submit.
+            Unlock <span className="font-medium text-slate-800">{postTitle}</span>.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 py-1">
+        <form
+          className="grid gap-3 py-1"
+          autoComplete="on"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit();
+          }}
+        >
           <div className="grid gap-1.5">
             <Label htmlFor="blog-lead-phone">Mobile number</Label>
             <Input
+              ref={phoneInputRef}
               id="blog-lead-phone"
+              name="tel"
               inputMode="tel"
               placeholder="10-digit mobile"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              autoComplete="tel"
+              autoComplete="tel-national"
             />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="blog-lead-name">Full name</Label>
             <Input
               id="blog-lead-name"
+              name="name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               autoComplete="name"
@@ -177,6 +243,7 @@ export function BlogLeadCaptureDialog({
             <Label htmlFor="blog-lead-email">Email</Label>
             <Input
               id="blog-lead-email"
+              name="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -187,23 +254,34 @@ export function BlogLeadCaptureDialog({
             <Label htmlFor="blog-lead-college">College name</Label>
             <Input
               id="blog-lead-college"
+              name="organization"
               value={collegeName}
               onChange={(e) => setCollegeName(e.target.value)}
               autoComplete="organization"
             />
           </div>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        </div>
-        <DialogFooter className="gap-2 sm:gap-0">
-          {!requireSubmit ? (
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-              Later
-            </Button>
+          {!autofillReady ? (
+            <p className="text-xs text-slate-500">Loading your saved details…</p>
           ) : null}
-          <Button type="button" className="bg-[#5AA3E6] hover:bg-[#4a92d5]" onClick={() => void handleSubmit()} disabled={submitting}>
-            {submitting ? <Loader2 className="size-4 animate-spin" /> : "Submit & read"}
-          </Button>
-        </DialogFooter>
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          <DialogFooter className="gap-2 sm:gap-0 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              disabled={submitting}
+            >
+              Close
+            </Button>
+            <Button
+              type="submit"
+              className="bg-[#5AA3E6] hover:bg-[#4a92d5]"
+              disabled={submitting || !autofillReady}
+            >
+              {submitting ? <Loader2 className="size-4 animate-spin" /> : "Submit & read"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

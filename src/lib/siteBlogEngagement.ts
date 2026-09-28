@@ -248,7 +248,22 @@ export type BlogLeadAutofillProfile = {
   full_name: string;
   email: string;
   college_name: string;
+  phone?: string;
 };
+
+/** Merge autofill sources — later keys only fill empty fields. */
+export function mergeBlogLeadAutofill(
+  current: BlogLeadAutofillProfile,
+  patch: Partial<BlogLeadAutofillProfile>
+): BlogLeadAutofillProfile {
+  const phoneDigits = (patch.phone || current.phone || "").replace(/\D/g, "").slice(-10);
+  return {
+    full_name: current.full_name.trim() || String(patch.full_name || "").trim(),
+    email: current.email.trim() || String(patch.email || "").trim(),
+    college_name: current.college_name.trim() || String(patch.college_name || "").trim(),
+    phone: phoneDigits || current.phone || "",
+  };
+}
 
 export async function lookupBlogLeadAutofillByPhone(phone: string): Promise<BlogLeadAutofillProfile> {
   const empty = { full_name: "", email: "", college_name: "" };
@@ -290,10 +305,14 @@ export async function loadStudentBlogAutofill(client: SupabaseClient): Promise<B
       .eq("id", uid)
       .maybeSingle();
     if (error || !data) return empty;
+    const phone = String(data.contact_number || "")
+      .replace(/\D/g, "")
+      .slice(-10);
     return {
       full_name: String(data.full_name || "").trim(),
       email: String(data.email || sessionData.session?.user?.email || "").trim(),
       college_name: String(data.college_name || "").trim(),
+      phone: phone.length >= 10 ? phone : "",
     };
   } catch {
     return empty;
