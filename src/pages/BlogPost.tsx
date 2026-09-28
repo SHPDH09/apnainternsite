@@ -7,7 +7,7 @@ import { BlogLeadCaptureDialog } from "@/components/blog/BlogLeadCaptureDialog";
 import { BlogMarkdownContent } from "@/components/blog/BlogMarkdownContent";
 import { BlogReaderShell } from "@/components/blog/BlogReaderShell";
 import {
-  blogLeadAlreadySubmitted,
+  isBlogReaderUnlockedOnDevice,
   blogViewRecordedThisSession,
   fetchBlogPostViewCount,
   incrementBlogPostView,
@@ -41,9 +41,9 @@ export default function BlogPost() {
         else {
           setPost(row);
           setViewCount(Number(row.view_count ?? 0));
-          const submitted = blogLeadAlreadySubmitted(row.id);
-          setLeadUnlocked(submitted);
-          setLeadOpen(!submitted);
+          const unlocked = isBlogReaderUnlockedOnDevice();
+          setLeadUnlocked(unlocked);
+          setLeadOpen(!unlocked);
           document.title = `${row.meta_title || row.title} · Apna Intern`;
         }
       } finally {
@@ -113,6 +113,7 @@ export default function BlogPost() {
         client={supabase}
         postId={post.id}
         postTitle={post.title}
+        requireSubmit={!leadUnlocked}
         onSubmitted={() => {
           setLeadUnlocked(true);
           setLeadOpen(false);

@@ -36,11 +36,24 @@ async function submitLead(body: Record<string, unknown>): Promise<string> {
   const email = String(body.email || "").trim().toLowerCase();
   const phone = normalizePhone(body.phone);
   const collegeName = String(body.college_name || "").trim() || null;
+  const deviceId = String(body.device_id || "").trim() || null;
+  let deviceInfo: Record<string, unknown> | null = null;
+  const rawDeviceInfo = body.device_info;
+  if (rawDeviceInfo && typeof rawDeviceInfo === "object" && !Array.isArray(rawDeviceInfo)) {
+    deviceInfo = rawDeviceInfo as Record<string, unknown>;
+  } else if (typeof rawDeviceInfo === "string" && rawDeviceInfo.trim()) {
+    try {
+      deviceInfo = JSON.parse(rawDeviceInfo) as Record<string, unknown>;
+    } catch {
+      deviceInfo = null;
+    }
+  }
 
   if (!postId) throw new Error("post_id is required");
   if (!fullName) throw new Error("Name is required");
   if (!email || !email.includes("@")) throw new Error("Valid email is required");
   if (!phone) throw new Error("Valid phone is required");
+  if (!collegeName) throw new Error("College name is required");
 
   const meta = await blogEngagementQuery<{ slug: string; title: string }>(
     `SELECT slug, title FROM public.site_blog_posts WHERE id = $1::uuid LIMIT 1`,
@@ -51,10 +64,21 @@ async function submitLead(body: Record<string, unknown>): Promise<string> {
 
   const { rows } = await blogEngagementQuery<{ id: string }>(
     `INSERT INTO public.site_blog_leads (
-       post_id, post_slug, post_title, full_name, email, phone, college_name
-     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
+       post_id, post_slug, post_title, full_name, email, phone, college_name,
+       device_id, device_info
+     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
      RETURNING id`,
-    [postId, slug, title, fullName, email, phone, collegeName]
+    [
+      postId,
+      slug,
+      title,
+      fullName,
+      email,
+      phone,
+      collegeName,
+      deviceId,
+      deviceInfo ? JSON.stringify(deviceInfo) : null,
+    ]
   );
   const id = rows[0]?.id;
   if (!id) throw new Error("Lead save failed");

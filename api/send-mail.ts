@@ -623,9 +623,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const email = String(body.email || '').trim().toLowerCase();
           const phoneDigits = String(body.phone || '').replace(/\D/g, '').slice(-10);
           const collegeName = String(body.college_name || '').trim() || null;
+          const deviceId = String(body.device_id || '').trim() || null;
+          let deviceInfo: Record<string, unknown> | null = null;
+          const rawDeviceInfo = body.device_info;
+          if (rawDeviceInfo && typeof rawDeviceInfo === 'object' && !Array.isArray(rawDeviceInfo)) {
+            deviceInfo = rawDeviceInfo as Record<string, unknown>;
+          } else if (typeof rawDeviceInfo === 'string' && rawDeviceInfo.trim()) {
+            try {
+              deviceInfo = JSON.parse(rawDeviceInfo) as Record<string, unknown>;
+            } catch {
+              deviceInfo = null;
+            }
+          }
           if (!postId) return res.status(400).json({ ok: false, message: 'post_id required' });
-          if (!fullName || !email.includes('@') || phoneDigits.length < 10) {
-            return res.status(400).json({ ok: false, message: 'Name, email, and phone are required' });
+          if (!fullName || !email.includes('@') || phoneDigits.length < 10 || !collegeName) {
+            return res.status(400).json({
+              ok: false,
+              message: 'Name, email, 10-digit mobile, and college name are required',
+            });
           }
           const meta = await blogEngagementQuery<{ slug: string; title: string }>(
             `SELECT slug, title FROM public.site_blog_posts WHERE id = $1::uuid LIMIT 1`,
@@ -635,10 +650,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const title = meta.rows[0]?.title ?? null;
           const { rows } = await blogEngagementQuery<{ id: string }>(
             `INSERT INTO public.site_blog_leads (
-               post_id, post_slug, post_title, full_name, email, phone, college_name
-             ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
+               post_id, post_slug, post_title, full_name, email, phone, college_name,
+               device_id, device_info
+             ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
              RETURNING id`,
-            [postId, slug, title, fullName, email, phoneDigits, collegeName]
+            [
+              postId,
+              slug,
+              title,
+              fullName,
+              email,
+              phoneDigits,
+              collegeName,
+              deviceId,
+              deviceInfo ? JSON.stringify(deviceInfo) : null,
+            ]
           );
           return res.status(201).json({ ok: true, id: rows[0]?.id });
         }

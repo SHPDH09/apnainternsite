@@ -13,9 +13,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  collectBlogDeviceInfo,
+  getBlogDeviceReaderProfile,
+  getOrCreateBlogDeviceId,
   loadStudentBlogAutofill,
   lookupBlogLeadAutofillByPhone,
-  markBlogLeadSubmitted,
+  saveBlogDeviceReaderUnlock,
   submitBlogReaderLead,
 } from "@/lib/siteBlogEngagement";
 
@@ -25,6 +28,8 @@ type Props = {
   client: SupabaseClient;
   postId: string;
   postTitle: string;
+  /** When true, user must submit — no dismiss without filling the form. */
+  requireSubmit?: boolean;
   onSubmitted: () => void;
 };
 
@@ -34,6 +39,7 @@ export function BlogLeadCaptureDialog({
   client,
   postId,
   postTitle,
+  requireSubmit = true,
   onSubmitted,
 }: Props) {
   const [fullName, setFullName] = useState("");
@@ -47,6 +53,14 @@ export function BlogLeadCaptureDialog({
   useEffect(() => {
     if (!open) return;
     setError("");
+    const saved = getBlogDeviceReaderProfile();
+    if (saved) {
+      setFullName(saved.full_name || "");
+      setEmail(saved.email || "");
+      setPhone(saved.phone || "");
+      setCollegeName(saved.college_name || "");
+      return;
+    }
     void (async () => {
       const fromStudent = await loadStudentBlogAutofill(client);
       if (fromStudent.full_name) setFullName(fromStudent.full_name);
@@ -75,20 +89,35 @@ export function BlogLeadCaptureDialog({
 
   const handleSubmit = async () => {
     setError("");
-    if (!fullName.trim() || !email.trim() || phone.replace(/\D/g, "").length < 10) {
-      setError("Please enter your name, email, and 10-digit mobile number.");
+    if (
+      !fullName.trim() ||
+      !email.trim() ||
+      phone.replace(/\D/g, "").length < 10 ||
+      !collegeName.trim()
+    ) {
+      setError("Please enter your name, email, 10-digit mobile, and college name.");
       return;
     }
     setSubmitting(true);
     try {
+      const deviceId = getOrCreateBlogDeviceId();
+      const deviceInfo = collectBlogDeviceInfo();
       await submitBlogReaderLead({
         postId,
         fullName,
         email,
         phone,
         collegeName,
+        deviceId,
+        deviceInfo,
       });
-      markBlogLeadSubmitted(postId);
+      saveBlogDeviceReaderUnlock({
+        postId,
+        fullName,
+        email,
+        phone,
+        collegeName,
+      });
       onSubmitted();
       onOpenChange(false);
     } catch (err) {
@@ -100,8 +129,22 @@ export function BlogLeadCaptureDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && requireSubmit) return;
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent
+        className="sm:max-w-md"
+        onPointerDownOutside={(e) => {
+          if (requireSubmit) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (requireSubmit) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="font-serif text-xl">Continue reading</DialogTitle>
           <DialogDescription className="text-left leading-relaxed">
@@ -152,9 +195,11 @@ export function BlogLeadCaptureDialog({
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Later
-          </Button>
+          {!requireSubmit ? (
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+              Later
+            </Button>
+          ) : null}
           <Button type="button" className="bg-[#5AA3E6] hover:bg-[#4a92d5]" onClick={() => void handleSubmit()} disabled={submitting}>
             {submitting ? <Loader2 className="size-4 animate-spin" /> : "Submit & read"}
           </Button>

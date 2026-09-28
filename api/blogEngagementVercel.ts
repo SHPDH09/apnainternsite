@@ -28,6 +28,12 @@ CREATE INDEX IF NOT EXISTS idx_site_blog_leads_phone
 
 CREATE INDEX IF NOT EXISTS idx_site_blog_leads_post
   ON public.site_blog_leads (post_id);
+
+ALTER TABLE public.site_blog_leads
+  ADD COLUMN IF NOT EXISTS device_id text;
+
+ALTER TABLE public.site_blog_leads
+  ADD COLUMN IF NOT EXISTS device_info jsonb;
 `;
 
 let pool: import("pg").Pool | null = null;
