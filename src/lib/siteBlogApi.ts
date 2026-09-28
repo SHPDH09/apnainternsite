@@ -199,23 +199,45 @@ const BLOG_SELECT =
 
 function isMissingBlogViewCountColumn(error: unknown): boolean {
   const msg = blogErrorText(error);
-  return /view_count/i.test(msg) && /column|does not exist|42703/i.test(msg);
+  if (/view_count/i.test(msg) && /column|does not exist|42703/i.test(msg)) return true;
+  if (error && typeof error === "object" && (error as { code?: string }).code === "42703") {
+    return /view_count/i.test(msg);
+  }
+  return false;
 }
 
+function attachDefaultViewCount<T extends SiteBlogPost | SiteBlogPost[] | null>(data: T): T {
+  if (!data) return data;
+  if (Array.isArray(data)) {
+    return (data as SiteBlogPost[]).map((row) => ({ ...row, view_count: row.view_count ?? 0 })) as T;
+  }
+  if (typeof data === "object") {
+    return { ...(data as SiteBlogPost), view_count: (data as SiteBlogPost).view_count ?? 0 } as T;
+  }
+  return data;
+}
+
+/** Public RDS reads: legacy columns first (production RDS may lack view_count). */
 async function runBlogSelectQuery<T extends SiteBlogPost | SiteBlogPost[] | null>(
   client: SupabaseClient,
   build: (columns: string) => PromiseLike<{ data: T; error: unknown | null }>
 ): Promise<{ data: T; error: unknown | null }> {
-  let { data, error } = await build(BLOG_SELECT);
+  let { data, error } = await build(BLOG_SELECT_LEGACY);
+  if (!error) {
+    return { data: attachDefaultViewCount(data), error: null };
+  }
+
   if (error && isMissingBlogViewCountColumn(error)) {
     ({ data, error } = await build(BLOG_SELECT_LEGACY));
-    if (!error && data) {
-      if (Array.isArray(data)) {
-        data = (data as SiteBlogPost[]).map((row) => ({ ...row, view_count: row.view_count ?? 0 })) as T;
-      } else if (data && typeof data === "object") {
-        data = { ...(data as SiteBlogPost), view_count: (data as SiteBlogPost).view_count ?? 0 } as T;
-      }
-    }
+    if (!error) return { data: attachDefaultViewCount(data), error: null };
+  }
+
+  ({ data, error } = await build(BLOG_SELECT));
+  if (error && isMissingBlogViewCountColumn(error)) {
+    ({ data, error } = await build(BLOG_SELECT_LEGACY));
+  }
+  if (!error && data) {
+    return { data: attachDefaultViewCount(data), error: null };
   }
   return { data, error };
 }
@@ -253,17 +275,26 @@ function sortBlogPosts(rows: SiteBlogPost[]): SiteBlogPost[] {
   });
 }
 
+function blogInstantMs(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const t = new Date(typeof value === "string" || typeof value === "number" ? value : String(value)).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
 /** Whether a post should appear on the public site right now. */
 export function isBlogPostPublic(post: SiteBlogPost, now = new Date()): boolean {
   if (!post.is_active) return false;
-  if (post.status === "draft") return false;
+  const status = String(post.status || "").toLowerCase();
+  if (status === "draft") return false;
   const ts = now.getTime();
-  if (post.status === "scheduled") {
-    if (!post.scheduled_at) return false;
-    return new Date(post.scheduled_at).getTime() <= ts;
+  if (status === "scheduled") {
+    const at = blogInstantMs(post.scheduled_at);
+    if (at == null) return false;
+    return at <= ts;
   }
-  if (post.status === "published") {
-    if (post.published_at && new Date(post.published_at).getTime() > ts) return false;
+  if (status === "published") {
+    const pub = blogInstantMs(post.published_at);
+    if (pub != null && pub > ts) return false;
     return true;
   }
   return false;

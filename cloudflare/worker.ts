@@ -98,6 +98,10 @@ async function tryHandleVercelSendMailActions(
     "ensure_blog_cms",
     "ensure_project_report_templates",
     "save_project_report_template",
+    "blog_increment_view",
+    "blog_get_view",
+    "blog_submit_lead",
+    "blog_lookup_phone",
   ]);
   if (!vercelSendMailActions.has(action)) return null;
 

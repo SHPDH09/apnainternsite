@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Calendar, Clock, Eye, Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { BlogReaderShell } from "@/components/blog/BlogReaderShell";
+import { fetchBlogPostViewCount } from "@/lib/siteBlogEngagement";
 import {
   estimateReadMinutes,
   fetchPublicBlogPosts,
@@ -20,7 +21,21 @@ export default function Blog() {
     void (async () => {
       try {
         const rows = await fetchPublicBlogPosts(supabase);
-        if (!cancelled) setPosts(rows);
+        if (cancelled) return;
+        setPosts(rows);
+        if (rows.length > 0) {
+          const counts = await Promise.all(
+            rows.map(async (post) => {
+              const view_count = await fetchBlogPostViewCount(post.id);
+              return { id: post.id, view_count };
+            })
+          );
+          if (cancelled) return;
+          const byId = new Map(counts.map((c) => [c.id, c.view_count]));
+          setPosts((prev) =>
+            prev.map((p) => ({ ...p, view_count: byId.get(p.id) ?? p.view_count ?? 0 }))
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

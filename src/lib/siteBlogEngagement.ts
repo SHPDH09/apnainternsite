@@ -11,19 +11,47 @@ type BlogInteractionAction =
   | "submit_lead"
   | "lookup_phone";
 
-async function postBlogInteraction(
+const SEND_MAIL_BLOG_ACTION: Record<BlogInteractionAction, string> = {
+  increment_view: "blog_increment_view",
+  get_view: "blog_get_view",
+  submit_lead: "blog_submit_lead",
+  lookup_phone: "blog_lookup_phone",
+};
+
+async function postBlogViaSendMail(
+  action: BlogInteractionAction,
   body: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(apiUrl("/api/blog-interaction"), {
+  const res = await fetch(apiUrl("/api/send-mail"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ action: SEND_MAIL_BLOG_ACTION[action], ...body }),
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
-    throw new Error(String(json.message || `HTTP ${res.status}`));
+    throw new Error(String(json.message || json.error || `HTTP ${res.status}`));
   }
   return json;
+}
+
+async function postBlogInteraction(
+  body: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const action = String(body.action || "").trim() as BlogInteractionAction;
+  try {
+    return await postBlogViaSendMail(action, body);
+  } catch {
+    const res = await fetch(apiUrl("/api/blog-interaction"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      throw new Error(String(json.message || `HTTP ${res.status}`));
+    }
+    return json;
+  }
 }
 
 async function rpcFallback(
@@ -74,13 +102,7 @@ export async function fetchBlogPostViewCount(postId: string): Promise<number> {
     const json = await postBlogInteraction({ action: "get_view", post_id: postId });
     return Number(json.view_count ?? 0);
   } catch {
-    const { data, error } = await supabase
-      .from("site_blog_posts")
-      .select("view_count")
-      .eq("id", postId)
-      .maybeSingle();
-    if (error) return 0;
-    return Number((data as { view_count?: number } | null)?.view_count ?? 0);
+    return 0;
   }
 }
 
