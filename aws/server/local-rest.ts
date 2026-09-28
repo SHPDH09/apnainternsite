@@ -49,10 +49,29 @@ async function dbQuery(req: Request, text: string, params?: unknown[]) {
   return queryAsUser(text, params, jwtFromRequest(req));
 }
 
+function isMissingViewCountColumn(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  const code = (err as { code?: string } | null)?.code;
+  return code === "42703" && /view_count/i.test(message);
+}
+
+function stripViewCountFromSelect(raw: unknown): unknown {
+  if (raw == null || raw === "") return raw;
+  const parts = String(raw)
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p && !/^view_count$/i.test(p));
+  return parts.length ? parts.join(",") : raw;
+}
+
 async function withCmsRetry<T>(table: string, run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (err) {
+    if (table === "site_blog_posts" && isMissingViewCountColumn(err)) {
+      await ensureCmsTable("site_blog_posts");
+      return await run();
+    }
     if (isMissingRelationError(err, table)) {
       if (isCmsTable(table)) {
         await ensureCmsTable(table);
@@ -424,7 +443,20 @@ export async function restGet(req: Request, res: Response) {
     sql += order;
     sql += ` LIMIT ${limit} OFFSET ${offset}`;
 
-    const { rows } = await withCmsRetry(table, () => dbQuery(req, sql, params));
+    let rows: Record<string, unknown>[];
+    try {
+      ({ rows } = await withCmsRetry(table, () => dbQuery(req, sql, params)));
+    } catch (err) {
+      if (table !== "site_blog_posts" || !isMissingViewCountColumn(err)) throw err;
+      const strippedSelect = stripViewCountFromSelect(req.query.select);
+      const legacyCols = parseSelect(strippedSelect);
+      let legacySql = `SELECT ${legacyCols} FROM public."${table}"`;
+      if (where) legacySql += ` WHERE ${where}`;
+      legacySql += order;
+      legacySql += ` LIMIT ${limit} OFFSET ${offset}`;
+      ({ rows } = await dbQuery(req, legacySql, params));
+      rows = rows.map((row) => ({ ...row, view_count: 0 }));
+    }
 
     // PostgREST: Accept headers / Prefer count — skip for now
     // single object when Accept prefers or limit=1 with maybeSingle client — client handles arrays
