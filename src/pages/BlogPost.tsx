@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Calendar, Clock, Eye, Loader2, Tag } from "lucide-react";
+import { Calendar, Clock, Eye, Loader2, LockOpen, Tag } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { BlogLeadCaptureDialog } from "@/components/blog/BlogLeadCaptureDialog";
 import { BlogMarkdownContent } from "@/components/blog/BlogMarkdownContent";
@@ -112,9 +113,12 @@ export default function BlogPost() {
         client={supabase}
         postId={post.id}
         postTitle={post.title}
-        onSubmitted={() => setLeadUnlocked(true)}
+        onSubmitted={() => {
+          setLeadUnlocked(true);
+          setLeadOpen(false);
+        }}
       />
-      <article className={contentLocked ? "blog-article pointer-events-none select-none blur-[2px]" : "blog-article"}>
+      <article className="blog-article">
         {post.cover_image_url ? (
           <div className="-mx-4 mb-8 overflow-hidden rounded-2xl sm:-mx-0 sm:mb-10">
             <img
@@ -167,7 +171,36 @@ export default function BlogPost() {
 
         <div className="my-10 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
 
-        <BlogMarkdownContent content={post.content} />
+        {contentLocked ? (
+          <div className="relative">
+            <div
+              className="pointer-events-none max-h-[min(52vh,28rem)] overflow-hidden select-none opacity-90"
+              aria-hidden
+            >
+              <BlogMarkdownContent content={post.content} />
+            </div>
+            <div
+              className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-white/75 to-white"
+              aria-hidden
+            />
+            <div className="relative -mt-24 flex flex-col items-center gap-4 px-4 pb-6 pt-16 text-center sm:-mt-28">
+              <p className="max-w-md text-sm leading-relaxed text-slate-600">
+                Share your name, email, and mobile once to unlock the full article. We use this only to share
+                internship updates — you can skip and come back anytime.
+              </p>
+              <Button
+                type="button"
+                className="bg-[#5AA3E6] hover:bg-[#4a92d5]"
+                onClick={() => setLeadOpen(true)}
+              >
+                <LockOpen className="mr-2 size-4" />
+                Continue reading
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <BlogMarkdownContent content={post.content} />
+        )}
       </article>
     </BlogReaderShell>
   );
