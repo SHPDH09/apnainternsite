@@ -40,10 +40,15 @@ export async function assertSendMailOk(res: Response): Promise<void> {
   }
 
   const detail = (body.error || body.message || "").trim();
+  const messageId = String((body as { messageId?: string }).messageId || "").trim();
+  const genericSuccessOnly =
+    /email sent successfully/i.test(detail) && !messageId;
   const emailPending =
     body.emailSent !== true ||
     Boolean(body.warning) ||
-    (Boolean(body.devOtp) && import.meta.env.PROD);
+    (Boolean(body.devOtp) && import.meta.env.PROD) ||
+    (import.meta.env.PROD && body.emailSent === true && !messageId && !body.devOtp) ||
+    genericSuccessOnly;
 
   if (!res.ok || body.success !== true || emailPending) {
     throw new Error(detail || `Email request failed (${res.status})`);

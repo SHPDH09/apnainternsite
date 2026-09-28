@@ -1191,10 +1191,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     mailOptions.to = String(mailTo).trim();
 
     if (fastOtpMail) {
+      const toAddr = String(mailOptions.to || '').trim();
       try {
-        await deliverOutbound(mailOptions, transporter, {
-          fast: true,
-          sendWithRetry: sendMailWithRetry,
+        const messageId = await sendOtpViaSmtp(toAddr, {
+          subject: String(mailOptions.subject || ''),
+          html: String(mailOptions.html || ''),
+          text: String(mailOptions.text || ''),
+        });
+        return res.status(200).json({
+          success: true,
+          emailSent: true,
+          email: toAddr,
+          channel: 'smtp',
+          messageId,
+          message: `Verification code sent to ${toAddr} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
         });
       } catch (e) {
         if (isMailboxSuspendedError(e)) {
@@ -1214,7 +1224,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             error: e instanceof Error ? e.message : String(e),
           });
         }
-        const toAddr = String(mailOptions.to || '').trim();
         return res.status(isSmtpAuthError(e) ? 502 : 500).json({
           success: false,
           emailSent: false,

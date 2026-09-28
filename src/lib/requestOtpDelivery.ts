@@ -34,14 +34,14 @@ function isTrustedOtpMessageId(messageId: string, body: OtpApiJson): boolean {
   return id.startsWith("<") && id.includes("@");
 }
 
-/** Vercel origin — bypasses Cloudflare edge Mail Manager (accepts mail but never delivers). */
+/** Fallback when edge proxy returns fake SMTP acceptance (Mail Manager). */
 const OTP_VERCEL_ORIGIN = "https://apnainternsite.vercel.app";
 
-/** Production OTP — Vercel Hostinger SMTP (not CF edge Mail Manager). */
+/** Production OTP on same origin (apnaintern.in → Vercel otp-deliver, not Lambda). */
 function getOtpDeliverApiUrl(): string {
   if (typeof window === "undefined") return "/api/otp-deliver";
   if (isLocalDevEnvironment()) return "/api/send-mail";
-  return `${OTP_VERCEL_ORIGIN}/api/otp-deliver`;
+  return getCanonicalMailApiUrl("/api/otp-deliver");
 }
 
 function isPasswordResetsSchemaMessage(message: string): boolean {

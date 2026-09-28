@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomUUID } from 'node:crypto';
-import { query } from '../../aws/server/db.js';
+import { blogEngagementQuery } from '../lib/blogEngagementDb.js';
 import { useRds } from '../lib/useRds.js';
 import { buildOtpMailContent, resolveOtpMailPurpose, type OtpMailPurpose } from '../lib/otpMailTemplate.js';
 import { formatSmtpError, isSesIdentityNotVerifiedError, isSmtpAuthError } from '../lib/smtpErrors.js';
@@ -121,7 +121,7 @@ async function handleWithRds(
       });
     }
 
-    await query(
+    await blogEngagementQuery(
       `INSERT INTO public.password_resets (id, email, otp, expires_at)
        VALUES ($1, $2, $3, now() + interval '15 minutes')`,
       [randomUUID(), normalizedEmail, generatedOtp]
@@ -137,7 +137,7 @@ async function handleWithRds(
       return res.status(400).json({ success: false, message: 'Invalid OTP or password' });
     }
 
-    const { rows: otpRows } = await query<{ id: string }>(
+    const { rows: otpRows } = await blogEngagementQuery<{ id: string }>(
       `SELECT id FROM public.password_resets
        WHERE lower(trim(email)) = $1 AND trim(otp) = $2 AND expires_at > now()
        ORDER BY created_at DESC NULLS LAST
@@ -148,7 +148,7 @@ async function handleWithRds(
       return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
     }
 
-    const { rows: okRows } = await query<{ result: boolean }>(
+    const { rows: okRows } = await blogEngagementQuery<{ result: boolean }>(
       `SELECT public.reset_user_password($1, $2, $3) AS result`,
       [normalizedEmail, normalizedOtp, password]
     );
