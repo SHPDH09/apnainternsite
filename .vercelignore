@@ -17,10 +17,8 @@ api/**
 !api/ensure-project-report-templates.ts
 !api/ensure-staff-attendance-offices.ts
 !api/staff-office-rpc.ts
-!api/staffOfficeSqlChunks.ts
-!api/staffOfficeApply.ts
 !api/rds-apply-all.ts
-!api/lib/**
+# api/lib/* and staffOffice* helpers are bundled via vercel.json includeFiles — not standalone routes.
 
 aws/**
 !aws/server/db.ts

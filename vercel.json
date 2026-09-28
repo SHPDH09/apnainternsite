@@ -5,11 +5,60 @@
   "functions": {
     "api/send-mail.ts": {
       "maxDuration": 60,
-      "includeFiles": "server/blogEngagementVercel.ts"
+      "includeFiles": [
+        "server/blogEngagementVercel.ts",
+        "api/lib/blogMediaUpload.ts"
+      ]
     },
     "api/auth/forgot-password.ts": {
       "maxDuration": 60,
-      "includeFiles": "server/blogEngagementVercel.ts"
+      "includeFiles": [
+        "server/blogEngagementVercel.ts",
+        "api/lib/useRds.ts",
+        "api/lib/otpMailTemplate.ts",
+        "api/lib/smtpErrors.ts"
+      ]
+    },
+    "api/admin-partner-register.ts": {
+      "maxDuration": 60,
+      "includeFiles": [
+        "api/lib/**",
+        "aws/server/db.ts",
+        "aws/server/partner-applications-bootstrap.ts"
+      ]
+    },
+    "api/ensure-partner-applications.ts": {
+      "maxDuration": 60,
+      "includeFiles": [
+        "api/lib/verifyBearerSession.ts",
+        "aws/server/local-jwt.ts",
+        "aws/server/partner-applications-bootstrap.ts",
+        "aws/server/db.ts"
+      ]
+    },
+    "api/ensure-project-report-templates.ts": {
+      "maxDuration": 60,
+      "includeFiles": [
+        "api/lib/verifyBearerSession.ts",
+        "aws/server/local-jwt.ts",
+        "aws/server/project-report-bootstrap.ts",
+        "aws/server/db.ts"
+      ]
+    },
+    "api/partner-application-submit.ts": {
+      "maxDuration": 60,
+      "includeFiles": [
+        "aws/server/local-jwt.ts",
+        "aws/server/partner-applications-bootstrap.ts",
+        "aws/server/db.ts"
+      ]
+    },
+    "api/staff-office-rpc.ts": {
+      "maxDuration": 60,
+      "includeFiles": [
+        "api/staffOfficeApply.ts",
+        "api/staffOfficeSqlChunks.ts"
+      ]
     }
   },
   "env": {
