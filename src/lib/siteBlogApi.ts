@@ -287,15 +287,16 @@ function blogInstantMs(value: unknown): number | null {
 }
 
 /** Whether a post should appear on the public site right now. */
-export function isBlogPostPublic(post: SiteBlogPost, now = new Date()): boolean {
+export function isBlogPostPublic(post: SiteBlogPost, now: Date = new Date()): boolean {
+  const nowDate = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
   if (post.is_active === false || post.is_active === "false") return false;
   const status = String(post.status || "").toLowerCase();
   if (status === "draft") return false;
   if (!status && post.is_active !== false) {
     const pub = blogInstantMs(post.published_at);
-    if (pub != null && pub <= now.getTime()) return true;
+    if (pub != null && pub <= nowDate.getTime()) return true;
   }
-  const ts = now.getTime();
+  const ts = nowDate.getTime();
   if (status === "scheduled") {
     const at = blogInstantMs(post.scheduled_at);
     if (at == null) return false;
@@ -387,7 +388,7 @@ async function fetchPublicBlogPostsViaDirectRest(
     if (!Array.isArray(data)) return [];
     return sortBlogPosts(
       data.map((row) => mapCoverUrl({ ...row, view_count: row.view_count ?? 0 }))
-    ).filter(isBlogPostPublic);
+    ).filter((post) => isBlogPostPublic(post));
   };
 
   const headers = {
@@ -415,7 +416,7 @@ async function fetchPublicBlogPostsViaDirectRest(
 async function loadPublicBlogFallbackRows(client: SupabaseClient): Promise<SiteBlogPost[]> {
   try {
     return sortBlogPosts((await fetchFallbackPublicBlogPosts(client)).map(mapCoverUrl)).filter(
-      isBlogPostPublic
+      (post) => isBlogPostPublic(post)
     );
   } catch {
     return [];
@@ -445,7 +446,9 @@ async function queryPublicBlogPostsFromRds(
       return null;
     }
     setSiteBlogTableAvailableKnown(true);
-    const rows = sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl)).filter(isBlogPostPublic);
+    const rows = sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl)).filter((post) =>
+      isBlogPostPublic(post)
+    );
     return { rows };
   } catch {
     return null;
