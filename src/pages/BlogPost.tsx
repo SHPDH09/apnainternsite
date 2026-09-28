@@ -110,7 +110,6 @@ export default function BlogPost() {
       <BlogLeadCaptureDialog
         open={leadOpen}
         onOpenChange={setLeadOpen}
-        client={supabase}
         postId={post.id}
         postTitle={post.title}
         requireSubmit={!leadUnlocked}
