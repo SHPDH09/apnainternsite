@@ -54,10 +54,10 @@ async function postBlogInteraction(
 ): Promise<Record<string, unknown>> {
   const action = String(body.action || "").trim() as BlogInteractionAction;
   try {
-    return await postBlogViaInteractionApi(body);
+    return await postBlogViaSendMail(action, body);
   } catch (primaryErr) {
     try {
-      return await postBlogViaSendMail(action, body);
+      return await postBlogViaInteractionApi(body);
     } catch (secondaryErr) {
       const msg =
         secondaryErr instanceof Error
