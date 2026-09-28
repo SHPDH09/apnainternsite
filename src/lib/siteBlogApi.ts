@@ -891,18 +891,31 @@ async function uploadBlogImageViaAdminApi(
       image_base64,
     }),
   });
-  const json = (await res.json().catch(() => ({}))) as {
+  const rawText = await res.text().catch(() => "");
+  let json: {
     ok?: boolean;
     url?: string;
     path?: string;
     message?: string;
-  };
+    error?: string;
+  } = {};
+  try {
+    json = rawText ? (JSON.parse(rawText) as typeof json) : {};
+  } catch {
+    /* non-JSON (e.g. Vercel FUNCTION_INVOCATION_FAILED) */
+  }
+  const serverMsg = String(json.message || json.error || "").trim();
   if (res.status === 401 || res.status === 403) {
-    throw new Error(json.message || "Sign in as admin to upload images.");
+    throw new Error(serverMsg || "Sign in as admin to upload images.");
   }
   if (!res.ok || !json.ok || !json.url || !json.path) {
+    if (/FUNCTION_INVOCATION_FAILED/i.test(rawText)) {
+      throw new Error(
+        "Image upload service failed to start on the server. Deploy the latest fix or retry in a minute."
+      );
+    }
     const msg =
-      json.message ||
+      serverMsg ||
       (res.status === 503
         ? "Image upload service is temporarily unavailable. Retry in a moment."
         : `Image upload failed (${res.status}).`);

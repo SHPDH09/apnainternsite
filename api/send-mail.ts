@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, randomUUID } from 'node:crypto';
-import { blogEngagementQuery } from '../server/blogEngagementVercel.js';
+import { blogEngagementQuery } from './lib/blogEngagementDb.js';
 import {
   BLOG_IMAGE_VERCEL_MAX_BYTES,
   decodeImageBase64,
   uploadBlogImageToS3,
-} from '../server/blogMediaUploadVercel.js';
-import { verifyBearerSession } from '../server/verifyBearerSessionVercel.js';
+} from './lib/blogMediaUpload.js';
+import { verifyBearerSession } from './lib/verifyBearerSession.js';
 
 async function assertBlogAdminUserId(userId: string): Promise<void> {
   const { rows } = await blogEngagementQuery<{ role: string }>(
@@ -588,7 +588,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!tokenMatch) {
         return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
       }
-      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
       const session = await verifyBearerSession(tokenMatch[1]);
       if (!session?.sub) {
         return res.status(401).json({ success: false, message: 'Invalid or expired session' });
@@ -795,7 +794,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!tokenMatch) {
         return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
       }
-      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
       const session = await verifyBearerSession(tokenMatch[1]);
       if (!session?.sub) {
         return res.status(401).json({ success: false, message: 'Invalid or expired session' });

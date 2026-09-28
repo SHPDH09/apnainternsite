@@ -1,5 +1,7 @@
 const S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || "ap-south-1";
 const LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || "ezyintern-staging-logos";
+/** Raw file size when sending base64 through Vercel (~4.5 MB request cap). */
+export const BLOG_IMAGE_VERCEL_MAX_BYTES = 3_300_000;
 export const BLOG_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 
 export function decodeImageBase64(raw: string): Buffer {

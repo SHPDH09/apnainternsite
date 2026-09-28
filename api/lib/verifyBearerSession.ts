@@ -1,9 +1,6 @@
 /**
- * Verify admin Bearer tokens on Vercel where LOCAL_JWT_SECRET may differ from Lambda.
- * Tries local verifyToken first, then Lambda /auth/v1/user (same secret as login).
+ * Verify Bearer tokens on Vercel (no aws/server/local-jwt — safe for send-mail bundle).
  */
-import { verifyToken } from "../../aws/server/local-jwt.js";
-
 const DEFAULT_LAMBDA_API =
   "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
 
@@ -20,19 +17,34 @@ export type VerifiedBearerSession = {
   email?: string;
 };
 
+async function verifyLocalJwt(token: string): Promise<VerifiedBearerSession | null> {
+  try {
+    const jwt = await import("jsonwebtoken");
+    const secret =
+      process.env.LOCAL_JWT_SECRET ||
+      process.env.JWT_SECRET ||
+      "ezyintern-local-dev-secret-change-me";
+    const payload = jwt.default.verify(token, secret, {
+      issuer: "ezyintern-local",
+    }) as { sub?: string; email?: string };
+    if (!payload?.sub) return null;
+    return {
+      sub: String(payload.sub),
+      email: payload.email ? String(payload.email) : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function verifyBearerSession(
   token: string
 ): Promise<VerifiedBearerSession | null> {
   const trimmed = token.trim();
   if (!trimmed) return null;
 
-  const local = verifyToken(trimmed);
-  if (local?.sub) {
-    return {
-      sub: String(local.sub),
-      email: local.email ? String(local.email) : undefined,
-    };
-  }
+  const local = await verifyLocalJwt(trimmed);
+  if (local?.sub) return local;
 
   try {
     const res = await fetch(lambdaAuthUrl(), {

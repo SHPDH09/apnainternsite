@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomUUID } from 'node:crypto';
-import { blogEngagementQuery } from '../../server/blogEngagementVercel.js';
+import { blogEngagementQuery } from '../lib/blogEngagementDb.js';
 import { useRds } from '../lib/useRds.js';
 import { buildOtpMailContent, resolveOtpMailPurpose, type OtpMailPurpose } from '../lib/otpMailTemplate.js';
 import { formatSmtpError, isSesIdentityNotVerifiedError, isSmtpAuthError } from '../lib/smtpErrors.js';
