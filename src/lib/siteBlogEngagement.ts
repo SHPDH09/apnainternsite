@@ -138,10 +138,11 @@ async function postBlogViaSendMail(
   action: BlogInteractionAction,
   body: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
+  const { action: _ignored, ...rest } = body;
   const res = await fetch(apiUrl("/api/send-mail"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: SEND_MAIL_BLOG_ACTION[action], ...body }),
+    body: JSON.stringify({ ...rest, action: SEND_MAIL_BLOG_ACTION[action] }),
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok || json.ok === false || json.success === false) {

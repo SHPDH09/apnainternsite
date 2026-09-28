@@ -549,6 +549,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     /** Lovable / some proxies drop `action`; infer college welcome from payload shape. */
     const normalizedAction = (() => {
       const raw = typeof action === "string" ? action.trim().toLowerCase() : "";
+      const blogAlias: Record<string, string> = {
+        increment_view: "blog_increment_view",
+        get_view: "blog_get_view",
+        submit_lead: "blog_submit_lead",
+        lookup_phone: "blog_lookup_phone",
+      };
+      if (raw && blogAlias[raw]) return blogAlias[raw];
       if (raw) return raw;
       const fromType = typeof type === "string" ? type.trim().toLowerCase() : "";
       if (fromType) return fromType;
