@@ -429,7 +429,7 @@ export async function fetchPublicBlogPosts(
   const fallbackRows = await loadPublicBlogFallbackRows(client);
 
   const directRest = await fetchPublicBlogPostsViaDirectRest(opts);
-  if (directRest && directRest.length > 0) {
+  if (directRest !== null) {
     return applyPublicBlogListOpts(mergeBlogPostsById(fallbackRows, directRest), opts);
   }
 
