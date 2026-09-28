@@ -318,13 +318,29 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
   };
 
   const handleCoverUpload = async (file: File) => {
-    if (!editor.id) {
-      toast.error("Save the post first, then upload a cover image.");
-      return;
+    let postId = editor.id;
+    if (!postId) {
+      if (!currentUserId || !editor.title.trim()) {
+        toast.error("Add a title, then upload a cover (a draft will be created automatically).");
+        return;
+      }
+      try {
+        const created = await createBlogPost(client, currentUserId, {
+          title: editor.title,
+          content: editor.content || editor.excerpt || editor.title,
+          excerpt: editor.excerpt,
+          status: "draft",
+        });
+        postId = created.id;
+        setEditor((e) => ({ ...e, id: postId }));
+      } catch (err) {
+        toast.error(formatSiteBlogError(err));
+        return;
+      }
     }
     setUploadingCover(true);
     try {
-      const { cover_image_url } = await uploadBlogCoverImage(client, editor.id, file);
+      const { cover_image_url } = await uploadBlogCoverImage(client, postId!, file);
       setEditor((e) => ({ ...e, cover_image_url }));
       toast.success("Cover image uploaded.");
       await reload();

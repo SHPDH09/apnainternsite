@@ -258,7 +258,7 @@ export async function handleStorageRequest(req: Request, res: Response) {
           ContentType: contentType,
         })
       );
-      res.status(200).json({ Key: `${s3Bucket}/${objectKey}`, Id: objectKey });
+      res.status(200).json({ Key: `${appBucket}/${objectKey}`, Id: objectKey });
       return;
     }
 

@@ -799,6 +799,60 @@ export async function updateBlogPost(
   throw new Error("Blog post not found. Save as draft first, then publish.");
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read image file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Vercel + S3 direct upload — Lambda /storage often returns 503 in production. */
+async function uploadBlogImageViaAdminApi(
+  client: SupabaseClient,
+  postId: string,
+  file: File,
+  subfolder: "cover" | "content"
+): Promise<{ url: string; path: string } | null> {
+  if (typeof window === "undefined" || typeof fetch === "undefined") return null;
+
+  const { data: sessionData } = await client.auth.getSession();
+  const token = sessionData.session?.access_token?.trim();
+  if (!token) return null;
+
+  const origin = window.location.origin.replace(/\/$/, "");
+  const image_base64 = await readFileAsDataUrl(file);
+  const res = await fetch(`${origin}/api/send-mail`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      action: "blog_upload_image",
+      post_id: postId,
+      subfolder,
+      file_name: file.name,
+      content_type: file.type || "image/jpeg",
+      image_base64,
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    url?: string;
+    path?: string;
+    message?: string;
+  };
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(json.message || "Sign in as admin to upload images.");
+  }
+  if (!res.ok || !json.ok || !json.url || !json.path) {
+    return null;
+  }
+  return { url: json.url, path: json.path };
+}
+
 async function uploadBlogImage(
   client: SupabaseClient,
   postId: string,
@@ -812,6 +866,14 @@ async function uploadBlogImage(
     throw new Error("Image must be 8 MB or smaller.");
   }
 
+  try {
+    const viaAdmin = await uploadBlogImageViaAdminApi(client, postId, file, subfolder);
+    if (viaAdmin) return viaAdmin;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/sign in as admin|admin privileges|authorization|token/i.test(msg)) throw err;
+  }
+
   const safeName = file.name.replace(/[^\w.\-]+/g, "_");
   const path = `blog/${postId}/${subfolder}/${Date.now()}-${safeName}`;
   const { error: upErr } = await client.storage.from(BLOG_BUCKET).upload(path, file, {
@@ -822,7 +884,10 @@ async function uploadBlogImage(
     if (/bucket not found/i.test(upErr.message)) {
       throw new Error('Storage bucket "logos" is missing. Run npm run aws:s3:provision.');
     }
-    throw upErr;
+    throw new Error(
+      upErr.message ||
+        "Image upload failed. Retry in a moment — if it persists, contact support."
+    );
   }
 
   const { data: pub } = client.storage.from(BLOG_BUCKET).getPublicUrl(path);
