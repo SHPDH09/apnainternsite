@@ -3,38 +3,7 @@
  * Whitelisted on Vercel (not proxied to Lambda). Self-contained — no aws/server imports.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { QueryResultRow } from "pg";
-import { BLOG_ENGAGEMENT_BOOTSTRAP_SQL } from "./lib/blogEngagementBootstrap.js";
-
-let pool: import("pg").Pool | null = null;
-let engagementReady: Promise<void> | null = null;
-
-function pgPoolConfig(databaseUrl: string) {
-  return {
-    connectionString: databaseUrl
-      .replace(/([?&])sslmode=[^&]*/gi, "$1")
-      .replace(/[?&]$/, ""),
-    ssl: /rds\.amazonaws\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
-    max: 1,
-    connectionTimeoutMillis: 20000,
-  };
-}
-
-async function getPool(): Promise<import("pg").Pool> {
-  if (pool) return pool;
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL not configured");
-  }
-  const pg = await import("pg");
-  pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
-  return pool;
-}
-
-async function query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) {
-  const p = await getPool();
-  return p.query<T>(text, params);
-}
+import { blogEngagementQuery, ensureBlogEngagementSchema } from "./lib/blogEngagementDb.js";
 
 function normalizePhone(raw: unknown): string {
   const digits = String(raw ?? "").replace(/\D/g, "");
@@ -42,17 +11,8 @@ function normalizePhone(raw: unknown): string {
   return digits.slice(-10);
 }
 
-async function ensureEngagementSchema(): Promise<void> {
-  if (!engagementReady) {
-    engagementReady = (async () => {
-      await query(BLOG_ENGAGEMENT_BOOTSTRAP_SQL);
-    })();
-  }
-  await engagementReady;
-}
-
 async function incrementView(postId: string): Promise<number> {
-  const { rows } = await query<{ view_count: string }>(
+  const { rows } = await blogEngagementQuery<{ view_count: string }>(
     `UPDATE public.site_blog_posts
      SET view_count = view_count + 1
      WHERE id = $1::uuid AND is_active = true
@@ -63,7 +23,7 @@ async function incrementView(postId: string): Promise<number> {
 }
 
 async function fetchViewCount(postId: string): Promise<number> {
-  const { rows } = await query<{ view_count: string }>(
+  const { rows } = await blogEngagementQuery<{ view_count: string }>(
     `SELECT view_count FROM public.site_blog_posts WHERE id = $1::uuid LIMIT 1`,
     [postId]
   );
@@ -82,14 +42,14 @@ async function submitLead(body: Record<string, unknown>): Promise<string> {
   if (!email || !email.includes("@")) throw new Error("Valid email is required");
   if (!phone) throw new Error("Valid phone is required");
 
-  const meta = await query<{ slug: string; title: string }>(
+  const meta = await blogEngagementQuery<{ slug: string; title: string }>(
     `SELECT slug, title FROM public.site_blog_posts WHERE id = $1::uuid LIMIT 1`,
     [postId]
   );
   const slug = meta.rows[0]?.slug ?? null;
   const title = meta.rows[0]?.title ?? null;
 
-  const { rows } = await query<{ id: string }>(
+  const { rows } = await blogEngagementQuery<{ id: string }>(
     `INSERT INTO public.site_blog_leads (
        post_id, post_slug, post_title, full_name, email, phone, college_name
      ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
@@ -111,7 +71,7 @@ async function lookupAutofill(phoneRaw: unknown): Promise<{
     return { full_name: "", email: "", college_name: "" };
   }
 
-  const student = await query<{ full_name: string; email: string; college_name: string }>(
+  const student = await blogEngagementQuery<{ full_name: string; email: string; college_name: string }>(
     `SELECT full_name, email, college_name
      FROM public.students
      WHERE right(regexp_replace(coalesce(contact_number, ''), '\\D', '', 'g'), 10) = $1
@@ -128,7 +88,7 @@ async function lookupAutofill(phoneRaw: unknown): Promise<{
     };
   }
 
-  const lead = await query<{ email: string; payload: Record<string, unknown> }>(
+  const lead = await blogEngagementQuery<{ email: string; payload: Record<string, unknown> }>(
     `SELECT email, payload
      FROM public.registration_leads
      WHERE right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = $1
@@ -164,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const action = String(body.action || "").trim();
 
   try {
-    await ensureEngagementSchema();
+    await ensureBlogEngagementSchema();
 
     if (action === "increment_view") {
       const postId = String(body.post_id || "").trim();

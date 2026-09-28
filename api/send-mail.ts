@@ -594,15 +594,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(503).json({ ok: false, message: 'DATABASE_URL is not configured on this deployment' });
       }
       try {
-        const { query } = await import('../aws/server/db.js');
-        const { BLOG_ENGAGEMENT_BOOTSTRAP_SQL } = await import('./lib/blogEngagementBootstrap.js');
-        await query(BLOG_ENGAGEMENT_BOOTSTRAP_SQL);
+        const { blogEngagementQuery } = await import('./lib/blogEngagementDb.js');
 
         const postId = String(body.post_id || '').trim();
 
         if (normalizedAction === 'blog_increment_view') {
           if (!postId) return res.status(400).json({ ok: false, message: 'post_id required' });
-          const { rows } = await query<{ view_count: string }>(
+          const { rows } = await blogEngagementQuery<{ view_count: string }>(
             `UPDATE public.site_blog_posts
              SET view_count = view_count + 1
              WHERE id = $1::uuid AND is_active = true
@@ -614,7 +612,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (normalizedAction === 'blog_get_view') {
           if (!postId) return res.status(400).json({ ok: false, message: 'post_id required' });
-          const { rows } = await query<{ view_count: string }>(
+          const { rows } = await blogEngagementQuery<{ view_count: string }>(
             `SELECT view_count FROM public.site_blog_posts WHERE id = $1::uuid LIMIT 1`,
             [postId]
           );
@@ -630,13 +628,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!fullName || !email.includes('@') || phoneDigits.length < 10) {
             return res.status(400).json({ ok: false, message: 'Name, email, and phone are required' });
           }
-          const meta = await query<{ slug: string; title: string }>(
+          const meta = await blogEngagementQuery<{ slug: string; title: string }>(
             `SELECT slug, title FROM public.site_blog_posts WHERE id = $1::uuid LIMIT 1`,
             [postId]
           );
           const slug = meta.rows[0]?.slug ?? null;
           const title = meta.rows[0]?.title ?? null;
-          const { rows } = await query<{ id: string }>(
+          const { rows } = await blogEngagementQuery<{ id: string }>(
             `INSERT INTO public.site_blog_leads (
                post_id, post_slug, post_title, full_name, email, phone, college_name
              ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
@@ -653,8 +651,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             profile: { full_name: '', email: '', college_name: '' },
           });
         }
-        const student = await query<{ full_name: string; email: string; college_name: string }>(
-          `SELECT full_name, email, college_name
+        const student = await blogEngagementQuery<{ full_name: string; email: string; college_name: string }>(
+            `SELECT full_name, email, college_name
            FROM public.students
            WHERE right(regexp_replace(coalesce(contact_number, ''), '\\D', '', 'g'), 10) = $1
            ORDER BY created_at DESC NULLS LAST
