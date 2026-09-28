@@ -1,0 +1,80 @@
+/**
+ * Blog image upload for Vercel /api/send-mail (outside api/ — not deployed as its own route).
+ */
+const S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || "ap-south-1";
+const LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || "ezyintern-staging-logos";
+/** Raw file size limit when sending base64 through Vercel (~4.5 MB request cap). */
+export const BLOG_IMAGE_VERCEL_MAX_BYTES = 3_300_000;
+export const BLOG_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+
+export function decodeImageBase64(raw: string): Buffer {
+  const trimmed = raw.trim();
+  const data = trimmed.includes(",") ? trimmed.split(",").pop() || "" : trimmed;
+  const buf = Buffer.from(data, "base64");
+  if (buf.length < 8) {
+    throw new Error("Invalid image data");
+  }
+  return buf;
+}
+
+function publicLogoObjectUrl(objectKey: string): string {
+  const key = objectKey.replace(/^\/+/, "");
+  return `https://${LOGOS_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key
+    .split("/")
+    .map((p) => encodeURIComponent(p))
+    .join("/")}`;
+}
+
+export type BlogMediaSubfolder = "cover" | "content";
+
+export function buildBlogImageObjectKey(input: {
+  postId: string;
+  subfolder: BlogMediaSubfolder;
+  fileName: string;
+}): string {
+  const safeName = String(input.fileName || "image")
+    .replace(/[^\w.\-]+/g, "_")
+    .slice(0, 180);
+  return `blog/${input.postId.trim()}/${input.subfolder}/${Date.now()}-${safeName}`;
+}
+
+export async function uploadBlogImageToS3(input: {
+  postId: string;
+  subfolder: BlogMediaSubfolder;
+  fileName: string;
+  contentType: string;
+  imageBuffer: Buffer;
+}): Promise<{ url: string; path: string }> {
+  if (!process.env.AWS_ACCESS_KEY_ID?.trim() || !process.env.AWS_SECRET_ACCESS_KEY?.trim()) {
+    throw new Error("Image upload is not configured on the server. Contact support.");
+  }
+  if (!input.postId.trim()) {
+    throw new Error("post_id required");
+  }
+  if (input.imageBuffer.length > BLOG_IMAGE_MAX_BYTES) {
+    throw new Error("Image must be 8 MB or smaller.");
+  }
+  const ct = (input.contentType || "application/octet-stream").toLowerCase();
+  if (!ct.startsWith("image/")) {
+    throw new Error("Please upload an image file (JPG, PNG, WebP, etc.).");
+  }
+
+  const path = buildBlogImageObjectKey({
+    postId: input.postId,
+    subfolder: input.subfolder,
+    fileName: input.fileName,
+  });
+
+  const { PutObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
+  const s3 = new S3Client({ region: S3_REGION });
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: LOGOS_BUCKET,
+      Key: path,
+      Body: input.imageBuffer,
+      ContentType: input.contentType || "application/octet-stream",
+    })
+  );
+
+  return { url: publicLogoObjectUrl(path), path };
+}

@@ -1,6 +1,23 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, randomUUID } from 'node:crypto';
 import { blogEngagementQuery } from '../server/blogEngagementVercel.js';
+import {
+  BLOG_IMAGE_VERCEL_MAX_BYTES,
+  decodeImageBase64,
+  uploadBlogImageToS3,
+} from '../server/blogMediaUploadVercel.js';
+import { verifyBearerSession } from '../server/verifyBearerSessionVercel.js';
+
+async function assertBlogAdminUserId(userId: string): Promise<void> {
+  const { rows } = await blogEngagementQuery<{ role: string }>(
+    `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
+    [userId]
+  );
+  const isAdmin = rows.some((r) => r.role === 'admin' || r.role === 'super_admin');
+  if (!isAdmin) {
+    throw new Error('Admin privileges required.');
+  }
+}
 
 /** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
@@ -719,7 +736,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!tokenMatch) {
         return res.status(401).json({ ok: false, message: 'Authorization Bearer token required' });
       }
-      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
       const session = await verifyBearerSession(tokenMatch[1]);
       if (!session?.sub) {
         return res.status(401).json({ ok: false, message: 'Invalid or expired session' });
@@ -731,8 +747,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       try {
-        const { assertAdminUserId } = await import('../aws/server/project-report-template-save.js');
-        await assertAdminUserId(session.sub);
+        await assertBlogAdminUserId(session.sub);
 
         const postId = String(body.post_id || '').trim();
         const subfolderRaw = String(body.subfolder || 'content').trim().toLowerCase();
@@ -747,8 +762,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ ok: false, message: 'image_base64 required' });
         }
 
-        const { decodeImageBase64, uploadBlogImageToS3 } = await import('./lib/blogMediaUpload.js');
         const imageBuffer = decodeImageBase64(imageBase64);
+        if (imageBuffer.length > BLOG_IMAGE_VERCEL_MAX_BYTES) {
+          return res.status(413).json({
+            ok: false,
+            message:
+              'Image is too large for upload through the site (max ~3 MB). Compress the image or use a smaller file.',
+          });
+        }
         const result = await uploadBlogImageToS3({
           postId,
           subfolder,

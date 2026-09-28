@@ -16,7 +16,8 @@ import {
 } from "@/lib/siteBlogFallbackStorage";
 
 const BLOG_BUCKET = "logos";
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+/** Matches server BLOG_IMAGE_VERCEL_MAX_BYTES — base64 must fit Vercel request limits. */
+const MAX_IMAGE_BYTES = 3_300_000;
 
 function blogErrorText(error: unknown): string {
   if (error && typeof error === "object") {
@@ -862,12 +863,16 @@ async function uploadBlogImageViaAdminApi(
   postId: string,
   file: File,
   subfolder: "cover" | "content"
-): Promise<{ url: string; path: string } | null> {
-  if (typeof window === "undefined" || typeof fetch === "undefined") return null;
+): Promise<{ url: string; path: string }> {
+  if (typeof window === "undefined" || typeof fetch === "undefined") {
+    throw new Error("Image upload is only available in the browser.");
+  }
 
   const { data: sessionData } = await client.auth.getSession();
   const token = sessionData.session?.access_token?.trim();
-  if (!token) return null;
+  if (!token) {
+    throw new Error("Sign in as admin to upload images.");
+  }
 
   const origin = window.location.origin.replace(/\/$/, "");
   const image_base64 = await readFileAsDataUrl(file);
@@ -896,7 +901,12 @@ async function uploadBlogImageViaAdminApi(
     throw new Error(json.message || "Sign in as admin to upload images.");
   }
   if (!res.ok || !json.ok || !json.url || !json.path) {
-    return null;
+    const msg =
+      json.message ||
+      (res.status === 503
+        ? "Image upload service is temporarily unavailable. Retry in a moment."
+        : `Image upload failed (${res.status}).`);
+    throw new Error(msg);
   }
   return { url: json.url, path: json.path };
 }
@@ -911,37 +921,10 @@ async function uploadBlogImage(
     throw new Error("Please upload an image file (JPG, PNG, WebP, etc.).");
   }
   if (file.size > MAX_IMAGE_BYTES) {
-    throw new Error("Image must be 8 MB or smaller.");
+    throw new Error("Image must be about 3 MB or smaller (compress if needed).");
   }
 
-  try {
-    const viaAdmin = await uploadBlogImageViaAdminApi(client, postId, file, subfolder);
-    if (viaAdmin) return viaAdmin;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/sign in as admin|admin privileges|authorization|token/i.test(msg)) throw err;
-  }
-
-  const safeName = file.name.replace(/[^\w.\-]+/g, "_");
-  const path = `blog/${postId}/${subfolder}/${Date.now()}-${safeName}`;
-  const { error: upErr } = await client.storage.from(BLOG_BUCKET).upload(path, file, {
-    upsert: true,
-    contentType: file.type || undefined,
-  });
-  if (upErr) {
-    if (/bucket not found/i.test(upErr.message)) {
-      throw new Error('Storage bucket "logos" is missing. Run npm run aws:s3:provision.');
-    }
-    throw new Error(
-      upErr.message ||
-        "Image upload failed. Retry in a moment — if it persists, contact support."
-    );
-  }
-
-  const { data: pub } = client.storage.from(BLOG_BUCKET).getPublicUrl(path);
-  const url =
-    publicStorageObjectUrl(BLOG_BUCKET, path) || resolveStorageUrl(pub.publicUrl) || pub.publicUrl;
-  return { url, path };
+  return uploadBlogImageViaAdminApi(client, postId, file, subfolder);
 }
 
 export async function uploadBlogCoverImage(
