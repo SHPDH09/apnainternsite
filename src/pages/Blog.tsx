@@ -20,7 +20,7 @@ export default function Blog() {
     let cancelled = false;
     void (async () => {
       try {
-        const rows = await fetchPublicBlogPosts(supabase);
+        const rows = await fetchPublicBlogPosts(supabase).catch(() => [] as SiteBlogPost[]);
         if (cancelled) return;
         setPosts(rows);
         if (rows.length > 0) {

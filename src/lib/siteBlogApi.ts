@@ -288,9 +288,13 @@ function blogInstantMs(value: unknown): number | null {
 
 /** Whether a post should appear on the public site right now. */
 export function isBlogPostPublic(post: SiteBlogPost, now = new Date()): boolean {
-  if (!post.is_active) return false;
+  if (post.is_active === false || post.is_active === "false") return false;
   const status = String(post.status || "").toLowerCase();
   if (status === "draft") return false;
+  if (!status && post.is_active !== false) {
+    const pub = blogInstantMs(post.published_at);
+    if (pub != null && pub <= now.getTime()) return true;
+  }
   const ts = now.getTime();
   if (status === "scheduled") {
     const at = blogInstantMs(post.scheduled_at);
@@ -358,35 +362,53 @@ function applyPublicBlogListOpts(
 /** Reliable public read when supabase-js select fails (e.g. missing view_count on RDS). */
 async function fetchPublicBlogPostsViaDirectRest(
   opts?: { featuredOnly?: boolean; postType?: BlogPostType }
-): Promise<SiteBlogPost[] | null> {
-  if (typeof window === "undefined") return null;
+): Promise<SiteBlogPost[]> {
+  if (typeof window === "undefined") return [];
   const base = resolveSupabaseUrl().replace(/\/$/, "");
-  if (!base) return null;
+  if (!base) return [];
 
-  const params = new URLSearchParams({
-    select: BLOG_SELECT_LIST_PUBLIC,
-    is_active: "eq.true",
-  });
-  if (opts?.featuredOnly) params.set("is_featured", "eq.true");
-  if (opts?.postType) params.set("post_type", `eq.${opts.postType}`);
+  const buildParams = (cacheBust: boolean) => {
+    const params = new URLSearchParams({
+      select: BLOG_SELECT_LIST_PUBLIC,
+      is_active: "eq.true",
+      status: "in.(published,scheduled)",
+    });
+    if (opts?.featuredOnly) params.set("is_featured", "eq.true");
+    if (opts?.postType) params.set("post_type", `eq.${opts.postType}`);
+    if (cacheBust) params.set("_", String(Date.now()));
+    return params;
+  };
 
   const key = resolveSupabaseAnonKey();
-  try {
-    const res = await fetch(`${base}/rest/v1/site_blog_posts?${params.toString()}`, {
-      cache: "no-store",
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-      },
-    });
-    if (!res.ok) return null;
+  const parseRows = async (res: Response): Promise<SiteBlogPost[]> => {
+    if (res.status === 304) return [];
+    if (!res.ok) return [];
     const data = (await res.json()) as SiteBlogPost[] | { message?: string };
-    if (!Array.isArray(data)) return null;
+    if (!Array.isArray(data)) return [];
     return sortBlogPosts(
       data.map((row) => mapCoverUrl({ ...row, view_count: row.view_count ?? 0 }))
     ).filter(isBlogPostPublic);
+  };
+
+  const headers = {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+  };
+
+  try {
+    for (const cacheBust of [false, true]) {
+      const res = await fetch(`${base}/rest/v1/site_blog_posts?${buildParams(cacheBust).toString()}`, {
+        cache: "no-store",
+        headers,
+      });
+      const rows = await parseRows(res);
+      if (rows.length > 0) return rows;
+    }
+    return [];
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -405,68 +427,74 @@ async function queryPublicBlogPostsFromRds(
   client: SupabaseClient,
   opts?: { featuredOnly?: boolean; postType?: BlogPostType }
 ): Promise<{ rows: SiteBlogPost[] } | { missingTable: true } | null> {
-  const filters = opts;
-  const listColumns = BLOG_SELECT_LIST_PUBLIC;
-  const { data, error } = await runBlogSelectQuery(client, (columns) => {
-    const cols = columns.includes("content") ? listColumns : columns;
-    let query = client.from("site_blog_posts").select(cols).eq("is_active", true);
-    if (filters?.featuredOnly) query = query.eq("is_featured", true);
-    if (filters?.postType) query = query.eq("post_type", filters.postType);
-    return query;
-  });
-  if (error) {
-    if (isSiteBlogTableMissing(error)) {
-      setSiteBlogTableAvailableKnown(false);
-      return { missingTable: true };
+  try {
+    const filters = opts;
+    const listColumns = BLOG_SELECT_LIST_PUBLIC;
+    const { data, error } = await runBlogSelectQuery(client, (columns) => {
+      const cols = columns.includes("content") ? listColumns : columns;
+      let query = client.from("site_blog_posts").select(cols).eq("is_active", true);
+      if (filters?.featuredOnly) query = query.eq("is_featured", true);
+      if (filters?.postType) query = query.eq("post_type", filters.postType);
+      return query;
+    });
+    if (error) {
+      if (isSiteBlogTableMissing(error)) {
+        setSiteBlogTableAvailableKnown(false);
+        return { missingTable: true };
+      }
+      return null;
     }
+    setSiteBlogTableAvailableKnown(true);
+    const rows = sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl)).filter(isBlogPostPublic);
+    return { rows };
+  } catch {
     return null;
   }
-  setSiteBlogTableAvailableKnown(true);
-  const rows = sortBlogPosts(((data || []) as SiteBlogPost[]).map(mapCoverUrl)).filter(isBlogPostPublic);
-  return { rows };
 }
 
 export async function fetchPublicBlogPosts(
   client: SupabaseClient,
   opts?: { featuredOnly?: boolean; limit?: number; postType?: BlogPostType }
 ): Promise<SiteBlogPost[]> {
-  resetSiteBlogStorageCache();
+  try {
+    resetSiteBlogStorageCache();
 
-  const fallbackRows = await loadPublicBlogFallbackRows(client);
-
-  const directRest = await fetchPublicBlogPostsViaDirectRest(opts);
-
-  const rds = await queryPublicBlogPostsFromRds(client, opts);
-  const directRows = directRest ?? [];
-  if (rds && "rows" in rds) {
-    return applyPublicBlogListOpts(
-      mergeBlogPostsById(fallbackRows, directRows, rds.rows),
-      opts
-    );
-  }
-
-  if (rds && "missingTable" in rds) {
+    const directRows = await fetchPublicBlogPostsViaDirectRest(opts);
     if (directRows.length > 0) {
-      return applyPublicBlogListOpts(mergeBlogPostsById(fallbackRows, directRows), opts);
+      const fallbackRows = await loadPublicBlogFallbackRows(client);
+      const rds = await queryPublicBlogPostsFromRds(client, opts);
+      const rdsRows = rds && "rows" in rds ? rds.rows : [];
+      return applyPublicBlogListOpts(
+        mergeBlogPostsById(directRows, rdsRows, fallbackRows),
+        opts
+      );
     }
+
+    const fallbackRows = await loadPublicBlogFallbackRows(client);
+    const rds = await queryPublicBlogPostsFromRds(client, opts);
+    if (rds && "rows" in rds) {
+      return applyPublicBlogListOpts(
+        mergeBlogPostsById(fallbackRows, rds.rows),
+        opts
+      );
+    }
+
+    if (rds && "missingTable" in rds) {
+      return applyPublicBlogListOpts(fallbackRows, opts);
+    }
+
+    resetSiteBlogStorageCache();
+    const retryDirect = await fetchPublicBlogPostsViaDirectRest(opts);
+    if (retryDirect.length > 0) {
+      return applyPublicBlogListOpts(retryDirect, opts);
+    }
+
     return applyPublicBlogListOpts(fallbackRows, opts);
+  } catch (err) {
+    console.warn("[fetchPublicBlogPosts]", err);
+    const direct = await fetchPublicBlogPostsViaDirectRest(opts).catch(() => [] as SiteBlogPost[]);
+    return applyPublicBlogListOpts(direct, opts);
   }
-
-  // Transient REST error — merge fallback with a fresh RDS attempt (no table probe cache).
-  resetSiteBlogStorageCache();
-  const retry = await queryPublicBlogPostsFromRds(client, opts);
-  if (retry && "rows" in retry) {
-    return applyPublicBlogListOpts(
-      mergeBlogPostsById(fallbackRows, directRows, retry.rows),
-      opts
-    );
-  }
-
-  if (directRows.length > 0) {
-    return applyPublicBlogListOpts(mergeBlogPostsById(fallbackRows, directRows), opts);
-  }
-
-  return applyPublicBlogListOpts(fallbackRows, opts);
 }
 
 function findPublicBlogPostInFallback(
