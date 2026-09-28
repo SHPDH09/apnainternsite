@@ -320,8 +320,11 @@ export function slugifyBlogTitle(title: string): string {
     .slice(0, 80);
 }
 
-export function estimateReadMinutes(content: string): number {
-  const words = content.trim().split(/\s+/).filter(Boolean).length;
+export function estimateReadMinutes(content?: string | null): number {
+  const words = String(content ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
   return Math.max(1, Math.ceil(words / 200));
 }
 

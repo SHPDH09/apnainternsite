@@ -112,7 +112,7 @@ export default function Blog() {
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <Clock className="size-3" />
-                      {estimateReadMinutes(post.content)} min
+                      {estimateReadMinutes(post.content ?? post.excerpt)} min
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <Eye className="size-3" />
