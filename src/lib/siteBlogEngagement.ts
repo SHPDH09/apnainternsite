@@ -150,40 +150,11 @@ async function postBlogViaSendMail(
   return json;
 }
 
-async function postBlogViaInteractionApi(
-  body: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  const res = await fetch(apiUrl("/api/blog-interaction"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!res.ok || json.ok === false) {
-    throw new Error(String(json.message || json.error || `HTTP ${res.status}`));
-  }
-  return json;
-}
-
 async function postBlogInteraction(
   body: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   const action = String(body.action || "").trim() as BlogInteractionAction;
-  try {
-    return await postBlogViaSendMail(action, body);
-  } catch (primaryErr) {
-    try {
-      return await postBlogViaInteractionApi(body);
-    } catch (secondaryErr) {
-      const msg =
-        secondaryErr instanceof Error
-          ? secondaryErr.message
-          : primaryErr instanceof Error
-            ? primaryErr.message
-            : "Blog request failed";
-      throw new Error(msg);
-    }
-  }
+  return postBlogViaSendMail(action, body);
 }
 
 async function rpcFallback(
