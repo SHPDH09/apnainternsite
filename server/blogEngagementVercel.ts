@@ -1,6 +1,5 @@
 /**
- * Blog RDS helpers for Vercel serverless (api root — bundled with send-mail / blog-interaction).
- * Do not import from api/lib/* inside send-mail (Vercel omits those from the function bundle).
+ * Blog RDS helpers for Vercel send-mail (lives outside api/ — not deployed as its own route).
  */
 import type { QueryResultRow } from "pg";
 

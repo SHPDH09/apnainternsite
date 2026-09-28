@@ -3,7 +3,7 @@
  * Whitelisted on Vercel (not proxied to Lambda). Self-contained — no aws/server imports.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { blogEngagementQuery, ensureBlogEngagementSchema } from "./blogEngagementVercel.js";
+import { blogEngagementQuery, ensureBlogEngagementSchema } from "../server/blogEngagementVercel.js";
 
 function normalizePhone(raw: unknown): string {
   const digits = String(raw ?? "").replace(/\D/g, "");

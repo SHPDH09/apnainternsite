@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, randomUUID } from 'node:crypto';
-import { blogEngagementQuery } from './blogEngagementVercel.js';
+import { blogEngagementQuery } from '../server/blogEngagementVercel.js';
 
 /** Vercel serverless must not import api/lib/* (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
