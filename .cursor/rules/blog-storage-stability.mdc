@@ -8,4 +8,4 @@ When changing blog CMS or storage (`aws/server/s3-storage.ts`, `siteBlogApi.ts`,
 - **Preserve** `ensureSiteBlogStorage` trying S3 fallback **before** failing bootstrap.
 - **Do not replace** `streamS3Object` with redirect-only public URLs if that breaks private bucket reads.
 - If another task touches storage or admin blog UI, **leave blog storage routing and fallback logic unchanged** unless the user explicitly asks to modify blog storage again.
-- **Vercel deploy:** never add `!api/blog-interaction.ts` to `.vercelignore` — production deploys fail. Blog RDS on Vercel goes through **`/api/send-mail`** with **`api/lib/blogEngagementDb.ts`** (whitelisted in `.vercelignore`), not imports from `server/` (those break the send-mail bundle).
+- **Vercel deploy:** never add `!api/blog-interaction.ts` to `.vercelignore` — production deploys fail. Blog views/leads use **`/api/send-mail`** with dynamic `import('./lib/blogEngagementDb.js')` only inside blog actions (no top-level `api/lib` imports in send-mail). **Blog admin images** use self-contained **`/api/blog-upload-image`** (`!api/blog-upload-image.ts` in `.vercelignore`).

@@ -6,6 +6,7 @@ const VERCEL_ENSURE_API_PATHS = new Set([
   "/api/ensure-project-report-templates",
   "/api/staff-office-rpc",
   "/api/rds-apply-all",
+  "/api/blog-upload-image",
 ]);
 
 function upstreamPath(pathname: string): string {
