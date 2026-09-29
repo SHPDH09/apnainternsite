@@ -876,13 +876,14 @@ async function uploadBlogImageViaAdminApi(
 
   const origin = window.location.origin.replace(/\/$/, "");
   const image_base64 = await readFileAsDataUrl(file);
-  const res = await fetch(`${origin}/api/blog-upload-image`, {
+  const res = await fetch(`${origin}/api/send-mail`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      action: "blog_upload_image",
       post_id: postId,
       subfolder,
       file_name: file.name,

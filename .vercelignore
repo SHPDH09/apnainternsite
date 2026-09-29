@@ -8,7 +8,6 @@ cloudflare/
 # Whitelist OTP mail handlers + their RDS/SMTP dependencies.
 api/**
 !api/send-mail.ts
-!api/blog-upload-image.ts
 !api/otp-deliver.ts
 !api/request-otp.ts
 !api/auth/forgot-password.ts

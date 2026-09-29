@@ -714,10 +714,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (normalizedAction === 'blog_upload_image') {
-      return res.status(410).json({
-        ok: false,
-        message: 'Use POST /api/blog-upload-image for blog image uploads.',
-      });
+      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
+      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) {
+        return res.status(401).json({ ok: false, message: 'Authorization Bearer token required' });
+      }
+      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
+      const session = await verifyBearerSession(tokenMatch[1]);
+      if (!session?.sub) {
+        return res.status(401).json({ ok: false, message: 'Invalid or expired session' });
+      }
+      if (!process.env.DATABASE_URL?.trim()) {
+        return res.status(503).json({
+          ok: false,
+          message: 'DATABASE_URL is not configured on this deployment',
+        });
+      }
+      try {
+        const { blogEngagementQuery } = await import('./lib/blogEngagementDb.js');
+        const { rows: roleRows } = await blogEngagementQuery<{ role: string }>(
+          `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
+          [session.sub]
+        );
+        if (!roleRows.some((r) => r.role === 'admin' || r.role === 'super_admin')) {
+          return res.status(403).json({ ok: false, message: 'Admin privileges required.' });
+        }
+
+        const {
+          BLOG_IMAGE_VERCEL_MAX_BYTES,
+          decodeImageBase64,
+          uploadBlogImageToS3,
+        } = await import('./lib/blogMediaUpload.js');
+
+        const postId = String(body.post_id || '').trim();
+        const subfolderRaw = String(body.subfolder || 'content').trim().toLowerCase();
+        const subfolder = subfolderRaw === 'cover' ? 'cover' : 'content';
+        const fileName = String(body.file_name || 'image.jpg').trim();
+        const contentType = String(body.content_type || 'image/jpeg').trim();
+        const imageBase64 = String(body.image_base64 || '').trim();
+        if (!postId) {
+          return res.status(400).json({ ok: false, message: 'post_id required' });
+        }
+        if (!imageBase64) {
+          return res.status(400).json({ ok: false, message: 'image_base64 required' });
+        }
+
+        const imageBuffer = decodeImageBase64(imageBase64);
+        if (imageBuffer.length > BLOG_IMAGE_VERCEL_MAX_BYTES) {
+          return res.status(413).json({
+            ok: false,
+            message:
+              'Image is too large for upload through the site (max ~3 MB). Compress the image or use a smaller file.',
+          });
+        }
+        const result = await uploadBlogImageToS3({
+          postId,
+          subfolder,
+          fileName,
+          contentType,
+          imageBuffer,
+        });
+        return res.status(200).json({ ok: true, ...result });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail blog_upload_image]', message);
+        const status = /admin privileges|authorization|token/i.test(message) ? 403 : 500;
+        return res.status(status).json({ ok: false, message: message || 'Blog image upload failed' });
+      }
     }
 
     if (
