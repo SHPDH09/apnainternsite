@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveSupabaseAnonKey, resolveSupabaseUrl } from "@/lib/supabaseEnv";
-import { publicStorageObjectUrl, resolveStorageUrl } from "@/lib/storageUrl";
+import {
+  publicStorageObjectUrl,
+  resolveBlogMarkdownAssetUrl,
+  resolveStorageUrl,
+  rewriteBlogMarkdownImageUrls,
+} from "@/lib/storageUrl";
 import {
   createFallbackBlogPost,
   deleteFallbackBlogPost,
@@ -267,6 +272,18 @@ function mapCoverUrl(row: SiteBlogPost): SiteBlogPost {
   };
 }
 
+function mapPublicBlogPost(row: SiteBlogPost): SiteBlogPost {
+  const mapped = mapCoverUrl(row);
+  const coverRaw = mapped.cover_image_url || row.cover_image_url;
+  return {
+    ...mapped,
+    content: rewriteBlogMarkdownImageUrls(mapped.content),
+    cover_image_url: coverRaw
+      ? resolveBlogMarkdownAssetUrl(coverRaw) || resolveStorageUrl(coverRaw) || coverRaw
+      : null,
+  };
+}
+
 function sortBlogPosts(rows: SiteBlogPost[]): SiteBlogPost[] {
   return [...rows].sort((a, b) => {
     const featured = Number(b.is_featured) - Number(a.is_featured);
@@ -511,7 +528,7 @@ function findPublicBlogPostInFallback(
   return fetchFallbackPublicBlogPosts(client)
     .then((rows) =>
       rows
-        .map(mapCoverUrl)
+        .map(mapPublicBlogPost)
         .find((p) => p.slug.toLowerCase() === normalizedSlug) ?? null
     )
     .then((post) => (post && isBlogPostPublic(post) ? post : null))
@@ -538,7 +555,7 @@ async function fetchPublicBlogPostBySlugViaDirectRest(normalizedSlug: string): P
     if (!res.ok) return null;
     const data = (await res.json()) as SiteBlogPost[];
     if (!Array.isArray(data) || !data[0]) return null;
-    const post = mapCoverUrl({ ...data[0], view_count: data[0].view_count ?? 0 });
+    const post = mapPublicBlogPost({ ...data[0], view_count: data[0].view_count ?? 0 });
     return isBlogPostPublic(post) ? post : null;
   } catch {
     return null;
@@ -563,7 +580,7 @@ export async function fetchPublicBlogPostBySlug(
 
   if (!error && data) {
     setSiteBlogTableAvailableKnown(true);
-    const post = mapCoverUrl(data as SiteBlogPost);
+    const post = mapPublicBlogPost(data as SiteBlogPost);
     if (isBlogPostPublic(post)) return post;
   } else if (error && isSiteBlogTableMissing(error)) {
     setSiteBlogTableAvailableKnown(false);
@@ -585,7 +602,7 @@ export async function fetchPublicBlogPostBySlug(
         .maybeSingle()
     );
     if (!retryErr && retryData) {
-      const post = mapCoverUrl(retryData as SiteBlogPost);
+      const post = mapPublicBlogPost(retryData as SiteBlogPost);
       if (isBlogPostPublic(post)) return post;
     }
   }

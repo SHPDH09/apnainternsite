@@ -8,6 +8,9 @@ const VERCEL_ENSURE_API_PATHS = new Set([
   "/api/rds-apply-all",
 ]);
 
+/** RDS-backed blog images — served on Vercel (DATABASE_URL), not Lambda until redeployed. */
+const VERCEL_PUBLIC_GET_API_PATHS = new Set(["/api/public/blog-media"]);
+
 function upstreamPath(pathname: string): string {
   const stage = "/staging";
   if (pathname === stage || pathname.startsWith(`${stage}/`)) {
@@ -22,6 +25,11 @@ export async function tryProxyEnsureApiToVercel(
   env: { VERCEL_MAIL_ORIGIN?: string },
 ): Promise<Response | null> {
   const path = upstreamPath(new URL(request.url).pathname);
-  if (!VERCEL_ENSURE_API_PATHS.has(path)) return null;
-  return proxyRequestToVercel(request, env);
+  if (VERCEL_ENSURE_API_PATHS.has(path)) {
+    return proxyRequestToVercel(request, env);
+  }
+  if (VERCEL_PUBLIC_GET_API_PATHS.has(path) && request.method === "GET") {
+    return proxyRequestToVercel(request, env);
+  }
+  return null;
 }

@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { resolveBlogMarkdownAssetUrl } from "@/lib/storageUrl";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -35,7 +36,7 @@ export function BlogMarkdownContent({ content, className }: Props) {
           img: ({ src, alt, ...props }) => (
             <figure className="my-8">
               <img
-                src={src}
+                src={resolveBlogMarkdownAssetUrl(typeof src === "string" ? src : undefined) || src}
                 alt={alt || ""}
                 className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200/80 shadow-md"
                 loading="lazy"

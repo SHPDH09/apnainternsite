@@ -135,6 +135,25 @@ export function resolveStorageUrl(url: string | null | undefined): string | null
 }
 
 /** Build a public URL for a freshly uploaded object. */
+/** Blog inline images: RDS API paths, storage proxy, or legacy S3 URLs. */
+export function resolveBlogMarkdownAssetUrl(url: string | null | undefined): string | null {
+  if (!url?.trim()) return null;
+  const trimmed = url.trim();
+  if (trimmed.startsWith("/api/public/blog-media")) return trimmed;
+  if (trimmed.startsWith("api/public/blog-media")) return `/${trimmed.replace(/^\/+/, "")}`;
+  const resolved = resolveStorageUrl(trimmed);
+  return resolved || trimmed;
+}
+
+/** Rewrite markdown image targets so public blog posts load on production. */
+export function rewriteBlogMarkdownImageUrls(content: string): string {
+  if (!content?.trim()) return content;
+  return content.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_match, alt: string, url: string) => {
+    const resolved = resolveBlogMarkdownAssetUrl(url) || url;
+    return `![${alt}](${resolved})`;
+  });
+}
+
 export function publicStorageObjectUrl(appBucket: string, objectPath: string): string {
   const cleanPath = objectPath.replace(/^\/+/, "").split(/[?#]/)[0];
   const proxied = proxyPublicObjectUrl(appBucket, cleanPath);
