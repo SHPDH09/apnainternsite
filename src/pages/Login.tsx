@@ -24,12 +24,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { resolveDashboardPath } from "@/lib/resolveDashboardPath";
 import { signInStudentWithPassword } from "@/lib/studentAuthLogin";
 import { establishAdminAuthSession } from "@/lib/adminAuthSession";
-import {
-  requestAdminLoginOtp,
-  requiresAdminLoginOtp,
-  verifyAdminLoginOtp,
-} from "@/lib/adminLoginOtp";
-import { fetchRolesForUser } from "@/lib/portalAuth";
 import { isLocalDevEnvironment } from "@/lib/isLocalDev";
 import { finishPortalLoginAfterAuth } from "@/lib/finishPortalLogin";
 import {
@@ -69,7 +63,6 @@ const Login = () => {
   // /cybercafe/login is partner portal login (no student-sign-out flow).
   const isAdminLoginRoute =
     location.pathname === ADMIN_LOGIN_PATH || isCyberCafeLoginRoute;
-  /** /admin/login — email OTP only for admin / super_admin roles (not staff). */
   const isStaffPortalLogin = location.pathname === ADMIN_LOGIN_PATH;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -78,18 +71,6 @@ const Login = () => {
 
   const [loginLoading, setLoginLoading] = useState(false);
   const isStudentLoginRoute = location.pathname === STUDENT_LOGIN_PATH;
-
-  /** Admin portal: password verified → email OTP before session is kept (admin/super_admin only). */
-  const [adminLoginStep, setAdminLoginStep] = useState<"password" | "otp">("password");
-  const [adminPendingEmail, setAdminPendingEmail] = useState("");
-  const [adminPendingPassword, setAdminPendingPassword] = useState("");
-  const [adminOtp, setAdminOtp] = useState("");
-  const [adminOtpSending, setAdminOtpSending] = useState(false);
-  const [adminOtpSent, setAdminOtpSent] = useState(false);
-  const [adminDevOtp, setAdminDevOtp] = useState<string | null>(null);
-  const [adminOtpVerified, setAdminOtpVerified] = useState(false);
-  const [adminOtpError, setAdminOtpError] = useState(false);
-  const isLocalDev = isLocalDevEnvironment();
 
   // Captcha State
   const [captchaVerified, setCaptchaVerified] = useState(false);
@@ -226,63 +207,6 @@ const Login = () => {
     navigate(finish.destination);
   };
 
-  const sendAdminLoginOtp = async (targetEmail: string) => {
-    setAdminOtpSending(true);
-    try {
-      const sent = await requestAdminLoginOtp(supabase, targetEmail);
-      if (!sent.ok) throw sent.error;
-      const devCode =
-        sent.devOtp ??
-        (typeof window !== "undefined" ? window.sessionStorage.getItem("admin_login_otp") : null);
-      setAdminDevOtp(devCode);
-      setAdminOtpSent(true);
-      toast.success(
-        `Verification code sent to ${sent.email} from info@apnaintern.in. Check Inbox, Spam, and Promotions folders.`
-      );
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to send verification code";
-      toast.error(msg);
-    } finally {
-      setAdminOtpSending(false);
-    }
-  };
-
-  const handleAdminOtpVerify = async () => {
-    if (adminOtp.length !== 6) {
-      toast.error("Enter the 6-digit code from your email");
-      return;
-    }
-    if (!captchaVerified) {
-      toast.error("Please verify you are human");
-      return;
-    }
-    setAdminOtpError(false);
-    setAdminOtpVerified(false);
-    setLoginLoading(true);
-    try {
-      const valid = await verifyAdminLoginOtp(supabase, adminPendingEmail, adminOtp);
-      if (!valid) {
-        setAdminOtpError(true);
-        throw new Error("Invalid or expired code. Tap Resend code and try again.");
-      }
-      setAdminOtpVerified(true);
-      await waitForOtpVerifiedAnimation();
-      const signIn = await signInStudentWithPassword(
-        supabase,
-        adminPendingEmail,
-        adminPendingPassword
-      );
-      if (!signIn.ok) throw signIn.error;
-      setAdminPendingPassword("");
-      await completeAuthAndNavigate();
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Verification failed";
-      toast.error(msg);
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) { toast.error("Please enter credentials"); return; }
@@ -365,7 +289,7 @@ const Login = () => {
           );
           return;
         }
-        // If RPCs failed (proxy/network), continue — password + OTP will validate.
+        // If RPCs failed (proxy/network), continue — password sign-in will validate.
       }
 
       if (isStudentLoginRoute) {
@@ -392,18 +316,7 @@ const Login = () => {
               : msg
           );
         }
-        const roles = await fetchRolesForUser(supabase, signIn.session.user.id);
-        if (!requiresAdminLoginOtp(roles, normalizedEmail)) {
-          await completeAuthAndNavigate();
-          return;
-        }
-        await supabase.auth.signOut();
-        setAdminPendingEmail(normalizedEmail);
-        setAdminPendingPassword(password);
-        setAdminOtp("");
-        setAdminOtpSent(false);
-        setAdminLoginStep("otp");
-        await sendAdminLoginOtp(normalizedEmail);
+        await completeAuthAndNavigate();
         return;
       }
 
@@ -712,13 +625,13 @@ const Login = () => {
       : isReferralLoginRoute
         ? "Enter the email and login ID from your invitation to see who registered with your referral link."
         : isStaffPortalLogin
-          ? "Admin accounts: password then email OTP. Staff sign in with password only."
+          ? "Sign in with your email and password."
           : isAdminLoginRoute
             ? "For cyber café partners and authorised portal accounts"
             : "For enrolled students (intern dashboard) — email and password only";
 
   const loginBadge = isStaffPortalLogin
-    ? "Admin OTP verification"
+    ? "Admin secure access"
     : isStudentLoginRoute
       ? "Student secure access"
       : "Apna Intern portal";
@@ -728,49 +641,7 @@ const Login = () => {
       <SiteNav />
       <main className="flex-1">
         <LoginPremiumLayout title={loginTitle} subtitle={loginSubtitle} badge={loginBadge}>
-            {isStaffPortalLogin && adminLoginStep === "otp" ? (
-              <LoginOtpVerification
-                headline="Two-step verification"
-                description={
-                  adminOtpSent ? (
-                    <>
-                      Password verified for{" "}
-                      <span className="font-semibold text-slate-900">{adminPendingEmail}</span>. Enter the{" "}
-                      <strong>6-digit code</strong> sent to that inbox.
-                    </>
-                  ) : (
-                    <>Sending verification code to {adminPendingEmail}…</>
-                  )
-                }
-                otp={adminOtp}
-                onOtpChange={(value) => {
-                  setAdminOtp(value);
-                  setAdminOtpVerified(false);
-                  setAdminOtpError(false);
-                }}
-                onVerify={() => void handleAdminOtpVerify()}
-                loading={loginLoading}
-                verified={adminOtpVerified}
-                verifying={loginLoading && !adminOtpVerified}
-                error={adminOtpError}
-                sending={adminOtpSending}
-                captchaVerified={captchaVerified}
-                verifyingCaptcha={verifyingCaptcha}
-                onVerifyCaptcha={handleVerifyCaptcha}
-                onResend={() => void sendAdminLoginOtp(adminPendingEmail)}
-                devOtpHint={adminDevOtp}
-                onBack={() => {
-                  setAdminLoginStep("password");
-                  setAdminPendingPassword("");
-                  setAdminOtp("");
-                  setAdminOtpSent(false);
-                  setAdminDevOtp(null);
-                  setAdminOtpVerified(false);
-                  setAdminOtpError(false);
-                }}
-              />
-            ) : (
-              <form onSubmit={handleLogin} className="space-y-5">
+            <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-2">
                   <Label
                     htmlFor="email"
@@ -859,7 +730,6 @@ const Login = () => {
                   {isReferralLoginRoute ? "Sign in" : "Login"}
                 </Button>
               </form>
-            )}
 
             {/* PIN steps (create_pin / enter_pin) removed — see handleLogin + commented handlers below */}
 
