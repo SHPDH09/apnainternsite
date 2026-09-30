@@ -48,18 +48,43 @@ export async function uploadBlogImageToS3(input: {
   const safeName = String(input.fileName || "image")
     .replace(/[^\w.\-]+/g, "_")
     .slice(0, 180);
-  const path = `blog/${input.postId.trim()}/${input.subfolder}/${Date.now()}-${safeName}`;
+  const stamp = Date.now();
+  const pid = input.postId.trim();
+  const primary = `blog/${pid}/${input.subfolder}/${stamp}-${safeName}`;
+  const fallback = `staff-profiles/blog/${pid}/${input.subfolder}/${stamp}-${safeName}`;
+  const contentType = input.contentType || "application/octet-stream";
+
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error("Image upload is not configured on the server. Contact support.");
+  }
 
   const { PutObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
-  const s3 = new S3Client({ region: S3_REGION });
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: LOGOS_BUCKET,
-      Key: path,
-      Body: input.imageBuffer,
-      ContentType: input.contentType || "application/octet-stream",
-    })
-  );
+  const s3 = new S3Client({
+    region: S3_REGION,
+    credentials: { accessKeyId, secretAccessKey },
+  });
 
-  return { url: publicLogoObjectUrl(path), path };
+  const put = async (key: string) => {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: LOGOS_BUCKET,
+        Key: key,
+        Body: input.imageBuffer,
+        ContentType: contentType,
+      })
+    );
+    return key;
+  };
+
+  try {
+    const path = await put(primary);
+    return { url: publicLogoObjectUrl(path), path };
+  } catch (primaryErr) {
+    const msg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+    if (!/access denied|accessdenied|403/i.test(msg)) throw primaryErr;
+    const path = await put(fallback);
+    return { url: publicLogoObjectUrl(path), path };
+  }
 }

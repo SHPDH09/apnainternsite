@@ -145,6 +145,54 @@ function publicBlogLogoUrl(objectKey: string): string {
     .join('/')}`;
 }
 
+function blogImageObjectKeys(input: {
+  postId: string;
+  subfolder: 'cover' | 'content';
+  fileName: string;
+}): { primary: string; fallback: string } {
+  const safeName = String(input.fileName || 'image')
+    .replace(/[^\w.\-]+/g, '_')
+    .slice(0, 180);
+  const stamp = Date.now();
+  const pid = input.postId.trim();
+  return {
+    primary: `blog/${pid}/${input.subfolder}/${stamp}-${safeName}`,
+    /** Vercel SMTP/IAM user often has PutObject only under staff-profiles/* (face photos). */
+    fallback: `staff-profiles/blog/${pid}/${input.subfolder}/${stamp}-${safeName}`,
+  };
+}
+
+async function putBlogImageObject(
+  objectKey: string,
+  imageBuffer: Buffer,
+  contentType: string
+): Promise<void> {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error('Image upload is not configured on the server. Contact support.');
+  }
+  const { PutObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+  const s3 = new S3Client({
+    region: BLOG_S3_REGION,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BLOG_LOGOS_BUCKET,
+      Key: objectKey,
+      Body: imageBuffer,
+      ContentType: contentType || 'application/octet-stream',
+    })
+  );
+}
+
+function isS3AccessDenied(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  const name = err && typeof err === 'object' && 'name' in err ? String((err as { name?: string }).name) : '';
+  return /access denied|accessdenied|403/i.test(msg) || name === 'AccessDenied';
+}
+
 async function uploadBlogImageToS3Inline(input: {
   postId: string;
   subfolder: 'cover' | 'content';
@@ -152,28 +200,31 @@ async function uploadBlogImageToS3Inline(input: {
   contentType: string;
   imageBuffer: Buffer;
 }): Promise<{ url: string; path: string }> {
-  if (!process.env.AWS_ACCESS_KEY_ID?.trim() || !process.env.AWS_SECRET_ACCESS_KEY?.trim()) {
-    throw new Error('Image upload is not configured on the server. Contact support.');
-  }
   const ct = (input.contentType || '').toLowerCase();
   if (!ct.startsWith('image/')) {
     throw new Error('Please upload an image file (JPG, PNG, WebP, etc.).');
   }
-  const safeName = String(input.fileName || 'image')
-    .replace(/[^\w.\-]+/g, '_')
-    .slice(0, 180);
-  const path = `blog/${input.postId.trim()}/${input.subfolder}/${Date.now()}-${safeName}`;
-  const { PutObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-  const s3 = new S3Client({ region: BLOG_S3_REGION });
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: BLOG_LOGOS_BUCKET,
-      Key: path,
-      Body: input.imageBuffer,
-      ContentType: input.contentType || 'application/octet-stream',
-    })
-  );
-  return { url: publicBlogLogoUrl(path), path };
+  const keys = blogImageObjectKeys(input);
+  const contentType = input.contentType || 'application/octet-stream';
+
+  try {
+    await putBlogImageObject(keys.primary, input.imageBuffer, contentType);
+    return { url: publicBlogLogoUrl(keys.primary), path: keys.primary };
+  } catch (primaryErr) {
+    if (!isS3AccessDenied(primaryErr)) throw primaryErr;
+    console.warn('[blog_upload_image] primary S3 key denied, trying staff-profiles/blog prefix');
+    try {
+      await putBlogImageObject(keys.fallback, input.imageBuffer, contentType);
+      return { url: publicBlogLogoUrl(keys.fallback), path: keys.fallback };
+    } catch (fallbackErr) {
+      const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+      throw new Error(
+        isS3AccessDenied(fallbackErr)
+          ? 'Image upload blocked by storage permissions. Ask support to allow S3 PutObject for blog/ on the logos bucket.'
+          : msg
+      );
+    }
+  }
 }
 
 /** Vercel serverless must not import api/lib/* at module load (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
