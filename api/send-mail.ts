@@ -149,16 +149,22 @@ function blogImageObjectKeys(input: {
   postId: string;
   subfolder: 'cover' | 'content';
   fileName: string;
+  /** Admin user id — used for IAM-friendly keys (same pattern as staff face photos). */
+  uploaderId?: string;
 }): { primary: string; fallback: string } {
   const safeName = String(input.fileName || 'image')
     .replace(/[^\w.\-]+/g, '_')
     .slice(0, 180);
   const stamp = Date.now();
-  const pid = input.postId.trim();
+  const pid = input.postId.trim().replace(/[^\w.\-]+/g, '_').slice(0, 64);
+  const uploader = String(input.uploaderId || pid)
+    .trim()
+    .replace(/[^\w.\-]+/g, '_')
+    .slice(0, 64);
   return {
     primary: `blog/${pid}/${input.subfolder}/${stamp}-${safeName}`,
-    /** Vercel SMTP/IAM user often has PutObject only under staff-profiles/* (face photos). */
-    fallback: `staff-profiles/blog/${pid}/${input.subfolder}/${stamp}-${safeName}`,
+    /** Vercel IAM often allows only flat keys like staff-profiles/{id}-face-*.jpg (not staff-profiles/blog/...). */
+    fallback: `staff-profiles/${uploader}-blog-${input.subfolder}-${stamp}-${safeName}`,
   };
 }
 
@@ -199,6 +205,7 @@ async function uploadBlogImageToS3Inline(input: {
   fileName: string;
   contentType: string;
   imageBuffer: Buffer;
+  uploaderId?: string;
 }): Promise<{ url: string; path: string }> {
   const ct = (input.contentType || '').toLowerCase();
   if (!ct.startsWith('image/')) {
@@ -212,7 +219,7 @@ async function uploadBlogImageToS3Inline(input: {
     return { url: publicBlogLogoUrl(keys.primary), path: keys.primary };
   } catch (primaryErr) {
     if (!isS3AccessDenied(primaryErr)) throw primaryErr;
-    console.warn('[blog_upload_image] primary S3 key denied, trying staff-profiles/blog prefix');
+    console.warn('[blog_upload_image] primary S3 key denied, trying staff-profiles flat prefix');
     try {
       await putBlogImageObject(keys.fallback, input.imageBuffer, contentType);
       return { url: publicBlogLogoUrl(keys.fallback), path: keys.fallback };
@@ -220,7 +227,7 @@ async function uploadBlogImageToS3Inline(input: {
       const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
       throw new Error(
         isS3AccessDenied(fallbackErr)
-          ? 'Image upload blocked by storage permissions. Ask support to allow S3 PutObject for blog/ on the logos bucket.'
+          ? 'Image upload blocked by storage permissions. Contact support to verify S3 PutObject on the logos bucket.'
           : msg
       );
     }
@@ -1028,6 +1035,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           fileName,
           contentType,
           imageBuffer,
+          uploaderId: session.sub,
         });
         return res.status(200).json({ ok: true, ...result });
       } catch (err) {

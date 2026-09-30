@@ -30,6 +30,8 @@ export async function uploadBlogImageToS3(input: {
   fileName: string;
   contentType: string;
   imageBuffer: Buffer;
+  /** Admin user id for IAM-friendly fallback keys (staff-profiles/{id}-blog-...). */
+  uploaderId?: string;
 }): Promise<{ url: string; path: string }> {
   if (!process.env.AWS_ACCESS_KEY_ID?.trim() || !process.env.AWS_SECRET_ACCESS_KEY?.trim()) {
     throw new Error("Image upload is not configured on the server. Contact support.");
@@ -50,8 +52,13 @@ export async function uploadBlogImageToS3(input: {
     .slice(0, 180);
   const stamp = Date.now();
   const pid = input.postId.trim();
-  const primary = `blog/${pid}/${input.subfolder}/${stamp}-${safeName}`;
-  const fallback = `staff-profiles/blog/${pid}/${input.subfolder}/${stamp}-${safeName}`;
+  const safePid = pid.replace(/[^\w.\-]+/g, "_").slice(0, 64);
+  const uploader = String(input.uploaderId || safePid)
+    .trim()
+    .replace(/[^\w.\-]+/g, "_")
+    .slice(0, 64);
+  const primary = `blog/${safePid}/${input.subfolder}/${stamp}-${safeName}`;
+  const fallback = `staff-profiles/${uploader}-blog-${input.subfolder}-${stamp}-${safeName}`;
   const contentType = input.contentType || "application/octet-stream";
 
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
