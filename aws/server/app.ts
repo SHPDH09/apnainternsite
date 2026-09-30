@@ -20,6 +20,7 @@ import rpcByName from "../../api/rpc-call";
 import dataSelect from "../../api/data-select";
 import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
 import ensureBlogCms from "../../api/ensure-blog-cms";
+import publicBlogMedia from "../../api/public-blog-media";
 import ensureDashboardServiceKeys from "../../api/ensure-dashboard-service-keys";
 import ensureProjectReportTemplates from "../../api/ensure-project-report-templates";
 import ensurePartnerApplications from "../../api/ensure-partner-applications";
@@ -265,6 +266,7 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/payment/verify", handler: paymentVerify },
     { method: "post", path: "/api/payment/webhook", handler: paymentWebhook },
     { method: "get", path: "/api/payment/status", handler: paymentStatus },
+    { method: "get", path: "/api/public/blog-media", handler: publicBlogMedia },
   ];
 
   if (process.env.NODE_ENV !== "production") {

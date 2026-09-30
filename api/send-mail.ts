@@ -32,6 +32,19 @@ ALTER TABLE public.site_blog_leads
 
 ALTER TABLE public.site_blog_leads
   ADD COLUMN IF NOT EXISTS device_info jsonb;
+
+CREATE TABLE IF NOT EXISTS public.site_blog_media_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id uuid NOT NULL,
+  subfolder text NOT NULL DEFAULT 'content',
+  file_name text,
+  content_type text NOT NULL DEFAULT 'application/octet-stream',
+  data bytea NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_site_blog_media_post
+  ON public.site_blog_media_assets (post_id);
 `;
 
 const BLOG_S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'ap-south-1';
@@ -199,6 +212,41 @@ function isS3AccessDenied(err: unknown): boolean {
   return /access denied|accessdenied|403/i.test(msg) || name === 'AccessDenied';
 }
 
+function resolvePublicSiteOrigin(): string {
+  const candidates = [
+    process.env.PUBLIC_SITE_URL,
+    process.env.SITE_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    process.env.VERCEL_URL,
+  ];
+  for (const raw of candidates) {
+    const v = String(raw || '').trim().replace(/\/$/, '');
+    if (!v) continue;
+    if (v.startsWith('http://') || v.startsWith('https://')) return v;
+    return `https://${v}`;
+  }
+  return 'https://apnaintern.in';
+}
+
+async function uploadBlogImageToRdsInline(input: {
+  postId: string;
+  subfolder: 'cover' | 'content';
+  fileName: string;
+  contentType: string;
+  imageBuffer: Buffer;
+}): Promise<{ url: string; path: string }> {
+  const id = randomUUID();
+  const contentType = input.contentType || 'application/octet-stream';
+  await blogEngagementQuery(
+    `INSERT INTO public.site_blog_media_assets (id, post_id, subfolder, file_name, content_type, data)
+     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::bytea)`,
+    [id, input.postId, input.subfolder, input.fileName, contentType, input.imageBuffer]
+  );
+  const origin = resolvePublicSiteOrigin();
+  const url = `${origin}/api/public/blog-media?id=${encodeURIComponent(id)}`;
+  return { url, path: `rds:site_blog_media_assets/${id}` };
+}
+
 async function uploadBlogImageToS3Inline(input: {
   postId: string;
   subfolder: 'cover' | 'content';
@@ -224,12 +272,17 @@ async function uploadBlogImageToS3Inline(input: {
       await putBlogImageObject(keys.fallback, input.imageBuffer, contentType);
       return { url: publicBlogLogoUrl(keys.fallback), path: keys.fallback };
     } catch (fallbackErr) {
-      const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-      throw new Error(
-        isS3AccessDenied(fallbackErr)
-          ? 'Image upload blocked by storage permissions. Contact support to verify S3 PutObject on the logos bucket.'
-          : msg
-      );
+      if (!isS3AccessDenied(fallbackErr)) {
+        const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        throw new Error(msg);
+      }
+      console.warn('[blog_upload_image] S3 denied; storing image in RDS');
+      try {
+        return await uploadBlogImageToRdsInline(input);
+      } catch (rdsErr) {
+        const msg = rdsErr instanceof Error ? rdsErr.message : String(rdsErr);
+        throw new Error(msg || 'Blog image upload failed');
+      }
     }
   }
 }

@@ -9,3 +9,4 @@ When changing blog CMS or storage (`aws/server/s3-storage.ts`, `siteBlogApi.ts`,
 - **Do not replace** `streamS3Object` with redirect-only public URLs if that breaks private bucket reads.
 - If another task touches storage or admin blog UI, **leave blog storage routing and fallback logic unchanged** unless the user explicitly asks to modify blog storage again.
 - **Vercel deploy:** never add `!api/blog-interaction.ts` or extra standalone upload routes to `.vercelignore`. Blog views/leads/images use **`/api/send-mail`** with **inline** RDS/S3 helpers in `send-mail.ts` (do not `import('./lib/...')` at runtime — `api/lib` is not on disk in the send-mail bundle).
+- When Vercel IAM cannot **PutObject** to S3, **`blog_upload_image`** falls back to **`site_blog_media_assets`** in RDS; public URLs are **`GET /api/public/blog-media?id=`** (Lambda route, not a new Vercel function).
