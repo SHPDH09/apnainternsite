@@ -234,27 +234,62 @@ function buildOtpMail(otp: string, purpose: OtpPurpose): { subject: string; html
   return { subject: copy.subject, html, text };
 }
 
+async function storeOtpViaPg(email: string, otp: string, expiresAt: string): Promise<void> {
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL is not configured for OTP storage');
+  }
+  const pg = await import('pg');
+  const pool = new pg.default.Pool({
+    connectionString: databaseUrl
+      .replace(/([?&])sslmode=[^&]*/gi, '$1')
+      .replace(/[?&]$/, ''),
+    ssl: /rds\.amazonaws\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+    max: 1,
+    connectionTimeoutMillis: 15000,
+  });
+  try {
+    await pool.query(
+      `INSERT INTO public.password_resets (id, email, otp, expires_at)
+       VALUES ($1::uuid, $2, $3, $4::timestamptz)`,
+      [randomUUID(), email, otp, expiresAt]
+    );
+  } finally {
+    await pool.end();
+  }
+}
+
 async function storeOtp(email: string, otp: string): Promise<void> {
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-  const res = await fetch(RDS_REST, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: REST_KEY,
-      Authorization: `Bearer ${REST_KEY}`,
-      Prefer: 'return=minimal',
-    },
-    body: JSON.stringify({
-      id: randomUUID(),
-      email,
-      otp,
-      expires_at: expiresAt,
-    }),
-  });
-  if (!res.ok) {
+  const row = {
+    id: randomUUID(),
+    email,
+    otp,
+    expires_at: expiresAt,
+  };
+
+  try {
+    const res = await fetch(RDS_REST, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: REST_KEY,
+        Authorization: `Bearer ${REST_KEY}`,
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(row),
+    });
+    if (res.ok) return;
     const detail = await res.text().catch(() => '');
-    throw new Error(detail.trim().slice(0, 240) || `Could not store OTP (${res.status})`);
+    console.warn('[otp-deliver] REST password_resets insert failed:', res.status, detail.slice(0, 120));
+  } catch (restErr) {
+    console.warn(
+      '[otp-deliver] REST password_resets unreachable:',
+      restErr instanceof Error ? restErr.message : restErr
+    );
   }
+
+  await storeOtpViaPg(email, otp, expiresAt);
 }
 
 function isSmtpAuthError(e: unknown): boolean {
@@ -298,9 +333,17 @@ async function sendOtpViaSesApi(
   to: string,
   mail: { subject: string; html: string; text: string }
 ): Promise<string> {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error('AWS credentials missing for SES');
+  }
   const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
   const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
-  const client = new SESv2Client({ region });
+  const client = new SESv2Client({
+    region,
+    credentials: { accessKeyId, secretAccessKey },
+  });
   const fromAddress = resolveMailFromAddress();
 
   const result = await client.send(
@@ -415,16 +458,7 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
   const mail = buildOtpMail(otp, purpose);
   const errors: string[] = [];
 
-  // Primary: Hostinger mailbox SMTP (when outbound is enabled).
-  const mailboxResult = await trySmtpCandidates(
-    await collectSmtpCandidatesForOtp(),
-    email,
-    mail,
-    errors
-  );
-  if (mailboxResult) return mailboxResult;
-
-  // Fallback: Amazon SES (200/day sandbox — recipient must be verified in SES until Production Access).
+  // Primary: Amazon SES (ap-south-1) when identities like info@apnaintern.in are verified.
   if (canUseSesForOtp()) {
     try {
       const messageId = await sendOtpViaSesApi(email, mail);
@@ -440,9 +474,18 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
     }
   }
 
+  // Fallback: Hostinger mailbox SMTP.
+  const mailboxResult = await trySmtpCandidates(
+    await collectSmtpCandidatesForOtp(),
+    email,
+    mail,
+    errors
+  );
+  if (mailboxResult) return mailboxResult;
+
   throw new Error(
     errors.join(' | ') ||
-      'Failed to send verification email. Hostinger SMTP is disabled and Amazon SES is not configured.'
+      'Failed to send verification email. Check Amazon SES (ap-south-1) and SMTP settings on Vercel.'
   );
 }
 

@@ -448,9 +448,17 @@ async function sendOtpViaSesApi(
   recipient: string,
   mailContent: { subject: string; html: string; text: string }
 ): Promise<string> {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error('AWS credentials missing for SES');
+  }
   const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
   const region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
-  const client = new SESv2Client({ region });
+  const client = new SESv2Client({
+    region,
+    credentials: { accessKeyId, secretAccessKey },
+  });
   const fromAddress = resolveMailFromAddress();
   const result = await client.send(
     new SendEmailCommand({
@@ -521,24 +529,55 @@ const RDS_REST =
 const REST_KEY = process.env.RDS_ANON_KEY?.trim() || 'local-anon-key';
 
 async function storeOtpInRds(normalizedEmail: string, code: string): Promise<void> {
-  const res = await fetch(RDS_REST, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: REST_KEY,
-      Authorization: `Bearer ${REST_KEY}`,
-      Prefer: 'return=minimal',
-    },
-    body: JSON.stringify({
-      id: randomUUID(),
-      email: normalizedEmail,
-      otp: code,
-      expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-    }),
-  });
-  if (!res.ok) {
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const id = randomUUID();
+  try {
+    const res = await fetch(RDS_REST, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: REST_KEY,
+        Authorization: `Bearer ${REST_KEY}`,
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        id,
+        email: normalizedEmail,
+        otp: code,
+        expires_at: expiresAt,
+      }),
+    });
+    if (res.ok) return;
     const detail = await res.text().catch(() => '');
-    throw new Error(detail.trim().slice(0, 240) || `Could not store OTP (${res.status})`);
+    console.warn('[send-mail] REST password_resets failed:', res.status, detail.slice(0, 120));
+  } catch (restErr) {
+    console.warn(
+      '[send-mail] REST password_resets unreachable:',
+      restErr instanceof Error ? restErr.message : restErr
+    );
+  }
+
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    throw new Error('Could not store OTP — DATABASE_URL is not configured');
+  }
+  const pg = await import('pg');
+  const pool = new pg.default.Pool({
+    connectionString: databaseUrl
+      .replace(/([?&])sslmode=[^&]*/gi, '$1')
+      .replace(/[?&]$/, ''),
+    ssl: /rds\.amazonaws\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+    max: 1,
+    connectionTimeoutMillis: 15000,
+  });
+  try {
+    await pool.query(
+      `INSERT INTO public.password_resets (id, email, otp, expires_at)
+       VALUES ($1::uuid, $2, $3, $4::timestamptz)`,
+      [id, normalizedEmail, code, expiresAt]
+    );
+  } finally {
+    await pool.end();
   }
 }
 
@@ -1089,16 +1128,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let messageId = '';
         let channel: 'smtp' | 'ses' = 'smtp';
 
-        try {
-          messageId = await sendOtpViaSmtp(recipient, mailContent);
-        } catch (smtpErr) {
-          console.warn('SMTP OTP failed, trying Amazon SES:', smtpErr instanceof Error ? smtpErr.message : smtpErr);
-          if (canUseSesForOtp()) {
+        if (canUseSesForOtp()) {
+          try {
             messageId = await sendOtpViaSesApi(recipient, mailContent);
             channel = 'ses';
-          } else {
-            throw smtpErr;
+          } catch (sesErr) {
+            console.warn('SES OTP failed, trying SMTP:', sesErr instanceof Error ? sesErr.message : sesErr);
+            messageId = await sendOtpViaSmtp(recipient, mailContent);
+            channel = 'smtp';
           }
+        } else {
+          messageId = await sendOtpViaSmtp(recipient, mailContent);
         }
 
         if (!String(messageId || '').trim()) {
@@ -1151,7 +1191,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const mailSender = smtpCreds.fromAddress;
     const fastOtpMail =
       normalizedAction === 'login_otp' || normalizedAction === 'send_otp';
-    // OTP always uses Hostinger/mailbox SMTP — never AWS SES.
     const useSesApi = fastOtpMail ? false : canUseSesApi();
 
     if (!useSesApi && (!SMTP_USER || !SMTP_PASS)) {
@@ -1457,19 +1496,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (fastOtpMail) {
       const toAddr = String(mailOptions.to || '').trim();
+      const mailContent = {
+        subject: String(mailOptions.subject || ''),
+        html: String(mailOptions.html || ''),
+        text: String(mailOptions.text || ''),
+      };
       try {
-        const messageId = await sendOtpViaSmtp(toAddr, {
-          subject: String(mailOptions.subject || ''),
-          html: String(mailOptions.html || ''),
-          text: String(mailOptions.text || ''),
-        });
+        let messageId = '';
+        let channel: 'smtp' | 'ses' = 'smtp';
+        if (canUseSesForOtp()) {
+          try {
+            messageId = await sendOtpViaSesApi(toAddr, mailContent);
+            channel = 'ses';
+          } catch (sesErr) {
+            console.warn('SES login_otp failed, trying SMTP:', sesErr instanceof Error ? sesErr.message : sesErr);
+            messageId = await sendOtpViaSmtp(toAddr, mailContent);
+          }
+        } else {
+          messageId = await sendOtpViaSmtp(toAddr, mailContent);
+        }
         return res.status(200).json({
           success: true,
           emailSent: true,
           email: toAddr,
-          channel: 'smtp',
+          channel,
           messageId,
-          message: `Verification code sent to ${toAddr} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
+          message:
+            channel === 'ses'
+              ? `Verification code sent to ${toAddr} via Amazon SES from info@apnaintern.in. Check Inbox and Spam/Promotions.`
+              : `Verification code sent to ${toAddr} from info@apnaintern.in. Check Inbox and Spam/Promotions.`,
         });
       } catch (e) {
         if (isMailboxSuspendedError(e)) {
