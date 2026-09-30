@@ -1,6 +1,181 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, randomUUID } from 'node:crypto';
 
+/** Inline blog RDS + S3 — api/lib is not on disk in the send-mail Lambda bundle on Vercel. */
+const BLOG_ENGAGEMENT_BOOTSTRAP_SQL = `
+ALTER TABLE public.site_blog_posts
+  ADD COLUMN IF NOT EXISTS view_count bigint NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS public.site_blog_leads (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id uuid REFERENCES public.site_blog_posts (id) ON DELETE SET NULL,
+  post_slug text,
+  post_title text,
+  full_name text NOT NULL DEFAULT '',
+  email text NOT NULL DEFAULT '',
+  phone text NOT NULL DEFAULT '',
+  college_name text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_site_blog_leads_created
+  ON public.site_blog_leads (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_site_blog_leads_phone
+  ON public.site_blog_leads (phone);
+
+CREATE INDEX IF NOT EXISTS idx_site_blog_leads_post
+  ON public.site_blog_leads (post_id);
+
+ALTER TABLE public.site_blog_leads
+  ADD COLUMN IF NOT EXISTS device_id text;
+
+ALTER TABLE public.site_blog_leads
+  ADD COLUMN IF NOT EXISTS device_info jsonb;
+`;
+
+const BLOG_S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'ap-south-1';
+const BLOG_LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || 'ezyintern-staging-logos';
+const BLOG_IMAGE_VERCEL_MAX_BYTES = 3_300_000;
+
+let blogEngPool: import('pg').Pool | null = null;
+let blogEngReady: Promise<void> | null = null;
+
+function blogPgPoolConfig(databaseUrl: string) {
+  return {
+    connectionString: databaseUrl
+      .replace(/([?&])sslmode=[^&]*/gi, '$1')
+      .replace(/[?&]$/, ''),
+    ssl: /rds\.amazonaws\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+    max: 1,
+    connectionTimeoutMillis: 20000,
+  };
+}
+
+async function getBlogEngPool(): Promise<import('pg').Pool> {
+  if (blogEngPool) return blogEngPool;
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL is not configured on this deployment');
+  }
+  const pg = await import('pg');
+  blogEngPool = new pg.default.Pool(blogPgPoolConfig(databaseUrl));
+  return blogEngPool;
+}
+
+async function ensureBlogEngagementSchema(): Promise<void> {
+  if (!blogEngReady) {
+    blogEngReady = (async () => {
+      const p = await getBlogEngPool();
+      await p.query(BLOG_ENGAGEMENT_BOOTSTRAP_SQL);
+    })();
+  }
+  await blogEngReady;
+}
+
+async function blogEngagementQuery<T extends Record<string, unknown> = Record<string, unknown>>(
+  text: string,
+  params?: unknown[]
+) {
+  await ensureBlogEngagementSchema();
+  const p = await getBlogEngPool();
+  return p.query<T>(text, params);
+}
+
+async function verifyBearerSessionInline(
+  token: string
+): Promise<{ sub: string; email?: string } | null> {
+  const trimmed = token.trim();
+  if (!trimmed) return null;
+  try {
+    const jwt = await import('jsonwebtoken');
+    const secret =
+      process.env.LOCAL_JWT_SECRET ||
+      process.env.JWT_SECRET ||
+      'ezyintern-local-dev-secret-change-me';
+    const payload = jwt.default.verify(trimmed, secret, {
+      issuer: 'ezyintern-local',
+    }) as { sub?: string; email?: string };
+    if (payload?.sub) {
+      return {
+        sub: String(payload.sub),
+        email: payload.email ? String(payload.email) : undefined,
+      };
+    }
+  } catch {
+    /* Lambda auth fallback */
+  }
+  const lambdaAuth =
+    process.env.LAMBDA_API_URL?.trim()?.replace(/\/$/, '') ||
+    'https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging';
+  try {
+    const res = await fetch(`${lambdaAuth}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${trimmed}` },
+    });
+    if (!res.ok) return null;
+    const user = (await res.json().catch(() => null)) as {
+      id?: string;
+      sub?: string;
+      email?: string;
+    } | null;
+    const sub = user?.id || user?.sub;
+    if (!sub) return null;
+    return {
+      sub: String(sub),
+      email: user?.email ? String(user.email) : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function decodeBlogImageBase64(raw: string): Buffer {
+  const trimmed = raw.trim();
+  const data = trimmed.includes(',') ? trimmed.split(',').pop() || '' : trimmed;
+  const buf = Buffer.from(data, 'base64');
+  if (buf.length < 8) throw new Error('Invalid image data');
+  return buf;
+}
+
+function publicBlogLogoUrl(objectKey: string): string {
+  const key = objectKey.replace(/^\/+/, '');
+  return `https://${BLOG_LOGOS_BUCKET}.s3.${BLOG_S3_REGION}.amazonaws.com/${key
+    .split('/')
+    .map((p) => encodeURIComponent(p))
+    .join('/')}`;
+}
+
+async function uploadBlogImageToS3Inline(input: {
+  postId: string;
+  subfolder: 'cover' | 'content';
+  fileName: string;
+  contentType: string;
+  imageBuffer: Buffer;
+}): Promise<{ url: string; path: string }> {
+  if (!process.env.AWS_ACCESS_KEY_ID?.trim() || !process.env.AWS_SECRET_ACCESS_KEY?.trim()) {
+    throw new Error('Image upload is not configured on the server. Contact support.');
+  }
+  const ct = (input.contentType || '').toLowerCase();
+  if (!ct.startsWith('image/')) {
+    throw new Error('Please upload an image file (JPG, PNG, WebP, etc.).');
+  }
+  const safeName = String(input.fileName || 'image')
+    .replace(/[^\w.\-]+/g, '_')
+    .slice(0, 180);
+  const path = `blog/${input.postId.trim()}/${input.subfolder}/${Date.now()}-${safeName}`;
+  const { PutObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+  const s3 = new S3Client({ region: BLOG_S3_REGION });
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BLOG_LOGOS_BUCKET,
+      Key: path,
+      Body: input.imageBuffer,
+      ContentType: input.contentType || 'application/octet-stream',
+    })
+  );
+  return { url: publicBlogLogoUrl(path), path };
+}
+
 /** Vercel serverless must not import api/lib/* at module load (FUNCTION_INVOCATION_FAILED). SMTP helpers inlined below. */
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
 const DEFAULT_SMTP_HOST = 'smtp.hostinger.com';
@@ -570,8 +745,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!tokenMatch) {
         return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
       }
-      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
-      const session = await verifyBearerSession(tokenMatch[1]);
+      const session = await verifyBearerSessionInline(tokenMatch[1]);
       if (!session?.sub) {
         return res.status(401).json({ success: false, message: 'Invalid or expired session' });
       }
@@ -601,7 +775,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(503).json({ ok: false, message: 'DATABASE_URL is not configured on this deployment' });
       }
       try {
-        const { blogEngagementQuery } = await import('./lib/blogEngagementDb.js');
         const postId = String(body.post_id || '').trim();
 
         if (normalizedAction === 'blog_increment_view') {
@@ -719,8 +892,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!tokenMatch) {
         return res.status(401).json({ ok: false, message: 'Authorization Bearer token required' });
       }
-      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
-      const session = await verifyBearerSession(tokenMatch[1]);
+      const session = await verifyBearerSessionInline(tokenMatch[1]);
       if (!session?.sub) {
         return res.status(401).json({ ok: false, message: 'Invalid or expired session' });
       }
@@ -731,7 +903,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       try {
-        const { blogEngagementQuery } = await import('./lib/blogEngagementDb.js');
         const { rows: roleRows } = await blogEngagementQuery<{ role: string }>(
           `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
           [session.sub]
@@ -739,12 +910,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!roleRows.some((r) => r.role === 'admin' || r.role === 'super_admin')) {
           return res.status(403).json({ ok: false, message: 'Admin privileges required.' });
         }
-
-        const {
-          BLOG_IMAGE_VERCEL_MAX_BYTES,
-          decodeImageBase64,
-          uploadBlogImageToS3,
-        } = await import('./lib/blogMediaUpload.js');
 
         const postId = String(body.post_id || '').trim();
         const subfolderRaw = String(body.subfolder || 'content').trim().toLowerCase();
@@ -759,7 +924,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ ok: false, message: 'image_base64 required' });
         }
 
-        const imageBuffer = decodeImageBase64(imageBase64);
+        const imageBuffer = decodeBlogImageBase64(imageBase64);
         if (imageBuffer.length > BLOG_IMAGE_VERCEL_MAX_BYTES) {
           return res.status(413).json({
             ok: false,
@@ -767,7 +932,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               'Image is too large for upload through the site (max ~3 MB). Compress the image or use a smaller file.',
           });
         }
-        const result = await uploadBlogImageToS3({
+        const result = await uploadBlogImageToS3Inline({
           postId,
           subfolder,
           fileName,
@@ -792,8 +957,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!tokenMatch) {
         return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
       }
-      const { verifyBearerSession } = await import('./lib/verifyBearerSession.js');
-      const session = await verifyBearerSession(tokenMatch[1]);
+      const session = await verifyBearerSessionInline(tokenMatch[1]);
       if (!session?.sub) {
         return res.status(401).json({ success: false, message: 'Invalid or expired session' });
       }
