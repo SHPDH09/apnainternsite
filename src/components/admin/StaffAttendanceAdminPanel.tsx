@@ -297,6 +297,7 @@ export function StaffAttendanceAdminPanel({ employees, currentUserId, isActive =
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Address</TableHead>
                     <TableHead>Coordinates</TableHead>
                     <TableHead>Radius</TableHead>
                     <TableHead>Anti-cheat</TableHead>
@@ -307,14 +308,14 @@ export function StaffAttendanceAdminPanel({ employees, currentUserId, isActive =
                 <TableBody>
                   {loading && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         <Loader2 className="size-5 animate-spin inline mr-2" /> Loading…
                       </TableCell>
                     </TableRow>
                   )}
                   {!loading && offices.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         No offices configured yet. Add your first office location.
                       </TableCell>
                     </TableRow>
@@ -324,9 +325,13 @@ export function StaffAttendanceAdminPanel({ employees, currentUserId, isActive =
                       <TableRow key={o.id}>
                         <TableCell>
                           <p className="font-medium">{o.name}</p>
+                        </TableCell>
+                        <TableCell className="max-w-[240px] text-sm text-slate-600">
                           {o.address ? (
-                            <p className="text-xs text-muted-foreground truncate max-w-[200px]">{o.address}</p>
-                          ) : null}
+                            <span className="line-clamp-3 whitespace-pre-wrap">{o.address}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs font-mono text-slate-600">
                           {o.latitude.toFixed(5)}, {o.longitude.toFixed(5)}
@@ -435,7 +440,12 @@ export function StaffAttendanceAdminPanel({ employees, currentUserId, isActive =
                               <SelectItem value="none">— Not assigned —</SelectItem>
                               {activeOffices.map((o) => (
                                 <SelectItem key={o.id} value={o.id}>
-                                  {o.name}
+                                  <span className="block font-medium">{o.name}</span>
+                                  {o.address ? (
+                                    <span className="block text-xs text-muted-foreground truncate max-w-[280px]">
+                                      {o.address}
+                                    </span>
+                                  ) : null}
                                 </SelectItem>
                               ))}
                             </SelectContent>

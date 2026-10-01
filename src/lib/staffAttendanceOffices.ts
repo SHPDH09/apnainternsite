@@ -125,11 +125,35 @@ async function callStaffOfficeRpc<T>(name: string, args: Record<string, unknown>
   }
 }
 
+function normalizeStaffOffice(raw: Record<string, unknown>): StaffAttendanceOffice {
+  const addr = raw.address ?? raw.Address;
+  return {
+    id: String(raw.id ?? ""),
+    name: String(raw.name ?? ""),
+    address: addr != null && String(addr).trim() !== "" ? String(addr) : null,
+    latitude: Number(raw.latitude ?? 0),
+    longitude: Number(raw.longitude ?? 0),
+    radius_meters: Number(raw.radius_meters ?? 200),
+    max_gps_accuracy_m:
+      raw.max_gps_accuracy_m != null && raw.max_gps_accuracy_m !== ""
+        ? Number(raw.max_gps_accuracy_m)
+        : null,
+    require_face: raw.require_face !== false,
+    require_geo: raw.require_geo !== false,
+    is_active: raw.is_active !== false,
+    created_at: String(raw.created_at ?? ""),
+    updated_at: String(raw.updated_at ?? ""),
+  };
+}
+
 export async function listStaffAttendanceOffices(activeOnly = false): Promise<StaffAttendanceOffice[]> {
-  const data = await callStaffOfficeRpc<StaffAttendanceOffice[]>("admin_list_staff_attendance_offices", {
+  const data = await callStaffOfficeRpc<unknown>("admin_list_staff_attendance_offices", {
     p_active_only: activeOnly,
   });
-  return Array.isArray(data) ? data : [];
+  if (!Array.isArray(data)) return [];
+  return data.map((row) =>
+    normalizeStaffOffice(row && typeof row === "object" ? (row as Record<string, unknown>) : {})
+  );
 }
 
 export async function upsertStaffAttendanceOffice(input: {
@@ -144,7 +168,7 @@ export async function upsertStaffAttendanceOffice(input: {
   requireGeo?: boolean;
   isActive?: boolean;
 }): Promise<StaffAttendanceOffice> {
-  return callStaffOfficeRpc<StaffAttendanceOffice>("admin_upsert_staff_attendance_office", {
+  const row = await callStaffOfficeRpc<Record<string, unknown>>("admin_upsert_staff_attendance_office", {
     p_id: input.id ?? null,
     p_name: input.name.trim(),
     p_address: input.address?.trim() || null,
@@ -156,6 +180,7 @@ export async function upsertStaffAttendanceOffice(input: {
     p_require_geo: input.requireGeo ?? true,
     p_is_active: input.isActive ?? true,
   });
+  return normalizeStaffOffice(row || {});
 }
 
 export async function deleteStaffAttendanceOffice(id: string): Promise<void> {

@@ -24,6 +24,11 @@ BEGIN
     );
   END IF;
 
+  IF to_regclass('public.staff_attendance_offices') IS NOT NULL THEN
+    ALTER TABLE public.staff_attendance_offices
+      ADD COLUMN IF NOT EXISTS address text;
+  END IF;
+
   IF to_regclass('public.staff_office_assignments') IS NULL THEN
     CREATE TABLE public.staff_office_assignments (
       employee_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
