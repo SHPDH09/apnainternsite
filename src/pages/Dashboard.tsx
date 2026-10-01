@@ -190,6 +190,13 @@ const Dashboard = () => {
     [learningMaterials]
   );
 
+  const studentUniversityLogoUrl = useMemo(() => {
+    const name = String(profile?.university_name || "").trim();
+    if (!name) return null;
+    const row = unis.find((u) => String(u.name || "").trim() === name);
+    return row?.logo_url ?? null;
+  }, [profile?.university_name, unis]);
+
   const activeAssignmentCount = useMemo(
     () => assignmentsList.filter((a) => !a.submission).length,
     [assignmentsList]
@@ -376,7 +383,10 @@ const Dashboard = () => {
       if (studentLoad.profile) {
         fetchStudentLearningMaterials(supabase, studentLoad.profile)
           .then(setLearningMaterials)
-          .catch(() => setLearningMaterials([]));
+          .catch((err) => {
+            console.warn("[Dashboard] learning materials:", err);
+            setLearningMaterials([]);
+          });
       } else {
         setLearningMaterials([]);
       }
@@ -401,6 +411,7 @@ const Dashboard = () => {
     profile,
     attendanceRecords: attendanceList,
     projectReports,
+    universityLogoUrl: studentUniversityLogoUrl,
     hasCertificate: !!cert,
     onOpenAcceptanceLetter: () => setIsOfferLetterOpen(true),
     onOpenCertificate: () => {
@@ -1160,6 +1171,7 @@ const Dashboard = () => {
                 fields={documentActions.fields}
                 attendanceRecords={documentActions.attendanceRecords}
                 issueDate={documentActions.documentIssueDate}
+                projectPreview={documentActions.projectGenerateInput}
               />
             </>
           )}

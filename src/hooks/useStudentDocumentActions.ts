@@ -18,6 +18,14 @@ import {
 } from "@/lib/storageUrl";
 import { StudentLogbookDocument } from "@/components/student/StudentLogbookDocument";
 import { StudentAttendanceReportDocument } from "@/components/student/StudentAttendanceReportDocument";
+import { ProjectReportPreviewDocument } from "@/components/student/ProjectReportPreviewDocument";
+import { fetchProjectReportDomainTemplate } from "@/lib/projectReportSettings";
+import {
+  PROJECT_REPORT_MODES,
+  type ProjectReportMode,
+} from "@/lib/projectReportDomainContent";
+import { downloadProjectReportPdf } from "@/lib/projectReportPdf";
+import { studentInternshipMode } from "@/lib/internshipMode";
 import { createElement } from "react";
 
 export type StudentDocumentId =
@@ -44,6 +52,7 @@ type Options = {
   profile: Record<string, unknown> | null;
   attendanceRecords: AttendanceRecord[];
   projectReports: LearningMaterialRow[];
+  universityLogoUrl?: string | null;
   hasCertificate: boolean;
   onOpenAcceptanceLetter: () => void;
   onOpenCertificate: () => void;
@@ -61,6 +70,7 @@ export function useStudentDocumentActions({
   profile,
   attendanceRecords,
   projectReports,
+  universityLogoUrl,
   hasCertificate,
   onOpenAcceptanceLetter,
   onOpenCertificate,
@@ -68,6 +78,7 @@ export function useStudentDocumentActions({
 }: Options) {
   const logbookRef = useRef<HTMLDivElement>(null);
   const attendanceRef = useRef<HTMLDivElement>(null);
+  const projectReportRef = useRef<HTMLDivElement>(null);
   const consentInputRef = useRef<HTMLInputElement>(null);
   const [downloading, setDownloading] = useState<StudentDocumentId | null>(null);
   const [uploadingConsent, setUploadingConsent] = useState(false);
@@ -86,7 +97,42 @@ export function useStudentDocumentActions({
       : projectReport?.file_url
         ? [projectReport.file_url]
         : [];
-  const projectReady = projectUrlCandidates.length > 0;
+
+  const projectGenerateInput = useMemo(() => {
+    const pick = (...values: unknown[]) => {
+      for (const v of values) {
+        const s = String(v ?? "").trim();
+        if (s && s !== "—") return s;
+      }
+      return "";
+    };
+    const domain = pick(
+      profile?.internship_domain,
+      profile?.course,
+      profile?.subject,
+      fields.domain
+    );
+    const universityName = pick(profile?.university_name, fields.university);
+    if (!domain || !universityName) return null;
+    const modeRaw = studentInternshipMode({
+      university_name: universityName,
+      internship_mode: profile?.internship_mode,
+      metadata: profile?.metadata,
+    });
+    const mode = (
+      PROJECT_REPORT_MODES.includes(modeRaw as ProjectReportMode) ? modeRaw : "Online"
+    ) as ProjectReportMode;
+    return {
+      universityName,
+      universityLogoUrl: universityLogoUrl ?? null,
+      domain,
+      mode,
+    };
+  }, [profile, fields.domain, fields.university, universityLogoUrl]);
+
+  const projectUploadedReady = projectUrlCandidates.length > 0;
+  const projectAutoReady = projectGenerateInput != null;
+  const projectReady = projectUploadedReady || projectAutoReady;
 
   const documents: StudentDocumentMeta[] = useMemo(
     () => [
@@ -137,11 +183,23 @@ export function useStudentDocumentActions({
         description:
           "Your domain-specific project report, uploaded by the Apna Intern team for your batch.",
         ready: projectReady,
-        statusLabel: projectReady ? "Ready" : "Not shared yet",
+        statusLabel: projectReady
+          ? projectUploadedReady
+            ? "Ready"
+            : "Auto-generated"
+          : "Complete profile (domain & university)",
       },
     ],
-    [consentUrl, hasCertificate, projectReady]
+    [consentUrl, hasCertificate, projectReady, projectUploadedReady]
   );
+
+  const generateStudentProjectReport = useCallback(async () => {
+    if (!projectGenerateInput) {
+      throw new Error("Add your university and internship domain in Profile to generate your project report.");
+    }
+    const template = await fetchProjectReportDomainTemplate(supabase, projectGenerateInput.domain);
+    return { template, input: projectGenerateInput };
+  }, [projectGenerateInput]);
 
   const refreshIssueDate = useCallback(() => {
     setDocumentIssueDate(formatDocumentIssueDate());
@@ -230,8 +288,11 @@ export function useStudentDocumentActions({
             if (url) window.open(url, "_blank", "noopener,noreferrer");
             else toast.error("Could not open project report.");
           })();
+        } else if (projectAutoReady) {
+          refreshIssueDate();
+          setPreviewId("project");
         } else {
-          toast.info("Project report has not been shared for your profile yet.");
+          toast.info("Add your university and internship domain in Profile to view your project report.");
         }
         break;
       default:
@@ -283,8 +344,21 @@ export function useStudentDocumentActions({
           } finally {
             setDownloading(null);
           }
+        } else if (projectAutoReady) {
+          setDownloading("project");
+          try {
+            refreshIssueDate();
+            await waitForPaint();
+            const { template, input } = await generateStudentProjectReport();
+            await downloadProjectReportPdf(template, input, projectReportRef.current);
+            toast.success("Project report downloaded.");
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Could not generate project report PDF.");
+          } finally {
+            setDownloading(null);
+          }
         } else {
-          toast.info("Project report has not been shared for your profile yet.");
+          toast.info("Add your university and internship domain in Profile to download your project report.");
         }
         break;
       default:
@@ -306,6 +380,15 @@ export function useStudentDocumentActions({
       attendanceRecords,
       issueDate: documentIssueDate,
     }),
+    projectGenerateInput
+      ? createElement(ProjectReportPreviewDocument, {
+          ref: projectReportRef,
+          universityName: projectGenerateInput.universityName,
+          universityLogoUrl: projectGenerateInput.universityLogoUrl,
+          domain: projectGenerateInput.domain,
+          mode: projectGenerateInput.mode,
+        })
+      : null,
     createElement("input", {
       ref: consentInputRef,
       type: "file",
@@ -330,5 +413,6 @@ export function useStudentDocumentActions({
     attendanceRecords,
     documentIssueDate,
     hiddenPdfNodes,
+    projectGenerateInput,
   };
 }
