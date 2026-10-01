@@ -85,6 +85,8 @@ export function AdminStaffLeaveRequestsPanel({
   const [reviewRow, setReviewRow] = useState<StaffLeaveRequest | null>(null);
   const [reviewAction, setReviewAction] = useState<"approved" | "rejected">("approved");
   const [remarks, setRemarks] = useState("");
+  const [halfDayFrom, setHalfDayFrom] = useState("10:00");
+  const [halfDayUntil, setHalfDayUntil] = useState("14:00");
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -126,16 +128,30 @@ export function AdminStaffLeaveRequestsPanel({
     setReviewRow(row);
     setReviewAction(action);
     setRemarks(row.admin_remarks || "");
+    setHalfDayFrom(row.half_day_check_in_from || "10:00");
+    setHalfDayUntil(row.half_day_check_in_until || "14:00");
   };
 
   const saveReview = async () => {
     if (!reviewRow || !currentUserId) return;
+    if (
+      reviewAction === "approved" &&
+      reviewRow.leave_type === "half_day" &&
+      halfDayFrom >= halfDayUntil
+    ) {
+      toast.error("Half-day check-in end time must be after start time.");
+      return;
+    }
     setSaving(true);
     try {
       await reviewLeaveRequest(supabase, reviewRow.id, {
         status: reviewAction,
         adminRemarks: remarks,
         reviewedBy: currentUserId,
+        halfDayCheckInFrom:
+          reviewAction === "approved" && reviewRow.leave_type === "half_day" ? halfDayFrom : null,
+        halfDayCheckInUntil:
+          reviewAction === "approved" && reviewRow.leave_type === "half_day" ? halfDayUntil : null,
       });
       toast.success(`Leave request ${reviewAction}.`);
       setReviewRow(null);
@@ -230,7 +246,13 @@ export function AdminStaffLeaveRequestsPanel({
                   <TableCell className="font-medium">{staffLabel(employees, r.staff_id)}</TableCell>
                   <TableCell>{LEAVE_TYPE_LABELS[r.leave_type]}</TableCell>
                   <TableCell className="whitespace-nowrap text-sm">
-                    {r.from_date} → {r.to_date}
+                    {r.from_date}
+                    {r.from_date !== r.to_date ? ` → ${r.to_date}` : ""}
+                    {r.leave_type === "half_day" && r.status === "approved" && r.half_day_check_in_from ? (
+                      <div className="mt-0.5 text-[10px] text-muted-foreground">
+                        Check-in {r.half_day_check_in_from}–{r.half_day_check_in_until} IST
+                      </div>
+                    ) : null}
                   </TableCell>
                   <TableCell className="max-w-[12rem] text-sm">
                     <span className="line-clamp-2">{r.reason}</span>
@@ -298,9 +320,37 @@ export function AdminStaffLeaveRequestsPanel({
               <p>
                 <span className="font-semibold">{staffLabel(employees, reviewRow.staff_id)}</span>
                 {" · "}
-                {LEAVE_TYPE_LABELS[reviewRow.leave_type]} ({reviewRow.from_date} → {reviewRow.to_date})
+                {LEAVE_TYPE_LABELS[reviewRow.leave_type]} (
+                {reviewRow.from_date}
+                {reviewRow.from_date !== reviewRow.to_date ? ` → ${reviewRow.to_date}` : ""})
               </p>
               <p className="text-muted-foreground">{reviewRow.reason}</p>
+              {reviewRow.leave_type === "half_day" && reviewAction === "approved" ? (
+                <div className="rounded-lg border border-sky-200 bg-sky-50/80 p-3 space-y-3">
+                  <p className="text-xs font-semibold text-sky-900">
+                    Set approved half-day check-in window (IST). Staff can check in only during this
+                    time, then check out when they leave.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Check-in from</Label>
+                      <Input
+                        type="time"
+                        value={halfDayFrom}
+                        onChange={(e) => setHalfDayFrom(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Check-in until</Label>
+                      <Input
+                        type="time"
+                        value={halfDayUntil}
+                        onChange={(e) => setHalfDayUntil(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               <div className="space-y-1.5">
                 <Label>Admin Remarks</Label>
                 <Textarea rows={3} value={remarks} onChange={(e) => setRemarks(e.target.value)} />

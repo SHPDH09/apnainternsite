@@ -119,7 +119,14 @@ function LeaveTab({ isActive, currentUserId }: Props) {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Leave Type</Label>
-            <Select value={leaveType} onValueChange={(v) => setLeaveType(v as LeaveType)}>
+            <Select
+              value={leaveType}
+              onValueChange={(v) => {
+                const next = v as LeaveType;
+                setLeaveType(next);
+                if (next === "half_day" && fromDate) setToDate(fromDate);
+              }}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -135,13 +142,31 @@ function LeaveTab({ isActive, currentUserId }: Props) {
           <div className="space-y-1.5 sm:col-span-2 grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>From Date</Label>
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              <Input
+                type="date"
+                value={fromDate}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  if (leaveType === "half_day") setToDate(e.target.value);
+                }}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>To Date</Label>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              <Input
+                type="date"
+                value={toDate}
+                disabled={leaveType === "half_day"}
+                onChange={(e) => setToDate(e.target.value)}
+              />
             </div>
           </div>
+          {leaveType === "half_day" ? (
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              Half-day is for one date only. After admin approves, they will set your check-in time
+              window for attendance.
+            </p>
+          ) : null}
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Reason / Description</Label>
             <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why do you need leave?" />

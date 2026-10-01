@@ -12,6 +12,14 @@ export type StaffAttendanceOfficePayload = {
   require_geo: boolean;
 };
 
+export type StaffHalfDayApprovalPayload = {
+  leave_request_id?: string;
+  check_in_from_minutes?: number;
+  check_in_until_minutes?: number;
+  check_in_from?: string;
+  check_in_until?: string;
+};
+
 export type StaffAttendanceStatusPayload = {
   attendance_date: string;
   ist_minutes: number;
@@ -23,10 +31,21 @@ export type StaffAttendanceStatusPayload = {
   can_check_out: boolean;
   check_in_opens_at: string;
   check_out_opens_at: string;
+  half_day_mode?: boolean;
+  half_day?: StaffHalfDayApprovalPayload | null;
+  on_approved_leave?: boolean;
+  attendance_message?: string | null;
   office_assigned: boolean;
   face_registered?: boolean;
   face_descriptor?: number[] | null;
   office: StaffAttendanceOfficePayload | null;
+};
+
+export type StaffSelfMarkResult = {
+  ok?: boolean;
+  action?: string;
+  message?: string;
+  half_day?: boolean;
 };
 
 const RDS_APPLY_CODE = "apnaintern-owner-setup-v1";
@@ -167,8 +186,8 @@ export async function staffSelfCheckIn(input: {
   longitude: number;
   faceScore: number;
   gpsAccuracyM?: number | null;
-}) {
-  return callStaffSelfRpc("staff_self_check_in", {
+}): Promise<StaffSelfMarkResult> {
+  return callStaffSelfRpc<StaffSelfMarkResult>("staff_self_check_in", {
     p_latitude: input.latitude,
     p_longitude: input.longitude,
     p_face_score: input.faceScore,
@@ -199,8 +218,8 @@ export async function staffSelfCheckOut(input: {
   longitude: number;
   faceScore: number;
   gpsAccuracyM?: number | null;
-}) {
-  return callStaffSelfRpc("staff_self_check_out", {
+}): Promise<StaffSelfMarkResult> {
+  return callStaffSelfRpc<StaffSelfMarkResult>("staff_self_check_out", {
     p_latitude: input.latitude,
     p_longitude: input.longitude,
     p_face_score: input.faceScore,

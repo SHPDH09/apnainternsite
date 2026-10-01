@@ -14,6 +14,15 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { haversineMeters, requestCurrentPosition } from "@/lib/geoLocation";
 import { deriveStaffAttendanceWindow } from "@/lib/staffAttendanceWindows";
@@ -58,6 +67,7 @@ export function StaffGeoFaceAttendanceMark({
   const [cameraReady, setCameraReady] = useState(false);
   const [geoOk, setGeoOk] = useState<boolean | null>(null);
   const [geoDistance, setGeoDistance] = useState<number | null>(null);
+  const [successPopup, setSuccessPopup] = useState<{ title: string; body: string } | null>(null);
 
   const faceRegistered = Boolean(status?.face_registered);
   const faceDescriptor = status?.face_descriptor ?? null;
@@ -111,7 +121,18 @@ export function StaffGeoFaceAttendanceMark({
     hasCheckIn: status?.has_check_in ?? false,
     hasCheckOut: status?.has_check_out ?? false,
     istMinutes: status?.ist_minutes,
+    halfDayMode: status?.half_day_mode,
+    halfDayFrom: status?.half_day?.check_in_from,
+    halfDayUntil: status?.half_day?.check_in_until,
+    canCheckInFromServer: status?.can_check_in,
+    canCheckOutFromServer: status?.can_check_out,
+    serverMessage: status?.attendance_message,
   });
+
+  const canCheckIn = status?.can_check_in ?? windowState.canCheckIn;
+  const canCheckOut = status?.can_check_out ?? windowState.canCheckOut;
+  const statusMessage =
+    status?.attendance_message?.trim() || windowState.message;
 
   const verifyLocation = async () => {
     const office = status?.office;
@@ -201,21 +222,33 @@ export function StaffGeoFaceAttendanceMark({
       }
 
       if (action === "check_in") {
-        await staffSelfCheckIn({
+        const result = await staffSelfCheckIn({
           latitude: pos.latitude,
           longitude: pos.longitude,
           faceScore: score,
           gpsAccuracyM: pos.accuracy ?? null,
         });
+        const body =
+          result.message ||
+          (result.half_day
+            ? "Half-day check-in recorded. You can check out when you leave."
+            : "Check-in recorded successfully.");
         toast.success("Check-in recorded");
+        setSuccessPopup({ title: "Check-in OK", body });
       } else {
-        await staffSelfCheckOut({
+        const result = await staffSelfCheckOut({
           latitude: pos.latitude,
           longitude: pos.longitude,
           faceScore: score,
           gpsAccuracyM: pos.accuracy ?? null,
         });
+        const body =
+          result.message ||
+          (result.half_day
+            ? "Half-day check-out recorded. Today's attendance is complete."
+            : "Check-out recorded. Today's attendance is complete.");
         toast.success("Check-out recorded");
+        setSuccessPopup({ title: "Check-out OK", body });
       }
 
       await loadStatus();
@@ -242,12 +275,14 @@ export function StaffGeoFaceAttendanceMark({
             </h3>
             <p className="mt-1 text-xs text-slate-300">
               {faceRegistered
-                ? "Check-in from 10:00 AM · Check-out from 6:00 PM (IST)"
+                ? status?.half_day_mode && status.half_day
+                  ? `Approved half-day · Check-in ${status.half_day.check_in_from}–${status.half_day.check_in_until} IST`
+                  : "Check-in from 10:00 AM · Check-out from 6:00 PM (IST)"
                 : "One-time setup — same photo saves to profile. You can change profile photo later without affecting attendance."}
             </p>
           </div>
           <Badge variant="outline" className="border-white/20 bg-white/10 text-white">
-            {loading ? "Loading…" : faceRegistered ? windowState.message : "Setup required"}
+            {loading ? "Loading…" : faceRegistered ? statusMessage : "Setup required"}
           </Badge>
         </div>
       </div>
@@ -317,9 +352,9 @@ export function StaffGeoFaceAttendanceMark({
                           hour: "2-digit",
                           minute: "2-digit",
                         })
-                      : windowState.canCheckIn
+                      : canCheckIn
                         ? "Open now"
-                        : "10:00 AM IST"}
+                        : `${status?.check_in_opens_at || "10:00"} IST`}
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
@@ -332,9 +367,11 @@ export function StaffGeoFaceAttendanceMark({
                           hour: "2-digit",
                           minute: "2-digit",
                         })
-                      : windowState.canCheckOut
+                      : canCheckOut
                         ? "Open now"
-                        : "6:00 PM IST"}
+                        : status?.half_day_mode
+                          ? "After check-in"
+                          : `${status?.check_out_opens_at || "18:00"} IST`}
                   </p>
                 </div>
               </div>
@@ -371,7 +408,7 @@ export function StaffGeoFaceAttendanceMark({
                 <Button
                   type="button"
                   className="gap-2 bg-[#2B7CD3] hover:bg-[#256bb8]"
-                  disabled={busy || loading || !windowState.canCheckIn || !status?.office_assigned}
+                  disabled={busy || loading || !canCheckIn || !status?.office_assigned}
                   onClick={() => void runMark("check_in")}
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
@@ -381,7 +418,7 @@ export function StaffGeoFaceAttendanceMark({
                   type="button"
                   variant="outline"
                   className="gap-2"
-                  disabled={busy || loading || !windowState.canCheckOut || !status?.office_assigned}
+                  disabled={busy || loading || !canCheckOut || !status?.office_assigned}
                   onClick={() => void runMark("check_out")}
                 >
                   {busy ? (
@@ -413,6 +450,18 @@ export function StaffGeoFaceAttendanceMark({
           )}
         </div>
       </div>
+
+      <AlertDialog open={!!successPopup} onOpenChange={(open) => !open && setSuccessPopup(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{successPopup?.title ?? "OK"}</AlertDialogTitle>
+            <AlertDialogDescription>{successPopup?.body ?? ""}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setSuccessPopup(null)}>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <style>{`.mirror-video { transform: scaleX(-1); }`}</style>
     </Card>

@@ -5,6 +5,7 @@ import {
   STAFF_SALARY_REQUIRED_RPCS,
   STAFF_SELF_OFFICE_REQUIRED_RPCS,
   staffFaceRegisterRpcSql,
+  staffHalfDayAttendanceSql,
   staffOfficeAdminRpcSql,
   staffOfficeEnsureSchemaSql,
   staffOfficeSelfAttendanceRpcSql,
@@ -47,6 +48,11 @@ async function rpcExists(pool: Queryable, name: string): Promise<boolean> {
   return Boolean(rows[0]?.ok);
 }
 
+/** Schema + RPC updates for half-day leave (idempotent CREATE OR REPLACE). */
+export async function applyStaffHalfDayAttendanceBootstrap(pool: Queryable): Promise<void> {
+  await pool.query(staffHalfDayAttendanceSql());
+}
+
 async function assertRpcs(pool: Queryable, names: string[]): Promise<void> {
   if (!names.length) return;
   const checks = names.map(
@@ -68,12 +74,13 @@ export async function applyStaffSelfOfficeBootstrap(pool: Queryable): Promise<vo
     (await rpcExists(pool, "staff_self_attendance_status")) &&
     (await rpcExists(pool, "staff_self_check_in")) &&
     (await rpcExists(pool, "_staff_attendance_employee_id"));
-  if (ready) return;
-
-  await pool.query(staffOfficeEnsureSchemaSql());
-  await pool.query("SELECT public._ensure_staff_attendance_office_schema()");
-  await pool.query(staffOfficeSelfAttendanceRpcSql());
-  await assertRpcs(pool, STAFF_SELF_OFFICE_REQUIRED_RPCS);
+  if (!ready) {
+    await pool.query(staffOfficeEnsureSchemaSql());
+    await pool.query("SELECT public._ensure_staff_attendance_office_schema()");
+    await pool.query(staffOfficeSelfAttendanceRpcSql());
+    await assertRpcs(pool, STAFF_SELF_OFFICE_REQUIRED_RPCS);
+  }
+  await applyStaffHalfDayAttendanceBootstrap(pool);
 }
 
 /** Lightweight bootstrap for one-time face registration (script 90). */
@@ -91,6 +98,7 @@ export async function applyStaffFaceRegisterBootstrap(pool: Queryable): Promise<
   }
 
   await pool.query(staffFaceRegisterRpcSql());
+  await applyStaffHalfDayAttendanceBootstrap(pool);
   await assertRpcs(pool, STAFF_FACE_REGISTER_REQUIRED_RPCS);
 }
 
@@ -113,6 +121,7 @@ export async function applyStaffOfficeBootstrap(pool: Queryable): Promise<void> 
   await pool.query(staffOfficeAdminRpcSql());
   await pool.query(staffOfficeSelfAttendanceRpcSql());
   await pool.query(staffFaceRegisterRpcSql());
+  await applyStaffHalfDayAttendanceBootstrap(pool);
   await pool.query(staffSalaryBaseSql());
   await pool.query(staffSalaryAdvancedSql());
 
