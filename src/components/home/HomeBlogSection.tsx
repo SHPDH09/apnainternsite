@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Calendar, Eye } from "lucide-react";
+import { BlogCoverImage } from "@/components/blog/BlogCoverImage";
 import { formatBlogDate, formatBlogViewCount, type SiteBlogPost } from "@/lib/siteBlogApi";
 
 type Props = {
@@ -33,9 +34,8 @@ export function HomeBlogSection({ posts }: Props) {
             >
               {post.cover_image_url ? (
                 <div className="aspect-[16/10] overflow-hidden">
-                  <img
-                    src={post.cover_image_url}
-                    alt=""
+                  <BlogCoverImage
+                    url={post.cover_image_url}
                     className="size-full object-cover transition group-hover:scale-[1.03]"
                   />
                 </div>

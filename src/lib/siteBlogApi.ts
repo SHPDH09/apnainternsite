@@ -272,15 +272,22 @@ function mapCoverUrl(row: SiteBlogPost): SiteBlogPost {
   };
 }
 
-function mapPublicBlogPost(row: SiteBlogPost): SiteBlogPost {
+function mapPublicBlogListPost(row: SiteBlogPost): SiteBlogPost {
   const mapped = mapCoverUrl(row);
   const coverRaw = mapped.cover_image_url || row.cover_image_url;
   return {
     ...mapped,
-    content: rewriteBlogMarkdownImageUrls(mapped.content),
     cover_image_url: coverRaw
       ? resolveBlogMarkdownAssetUrl(coverRaw) || resolveStorageUrl(coverRaw) || coverRaw
       : null,
+  };
+}
+
+function mapPublicBlogPost(row: SiteBlogPost): SiteBlogPost {
+  const mapped = mapPublicBlogListPost(row);
+  return {
+    ...mapped,
+    content: rewriteBlogMarkdownImageUrls(mapped.content),
   };
 }
 

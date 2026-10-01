@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Calendar, Clock, Eye, Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { BlogCoverImage } from "@/components/blog/BlogCoverImage";
 import { BlogReaderShell } from "@/components/blog/BlogReaderShell";
 import { fetchBlogPostViewCount } from "@/lib/siteBlogEngagement";
 import {
@@ -75,9 +76,8 @@ export default function Blog() {
               >
                 {post.cover_image_url ? (
                   <div className="aspect-[16/10] overflow-hidden bg-slate-100">
-                    <img
-                      src={post.cover_image_url}
-                      alt=""
+                    <BlogCoverImage
+                      url={post.cover_image_url}
                       className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                     />
                   </div>
