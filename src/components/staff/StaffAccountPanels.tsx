@@ -41,7 +41,7 @@ import {
   type StaffAuthSession,
 } from "@/lib/staffSessions";
 import type { AdminStaffProfile } from "@/lib/staffProfile";
-import { resolveStorageUrl } from "@/lib/storageUrl";
+import { resolveBlogMarkdownAssetUrl, resolveStorageUrl } from "@/lib/storageUrl";
 import { StaffGeoFaceAttendanceMark } from "@/components/staff/StaffGeoFaceAttendanceMark";
 
 type ProfileProps = {
@@ -72,8 +72,9 @@ export function StaffProfilePanel({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    const raw = profile?.profile_image_url || "";
     setImageUrl(
-      resolveStorageUrl(profile?.profile_image_url || "") || profile?.profile_image_url || null
+      resolveBlogMarkdownAssetUrl(raw) || resolveStorageUrl(raw) || raw || null
     );
   }, [profile?.profile_image_url]);
 
