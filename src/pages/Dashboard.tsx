@@ -57,6 +57,7 @@ import {
 import { StudentServiceLockDialog } from "@/components/student/StudentServiceLockDialog";
 import { normalizeOfferLetterProfile } from "@/lib/offerLetterProfile";
 import { loadStudentDashboardProfile } from "@/lib/loadStudentDashboardProfile";
+import { warmStudentUniquenessValidation } from "@/lib/ensureStudentUniquenessSchema";
 import { displayRegistrationId } from "@/lib/registrationId";
 import {
   enrichStudentProfileForDisplay,
@@ -284,6 +285,7 @@ const Dashboard = () => {
       }
 
       setProfile(studentLoad.profile);
+      void warmStudentUniquenessValidation();
       setCert(c.data);
       setPayment(pay.data);
       setSystemSettings(ss.data || []);
@@ -584,6 +586,10 @@ const Dashboard = () => {
           subject: editProfileData.subject,
           university_roll_number:
             editProfileData.university_roll_number ?? profile?.university_roll_number,
+          university_registration_number:
+            editProfileData.roll_number ?? profile?.roll_number ?? profile?.metadata?.registrationNo,
+          registrationNo:
+            editProfileData.roll_number ?? profile?.roll_number ?? profile?.metadata?.registrationNo,
           internship_mode:
             editProfileData.internship_mode?.trim() ||
             snapMeta.internship_mode ||
@@ -611,6 +617,8 @@ const Dashboard = () => {
         class_semester: editProfileData.class_semester ?? profile?.class_semester ?? "",
         roll_number: editProfileData.roll_number ?? profile?.roll_number ?? "",
         subject: editProfileData.subject ?? profile?.subject ?? "",
+        university_roll_number:
+          editProfileData.university_roll_number ?? profile?.university_roll_number ?? "",
         internship_domain: editProfileData.internship_domain ?? profile?.internship_domain ?? profile?.course ?? "",
         course: editProfileData.internship_domain ?? profile?.internship_domain ?? profile?.course ?? "",
         internship_duration:

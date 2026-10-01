@@ -25,6 +25,7 @@ const PROFILE_COLUMNS = [
   "academic_session",
   "class_semester",
   "roll_number",
+  "subject",
   "course",
   "internship_domain",
   "internship_duration",
@@ -383,9 +384,18 @@ export async function updateOwnStudentProfile(
       email: String(patch.email || ""),
       phone: String(patch.contact_number || ""),
       rollNumber: String(patch.roll_number || ""),
+      registrationNumber: String(
+        meta.university_registration_number ||
+          meta.universityRegistrationNumber ||
+          meta.registrationNo ||
+          ""
+      ),
       universityName: String(patch.university_name || existing?.university_name || ""),
       universityRollNumber: String(
-        meta.university_roll_number || meta.universityRollNumber || ""
+        meta.university_roll_number ||
+          meta.universityRollNumber ||
+          patch.roll_number ||
+          ""
       ),
       excludeUserId: userId,
     });
