@@ -1,10 +1,12 @@
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useBlogMediaSrc } from "@/hooks/useBlogMediaSrc";
 import { cn } from "@/lib/utils";
 
-function BlogMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
-  const activeSrc = useBlogMediaSrc(typeof src === "string" ? src : undefined);
+function BlogMarkdownImage({ src, alt }: { src?: string | null; alt?: string | null }) {
+  const url = typeof src === "string" ? src : undefined;
+  const activeSrc = useBlogMediaSrc(url);
 
   if (!activeSrc) return null;
 
@@ -21,6 +23,18 @@ function BlogMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   );
 }
 
+function BlogMarkdownLink({
+  href,
+  children,
+  ...props
+}: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+      {children}
+    </a>
+  );
+}
+
 type Props = {
   content: string;
   className?: string;
@@ -28,6 +42,14 @@ type Props = {
 
 /** Renders blog markdown: # headings, **bold**, links, images, lists, blockquotes. */
 export function BlogMarkdownContent({ content, className }: Props) {
+  const components = useMemo(
+    () => ({
+      a: BlogMarkdownLink,
+      img: BlogMarkdownImage,
+    }),
+    []
+  );
+
   return (
     <div
       className={cn(
@@ -43,17 +65,7 @@ export function BlogMarkdownContent({ content, className }: Props) {
         className
       )}
     >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ href, children, ...props }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-              {children}
-            </a>
-          ),
-          img: ({ src, alt }) => <BlogMarkdownImage src={typeof src === "string" ? src : undefined} alt={alt} />,
-        }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>
     </div>
