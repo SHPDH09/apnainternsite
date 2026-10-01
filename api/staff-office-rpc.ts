@@ -4,6 +4,7 @@
  * staff_register_face accepts optional p_image_base64 to upload photo to S3 on Vercel.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { randomUUID } from "node:crypto";
 
 const S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || "ap-south-1";
 const LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || "ezyintern-staging-logos";
@@ -97,27 +98,92 @@ function decodeImageBase64(raw: string): Buffer {
   return buf;
 }
 
-/** Upload face photo directly to S3 (Lambda /storage returns 503 on production). */
-async function uploadStaffFacePhoto(sessionSub: string, imageBase64: string): Promise<string> {
-  if (!process.env.AWS_ACCESS_KEY_ID?.trim() || !process.env.AWS_SECRET_ACCESS_KEY?.trim()) {
-    throw new Error("Photo upload is not configured on the server. Contact support.");
-  }
+const STAFF_FACE_MEDIA_BOOTSTRAP_SQL = `
+CREATE TABLE IF NOT EXISTS public.site_blog_media_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id uuid NOT NULL,
+  subfolder text NOT NULL DEFAULT 'content',
+  file_name text,
+  content_type text NOT NULL DEFAULT 'application/octet-stream',
+  data bytea NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+`;
 
+function resolvePublicSiteOrigin(): string {
+  const candidates = [
+    process.env.PUBLIC_SITE_URL,
+    process.env.SITE_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    process.env.VERCEL_URL,
+  ];
+  for (const raw of candidates) {
+    const v = String(raw || "").trim().replace(/\/$/, "");
+    if (!v) continue;
+    if (v.startsWith("http://") || v.startsWith("https://")) return v;
+    return `https://${v}`;
+  }
+  return "https://apnaintern.in";
+}
+
+function isS3AccessDenied(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  const name = err && typeof err === "object" && "name" in err ? String((err as { name?: string }).name) : "";
+  return /access denied|accessdenied|403/i.test(msg) || name === "AccessDenied";
+}
+
+async function uploadStaffFacePhotoRds(sessionSub: string, imageBuffer: Buffer): Promise<string> {
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    throw new Error("Photo storage is not configured on the server. Contact support.");
+  }
+  const pg = await import("pg");
+  const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
+  const id = randomUUID();
+  try {
+    await pool.query(STAFF_FACE_MEDIA_BOOTSTRAP_SQL);
+    await pool.query(
+      `INSERT INTO public.site_blog_media_assets (id, post_id, subfolder, file_name, content_type, data)
+       VALUES ($1::uuid, $2::uuid, 'staff-face', $3, 'image/jpeg', $4::bytea)`,
+      [id, sessionSub, `face-${Date.now()}.jpg`, imageBuffer]
+    );
+  } finally {
+    await pool.end();
+  }
+  const origin = resolvePublicSiteOrigin();
+  return `${origin}/api/send-mail?id=${encodeURIComponent(id)}`;
+}
+
+/** Upload face photo to S3; on IAM AccessDenied store in RDS (same as blog CMS images). */
+async function uploadStaffFacePhoto(sessionSub: string, imageBase64: string): Promise<string> {
   const imageBuffer = decodeImageBase64(imageBase64);
   const objectKey = `staff-profiles/${sessionSub}-face-${Date.now()}.jpg`;
 
-  const { PutObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
-  const s3 = new S3Client({ region: S3_REGION });
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: LOGOS_BUCKET,
-      Key: objectKey,
-      Body: imageBuffer,
-      ContentType: "image/jpeg",
-    })
-  );
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (accessKeyId && secretAccessKey) {
+    try {
+      const { PutObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
+      const s3 = new S3Client({
+        region: S3_REGION,
+        credentials: { accessKeyId, secretAccessKey },
+      });
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: LOGOS_BUCKET,
+          Key: objectKey,
+          Body: imageBuffer,
+          ContentType: "image/jpeg",
+        })
+      );
+      return publicLogoUrl(objectKey);
+    } catch (err) {
+      if (!isS3AccessDenied(err)) throw err;
+      console.warn("[staff-office-rpc] S3 face photo denied, using RDS fallback");
+    }
+  }
 
-  return publicLogoUrl(objectKey);
+  return uploadStaffFacePhotoRds(sessionSub, imageBuffer);
 }
 
 async function applyStaffOfficeSql(databaseUrl: string, rpcName: string): Promise<void> {
