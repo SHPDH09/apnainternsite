@@ -4,8 +4,8 @@ import {
   STAFF_OFFICE_REQUIRED_RPCS,
   STAFF_SALARY_REQUIRED_RPCS,
   STAFF_SELF_OFFICE_REQUIRED_RPCS,
+  STAFF_HALF_DAY_CHUNKS,
   staffFaceRegisterRpcSql,
-  staffHalfDayAttendanceSql,
   staffOfficeAdminRpcSql,
   staffOfficeEnsureSchemaSql,
   staffOfficeSelfAttendanceRpcSql,
@@ -50,7 +50,8 @@ async function rpcExists(pool: Queryable, name: string): Promise<boolean> {
 
 /** Schema + RPC updates for half-day leave (idempotent CREATE OR REPLACE). */
 export async function applyStaffHalfDayAttendanceBootstrap(pool: Queryable): Promise<void> {
-  await pool.query(staffHalfDayAttendanceSql());
+  if (!Array.isArray(STAFF_HALF_DAY_CHUNKS) || STAFF_HALF_DAY_CHUNKS.length === 0) return;
+  await pool.query(STAFF_HALF_DAY_CHUNKS.join(""));
 }
 
 async function assertRpcs(pool: Queryable, names: string[]): Promise<void> {
