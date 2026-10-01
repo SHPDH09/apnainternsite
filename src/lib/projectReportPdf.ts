@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont, type PDFImage } from "pdf-lib";
 import {
   DEFAULT_PROJECT_REPORT_FIELD_LAYOUT,
   type ProjectReportDomainTemplate,
@@ -11,12 +11,21 @@ import {
   type ProjectReportDomainSection,
   type ProjectReportMode,
 } from "@/lib/projectReportDomainContent";
+import {
+  applyUniversityTextReplacements,
+  defaultLogoCoverRegion,
+  extractPdfTextLines,
+  inferLogoCoverRegion,
+  type LogoCoverRegion,
+} from "@/lib/projectReportTemplateReplace";
 
 export type ProjectReportGenerateInput = {
   universityName: string;
   universityLogoUrl?: string | null;
   domain: string;
   mode: ProjectReportMode;
+  /** All catalog university names — used to find old names inside uploaded templates. */
+  catalogUniversityNames?: string[];
 };
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
@@ -90,8 +99,47 @@ function buildDomainContentLines(
   return out.filter((l, i, arr) => !(l === "" && arr[i + 1] === ""));
 }
 
+function coverLogoRegion(page: PDFPage, region: LogoCoverRegion) {
+  page.drawRectangle({
+    x: region.x - 4,
+    y: region.y - 4,
+    width: region.width + 8,
+    height: region.height + 8,
+    color: rgb(1, 1, 1),
+    borderWidth: 0,
+  });
+}
+
+function drawLogoInRegion(page: PDFPage, logoImage: PDFImage, region: LogoCoverRegion) {
+  const scale = Math.min(region.width / logoImage.width, region.height / logoImage.height);
+  const width = logoImage.width * scale;
+  const height = logoImage.height * scale;
+  page.drawImage(logoImage, {
+    x: region.x + (region.width - width) / 2,
+    y: region.y + (region.height - height) / 2,
+    width,
+    height,
+  });
+}
+
+function drawFallbackUniversityHeader(
+  page: PDFPage,
+  fontBold: PDFFont,
+  universityName: string,
+  layout: ProjectReportFieldLayout
+) {
+  const nameLayout = layout.universityName || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.universityName!;
+  const { width: pageWidth } = page.getSize();
+  const maxWidth = nameLayout.maxWidth || pageWidth - 72;
+  const nameLines = wrapText(universityName, fontBold, nameLayout.size, maxWidth);
+  const textWidth = Math.max(...nameLines.map((line) => fontBold.widthOfTextAtSize(line, nameLayout.size)));
+  const x = Math.max(36, (pageWidth - textWidth) / 2);
+  drawLines(page, fontBold, nameLines, x, nameLayout.y, nameLayout.size, nameLayout.size + 4);
+}
+
 async function overlayDynamicFields(
   pdfDoc: PDFDocument,
+  templateBytes: Uint8Array,
   input: ProjectReportGenerateInput,
   layout: ProjectReportFieldLayout,
   logoBytes: Uint8Array | null,
@@ -101,29 +149,67 @@ async function overlayDynamicFields(
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const pages = pdfDoc.getPages();
   const section = resolveProjectReportDomainContent(input.domain);
+  const catalogNames = input.catalogUniversityNames || [];
 
-  const logoLayout = layout.logo || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.logo!;
-  const logoPage = pages[logoLayout.page] || pages[0];
-  const logoImage = await embedLogo(pdfDoc, logoBytes);
-  if (logoImage && logoPage) {
-    logoPage.drawImage(logoImage, {
-      x: logoLayout.x,
-      y: logoLayout.y,
-      width: logoLayout.width,
-      height: logoLayout.height,
-    });
-  }
-
-  const nameLayout = layout.universityName || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.universityName!;
-  const namePage = pages[nameLayout.page] || pages[0];
-  if (namePage) {
-    const nameLines = wrapText(
-      input.universityName,
+  let replacedCount = 0;
+  if (options.fromDomainTemplate) {
+    const textLines = await extractPdfTextLines(templateBytes);
+    replacedCount = applyUniversityTextReplacements(
+      pages,
       fontBold,
-      nameLayout.size,
-      nameLayout.maxWidth || 360
+      textLines,
+      catalogNames,
+      input.universityName
     );
-    drawLines(namePage, fontBold, nameLines, nameLayout.x, nameLayout.y, nameLayout.size, nameLayout.size + 4);
+
+    const logoRegion =
+      textLines.length > 0 ? inferLogoCoverRegion(textLines, 0) : defaultLogoCoverRegion(0);
+    const logoPage = pages[logoRegion.pageIndex] || pages[0];
+    const logoImage = await embedLogo(pdfDoc, logoBytes);
+    if (logoImage && logoPage) {
+      coverLogoRegion(logoPage, logoRegion);
+      drawLogoInRegion(logoPage, logoImage, logoRegion);
+    }
+
+    if (replacedCount === 0 && pages[0]) {
+      const headerBand = defaultLogoCoverRegion(0);
+      coverLogoRegion(pages[0], {
+        ...headerBand,
+        y: 430,
+        height: 380,
+        x: 28,
+        width: pages[0].getSize().width - 56,
+      });
+      drawFallbackUniversityHeader(pages[0], fontBold, input.universityName, layout);
+      if (logoImage) {
+        coverLogoRegion(pages[0], logoRegion);
+        drawLogoInRegion(pages[0], logoImage, logoRegion);
+      }
+    }
+  } else {
+    const logoLayout = layout.logo || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.logo!;
+    const logoPage = pages[logoLayout.page] || pages[0];
+    const logoImage = await embedLogo(pdfDoc, logoBytes);
+    if (logoImage && logoPage) {
+      logoPage.drawImage(logoImage, {
+        x: logoLayout.x,
+        y: logoLayout.y,
+        width: logoLayout.width,
+        height: logoLayout.height,
+      });
+    }
+
+    const nameLayout = layout.universityName || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.universityName!;
+    const namePage = pages[nameLayout.page] || pages[0];
+    if (namePage) {
+      const nameLines = wrapText(
+        input.universityName,
+        fontBold,
+        nameLayout.size,
+        nameLayout.maxWidth || 360
+      );
+      drawLines(namePage, fontBold, nameLines, nameLayout.x, nameLayout.y, nameLayout.size, nameLayout.size + 4);
+    }
   }
 
   const modeLayout = layout.mode || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.mode!;
@@ -190,9 +276,10 @@ export async function generateProjectReportPdfBlob(
 
   if (templateBytes) {
     const pdfDoc = await PDFDocument.load(templateBytes);
-    await overlayDynamicFields(pdfDoc, input, layout, logoBytes, { fromDomainTemplate: true });
-    const bytes = await pdfDoc.save();
-    return new Blob([bytes], { type: "application/pdf" });
+    const bytes = new Uint8Array(templateBytes);
+    await overlayDynamicFields(pdfDoc, bytes, input, layout, logoBytes, { fromDomainTemplate: true });
+    const out = await pdfDoc.save();
+    return new Blob([out], { type: "application/pdf" });
   }
 
   if (htmlFallbackElement) {
