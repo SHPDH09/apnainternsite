@@ -32,11 +32,11 @@ import {
   verifyStaffFaceMatchFromDescriptor,
 } from "@/lib/staffFaceVerify";
 import { blobToBase64 } from "@/lib/staffFacePhotoUpload";
+import { humanizeStaffFaceError } from "@/lib/staffFaceErrors";
 import { staffStatCardClass } from "@/components/staff/staffStyles";
 
 type Props = {
   profileImageUrl?: string | null;
-  staffId?: string | null;
   isActive?: boolean;
   onMarked?: () => void;
   onFaceRegistered?: (profileImageUrl: string) => void;
@@ -44,13 +44,13 @@ type Props = {
 
 export function StaffGeoFaceAttendanceMark({
   profileImageUrl,
-  staffId,
   isActive = true,
   onMarked,
   onFaceRegistered,
 }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [status, setStatus] = useState<StaffAttendanceStatusPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -85,17 +85,18 @@ export function StaffGeoFaceAttendanceMark({
       return;
     }
 
-    const video = videoRef.current;
+    const video = videoEl;
     if (!video) return;
 
     let cancelled = false;
+    setCameraReady(false);
     (async () => {
       try {
         streamRef.current = await startStaffCamera(video);
         if (!cancelled) setCameraReady(true);
       } catch (e: unknown) {
         if (!cancelled) {
-          toast.error(e instanceof Error ? e.message : "Camera access denied");
+          toast.error(humanizeStaffFaceError(e));
         }
       }
     })();
@@ -105,7 +106,7 @@ export function StaffGeoFaceAttendanceMark({
       stopStaffCamera(streamRef.current);
       streamRef.current = null;
     };
-  }, [isActive]);
+  }, [isActive, videoEl]);
 
   const windowState = deriveStaffAttendanceWindow({
     hasCheckIn: status?.has_check_in ?? false,
@@ -152,11 +153,6 @@ export function StaffGeoFaceAttendanceMark({
       toast.error("Camera is not ready");
       return;
     }
-    if (!staffId) {
-      toast.error("Profile not loaded");
-      return;
-    }
-
     setRegistering(true);
     try {
       const { ensureStaffAttendanceSchema } = await import("@/lib/staffSelfAttendance");
@@ -175,7 +171,7 @@ export function StaffGeoFaceAttendanceMark({
       onFaceRegistered?.(result.profile_image_url || "");
       await loadStatus();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Face registration failed");
+      toast.error(humanizeStaffFaceError(e));
     } finally {
       setRegistering(false);
     }
@@ -221,7 +217,7 @@ export function StaffGeoFaceAttendanceMark({
       await loadStatus();
       onMarked?.();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Attendance mark failed");
+      toast.error(humanizeStaffFaceError(e));
     } finally {
       setBusy(false);
     }
@@ -256,7 +252,10 @@ export function StaffGeoFaceAttendanceMark({
         <div className="space-y-3">
           <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-950 aspect-[4/3]">
             <video
-              ref={videoRef}
+              ref={(el) => {
+                videoRef.current = el;
+                setVideoEl(el);
+              }}
               className="size-full object-cover mirror-video"
               playsInline
               muted

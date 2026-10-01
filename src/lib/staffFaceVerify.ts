@@ -192,13 +192,46 @@ async function loadProfileImageForFaceMatch(
 
 async function descriptorFromImage(
   faceapi: Awaited<ReturnType<typeof loadFaceApi>>,
-  img: HTMLImageElement | HTMLVideoElement
+  img: HTMLImageElement | HTMLVideoElement,
+  scoreThreshold = 0.5
 ) {
   const detection = await faceapi
-    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
+    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold }))
     .withFaceLandmarks()
     .withFaceDescriptor();
   return detection?.descriptor ?? null;
+}
+
+/** Wait until the video element has frames (visible preview ≠ readyState yet). */
+export function waitForVideoReady(video: HTMLVideoElement, timeoutMs = 12000): Promise<void> {
+  if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Camera is not ready yet"));
+    }, timeoutMs);
+
+    const onReady = () => {
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        cleanup();
+        resolve();
+      }
+    };
+
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      video.removeEventListener("loadeddata", onReady);
+      video.removeEventListener("playing", onReady);
+      video.removeEventListener("resize", onReady);
+    };
+
+    video.addEventListener("loadeddata", onReady);
+    video.addEventListener("playing", onReady);
+    video.addEventListener("resize", onReady);
+    onReady();
+  });
 }
 
 /** Capture a JPEG frame from the live camera for profile / face registration upload. */
@@ -206,9 +239,7 @@ export async function captureVideoFrameBlob(
   video: HTMLVideoElement,
   quality = 0.92
 ): Promise<Blob> {
-  if (video.readyState < 2) {
-    throw new Error("Camera is not ready yet");
-  }
+  await waitForVideoReady(video);
   const canvas = document.createElement("canvas");
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -229,10 +260,11 @@ export async function extractFaceDescriptorFromVideo(
   liveVideo: HTMLVideoElement
 ): Promise<number[]> {
   const faceapi = await ensureFaceModels();
-  if (liveVideo.readyState < 2) {
-    throw new Error("Camera is not ready yet");
+  await waitForVideoReady(liveVideo);
+  let desc = await descriptorFromImage(faceapi, liveVideo, 0.5);
+  if (!desc) {
+    desc = await descriptorFromImage(faceapi, liveVideo, 0.35);
   }
-  const desc = await descriptorFromImage(faceapi, liveVideo);
   if (!desc) {
     throw new Error("No face detected. Look at the camera in good lighting.");
   }
@@ -317,6 +349,7 @@ export async function startStaffCamera(video: HTMLVideoElement): Promise<MediaSt
   });
   video.srcObject = stream;
   await video.play();
+  await waitForVideoReady(video);
   return stream;
 }
 
