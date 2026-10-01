@@ -96,6 +96,7 @@ function buildDomainContentLines(
 function drawCoverRect(page: PDFPage, slot: ProjectReportTextSlot) {
   const w = slot.coverWidth ?? (slot.maxWidth || 200) + 8;
   const h = slot.coverHeight ?? slot.size + 6;
+  if (w <= 0 || h <= 0) return;
   page.drawRectangle({
     x: slot.x - 2,
     y: slot.y - 2,

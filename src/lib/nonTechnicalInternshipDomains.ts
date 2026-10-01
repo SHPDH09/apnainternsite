@@ -41,6 +41,7 @@ export const NON_TECHNICAL_INTERNSHIP_DOMAINS: readonly string[] = [
   "E-commerce Management",
   "Finance",
   "Accounting",
+  "Accounting, Tally & GST",
   "Auditing",
   "Taxation",
   "Banking",
