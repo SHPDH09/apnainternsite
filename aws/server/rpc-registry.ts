@@ -213,6 +213,7 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
   staff_log_activity: { args: ["p_event_type", "p_detail"], auth: "auth" },
   staff_update_profile_image: { args: ["p_profile_image_url"], auth: "auth" },
   staff_register_face: { args: ["p_face_descriptor", "p_photo_url"], auth: "auth" },
+  staff_list_my_paid_salary_slips: { args: [], auth: "auth" },
   finalize_college_admin_creation: {
     args: ["target_user_id", "staff_email", "staff_full_name", "p_college_ids", "p_college_admin_code"],
     auth: "admin",

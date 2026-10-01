@@ -199,6 +199,8 @@ BEGIN
     RAISE EXCEPTION 'Employee is required';
   END IF;
 
+  p_employee_id := public._staff_salary_auth_user_id(p_employee_id);
+
   INSERT INTO public.staff_paid_leave_grants (
     employee_id, salary_month, extra_paid_days, reason, granted_by, updated_at
   )
@@ -288,6 +290,8 @@ DECLARE
   v_is_festival boolean;
   v_leave_needs_paid numeric;
   v_leave_overflow numeric;
+  v_canonical uuid;
+  v_row_ids uuid[];
 BEGIN
   PERFORM public._admin_assert_salary_access();
 
@@ -295,17 +299,24 @@ BEGIN
     RAISE EXCEPTION 'Employee and salary month are required';
   END IF;
 
+  v_canonical := public._staff_salary_auth_user_id(p_employee_id);
+  v_row_ids := public._staff_salary_row_ids(p_employee_id);
+
   SELECT * INTO v_setup
   FROM public.staff_salary_setup s
-  WHERE s.employee_id = p_employee_id AND s.is_active IS TRUE;
+  WHERE s.employee_id = ANY(v_row_ids) AND s.is_active IS TRUE
+  ORDER BY CASE WHEN s.employee_id = v_canonical THEN 0 ELSE 1 END
+  LIMIT 1;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Payment setup missing for this staff member';
   END IF;
 
+  p_employee_id := v_canonical;
+
   IF EXISTS (
     SELECT 1 FROM public.staff_salary_slips ss
-    WHERE ss.employee_id = p_employee_id
+    WHERE ss.employee_id = ANY(v_row_ids)
       AND ss.salary_month = v_month
       AND ss.status = 'paid'
   ) THEN
@@ -325,7 +336,7 @@ BEGIN
     0::numeric
   INTO v_present, v_absent, v_leave_paid, v_half, v_holiday_att, v_overtime_hours
   FROM public.employee_attendance ea
-  WHERE ea.employee_id = p_employee_id
+  WHERE ea.employee_id = ANY(v_row_ids)
     AND ea.attendance_date >= v_month
     AND ea.attendance_date <= v_month_end;
 
@@ -341,7 +352,7 @@ BEGIN
   ), 0)
   INTO v_overtime_hours
   FROM public.employee_attendance ea
-  WHERE ea.employee_id = p_employee_id
+  WHERE ea.employee_id = ANY(v_row_ids)
     AND ea.attendance_date >= v_month
     AND ea.attendance_date <= v_month_end
     AND ea.status IN ('present', 'overtime', 'half_day');
@@ -354,14 +365,14 @@ BEGIN
   WHERE h.holiday_date >= v_month AND h.holiday_date <= v_month_end
     AND NOT EXISTS (
       SELECT 1 FROM public.employee_attendance ea
-      WHERE ea.employee_id = p_employee_id
+      WHERE ea.employee_id = ANY(v_row_ids)
         AND ea.attendance_date = h.holiday_date
     );
 
   -- Extra paid leave grant for this employee + month
   SELECT coalesce(g.extra_paid_days, 0) INTO v_extra_grant
   FROM public.staff_paid_leave_grants g
-  WHERE g.employee_id = p_employee_id AND g.salary_month = v_month;
+  WHERE g.employee_id = ANY(v_row_ids) AND g.salary_month = v_month;
 
   v_paid_quota := coalesce(v_setup.paid_leaves_per_month, 0) + coalesce(v_extra_grant, 0);
   v_paid_pool := v_paid_quota + v_festival_paid + v_holiday_att;
@@ -370,7 +381,7 @@ BEGIN
   FOR v_leave_req IN
     SELECT lr.leave_type, lr.from_date, lr.to_date
     FROM public.staff_leave_requests lr
-    WHERE lr.staff_id = p_employee_id
+    WHERE lr.staff_id = ANY(v_row_ids)
       AND lr.status = 'approved'
       AND lr.to_date >= v_month
       AND lr.from_date <= v_month_end
@@ -379,7 +390,7 @@ BEGIN
     WHILE v_d <= least(v_leave_req.to_date, v_month_end) LOOP
       SELECT EXISTS (
         SELECT 1 FROM public.employee_attendance ea
-        WHERE ea.employee_id = p_employee_id AND ea.attendance_date = v_d
+        WHERE ea.employee_id = ANY(v_row_ids) AND ea.attendance_date = v_d
       ) INTO v_has_att;
 
       IF NOT v_has_att THEN

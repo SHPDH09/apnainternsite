@@ -58,6 +58,8 @@ import {
   listStaffSalarySetups,
   listStaffSalarySlips,
   markStaffSalaryPaid,
+  resolveStaffSalaryEmployeeId,
+  staffSalaryEmployeeIdSet,
   PAYMENT_MODE_LABELS,
   SALARY_STATUS_LABELS,
   upsertStaffPaidLeaveGrant,
@@ -133,12 +135,31 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
   const setupByEmployee = useMemo(() => {
     const map = new Map<string, StaffSalarySetupRow>();
     setups.forEach((s) => map.set(s.employee_id, s));
+    for (const member of staff) {
+      for (const key of staffSalaryEmployeeIdSet(member)) {
+        const row = map.get(key);
+        if (row) map.set(member.id, row);
+      }
+    }
     return map;
-  }, [setups]);
+  }, [setups, staff]);
+
+  const slipForMember = useCallback(
+    (member: AdminStaffProfile) => {
+      const keys = new Set(staffSalaryEmployeeIdSet(member));
+      return slips.find((s) => keys.has(s.employee_id));
+    },
+    [slips]
+  );
 
   const staffNameById = useMemo(() => {
     const map = new Map<string, string>();
-    staff.forEach((s) => map.set(s.id, s.full_name || s.email));
+    staff.forEach((s) => {
+      const label = s.full_name || s.email;
+      map.set(s.id, label);
+      map.set(resolveStaffSalaryEmployeeId(s), label);
+      if (s.user_id) map.set(String(s.user_id), label);
+    });
     return map;
   }, [staff]);
 
@@ -183,7 +204,9 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
   }, [isActive, load]);
 
   const openSetup = (member: AdminStaffProfile) => {
-    const existing = setupByEmployee.get(member.id);
+    const existing =
+      setupByEmployee.get(member.id) ||
+      setups.find((s) => staffSalaryEmployeeIdSet(member).includes(s.employee_id));
     setSetupTarget(member);
     setForm({
       basic_salary: existing ? String(existing.basic_salary) : "",
@@ -213,7 +236,7 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
     setBusy(true);
     try {
       await upsertStaffSalarySetup({
-        employeeId: setupTarget.id,
+        employeeId: resolveStaffSalaryEmployeeId(setupTarget),
         basicSalary: basic,
         hra: Number(form.hra || 0),
         specialAllowance: Number(form.special_allowance || 0),
@@ -255,7 +278,7 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
 
   const generateAllReady = async () => {
     const ready = staff.filter(
-      (s) => setupByEmployee.get(s.id)?.is_active && !slips.some((sl) => sl.employee_id === s.id)
+      (s) => setupByEmployee.get(s.id)?.is_active && !slipForMember(s)
     );
     if (!ready.length) {
       toast.message("No staff pending generation (setup required or already generated)");
@@ -265,7 +288,7 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
     let ok = 0;
     for (const member of ready) {
       try {
-        await generateStaffSalary(member.id, salaryMonth);
+        await generateStaffSalary(resolveStaffSalaryEmployeeId(member), salaryMonth);
         ok += 1;
       } catch {
         /* continue */
@@ -428,7 +451,7 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
               <TableBody>
                 {staff.map((member) => {
                   const setup = setupByEmployee.get(member.id);
-                  const slip = slips.find((s) => s.employee_id === member.id);
+                  const slip = slipForMember(member);
                   const canGenerate = !!setup && !slip;
                   return (
                     <TableRow key={member.id}>
@@ -451,7 +474,7 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                         <Button
                           size="sm"
                           disabled={!canGenerate || generatingId === member.id}
-                          onClick={() => void runGenerate(member.id)}
+                          onClick={() => void runGenerate(resolveStaffSalaryEmployeeId(member))}
                         >
                           {generatingId === member.id ? (
                             <Loader2 className="size-4 animate-spin" />
@@ -633,8 +656,11 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                 void (async () => {
                   setBusy(true);
                   try {
+                    const grantMember = staff.find((s) => s.id === grantEmployee);
                     await upsertStaffPaidLeaveGrant({
-                      employeeId: grantEmployee,
+                      employeeId: grantMember
+                        ? resolveStaffSalaryEmployeeId(grantMember)
+                        : grantEmployee,
                       salaryMonth,
                       extraPaidDays: Number(grantDays || 0),
                       reason: grantReason,
