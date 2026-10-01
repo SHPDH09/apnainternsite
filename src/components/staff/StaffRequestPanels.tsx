@@ -229,6 +229,11 @@ function LeaveTab({ isActive, currentUserId }: Props) {
                   <TableCell>{statusBadge(r.status)}</TableCell>
                   <TableCell className="max-w-[14rem] text-sm text-muted-foreground">
                     {r.admin_remarks || "—"}
+                    {r.leave_type === "half_day" && r.status === "approved" && r.half_day_check_in_from ? (
+                      <span className="mt-1 block text-[11px] text-sky-800">
+                        Check-in window: {r.half_day_check_in_from}–{r.half_day_check_in_until} IST
+                      </span>
+                    ) : null}
                     {r.reviewed_at ? (
                       <span className="mt-1 block text-[10px]">
                         {REQUEST_STATUS_LABELS[r.status]} · {new Date(r.reviewed_at).toLocaleString()}
