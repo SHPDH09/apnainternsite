@@ -292,7 +292,7 @@ function TablesSection({ data }: { data: CertificateDisplayData }) {
 function CertificateFooter({
   certificateId,
   issueDate,
-  showSignature = true,
+  showSignature = false,
 }: {
   certificateId?: string | null;
   issueDate?: string | null;
@@ -395,7 +395,7 @@ function CertificateFooter({
 
 function CertificatePage({
   data,
-  showSignature = true,
+  showSignature = false,
 }: {
   data: CertificateDisplayData;
   showSignature?: boolean;
@@ -421,7 +421,7 @@ function CertificatePage({
 }
 
 export const CertificateDocument = forwardRef<HTMLDivElement, Props>(
-  function CertificateDocument({ data, className = "", showSignature = true }, ref) {
+  function CertificateDocument({ data, className = "", showSignature = false }, ref) {
     return (
       <div ref={ref} className={className} style={{ width: PAGE.width }}>
         <CertificatePage data={data} showSignature={showSignature} />

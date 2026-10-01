@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -19,6 +19,13 @@ import {
 import { StudentLogbookDocument } from "@/components/student/StudentLogbookDocument";
 import { StudentAttendanceReportDocument } from "@/components/student/StudentAttendanceReportDocument";
 import { createElement } from "react";
+import { fetchProjectReportDomainTemplate } from "@/lib/projectReportSettings";
+import {
+  ProjectReportGenerationError,
+  downloadStudentProjectReport,
+  previewStudentProjectReportUrl,
+} from "@/lib/projectReportStudent";
+import { PROJECT_REPORT_DOMAIN_UNAVAILABLE } from "@/lib/studentDocumentPlaceholders";
 
 export type StudentDocumentId =
   | "consent"
@@ -45,6 +52,7 @@ type Options = {
   attendanceRecords: AttendanceRecord[];
   projectReports: LearningMaterialRow[];
   hasCertificate: boolean;
+  certificateNumber?: string | null;
   onOpenAcceptanceLetter: () => void;
   onOpenCertificate: () => void;
   onProfileUpdated?: () => void | Promise<void>;
@@ -62,6 +70,7 @@ export function useStudentDocumentActions({
   attendanceRecords,
   projectReports,
   hasCertificate,
+  certificateNumber,
   onOpenAcceptanceLetter,
   onOpenCertificate,
   onProfileUpdated,
@@ -79,6 +88,8 @@ export function useStudentDocumentActions({
     () => getStudentConsentLetterUrl({ metadata: (profile?.metadata as Record<string, unknown>) || null }),
     [profile]
   );
+  const [domainProjectTemplateReady, setDomainProjectTemplateReady] = useState(false);
+
   const projectReport = projectReports[0] ?? null;
   const projectUrlCandidates =
     projectReport?.file_url_candidates?.length
@@ -86,7 +97,50 @@ export function useStudentDocumentActions({
       : projectReport?.file_url
         ? [projectReport.file_url]
         : [];
-  const projectReady = projectUrlCandidates.length > 0;
+  const projectReady = projectUrlCandidates.length > 0 || domainProjectTemplateReady;
+
+  useEffect(() => {
+    const domain = String(fields.domain || "").trim();
+    if (!domain || domain === "—") {
+      setDomainProjectTemplateReady(false);
+      return;
+    }
+    let cancelled = false;
+    void fetchProjectReportDomainTemplate(supabase, domain)
+      .then((row) => {
+        if (!cancelled) {
+          setDomainProjectTemplateReady(Boolean(row?.template_pdf_url || row?.template_pdf_path));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDomainProjectTemplateReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fields.domain]);
+
+  const projectGenOptions = useMemo(
+    () => ({ certificateNumber: certificateNumber ?? null }),
+    [certificateNumber]
+  );
+
+  const openAutoProjectReport = async () => {
+    try {
+      const url = await previewStudentProjectReportUrl(profile, projectGenOptions);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+    } catch (e) {
+      if (e instanceof ProjectReportGenerationError && e.code === "no_template") {
+        throw e;
+      }
+      throw e;
+    }
+  };
+
+  const downloadAutoProjectReport = async () => {
+    await downloadStudentProjectReport(profile, projectGenOptions);
+  };
 
   const documents: StudentDocumentMeta[] = useMemo(
     () => [
@@ -134,13 +188,18 @@ export function useStudentDocumentActions({
       {
         id: "project",
         title: "Project Report",
-        description:
-          "Your domain-specific project report, uploaded by the Apna Intern team for your batch.",
+        description: domainProjectTemplateReady
+          ? "Personalised project report for your internship domain — generated from your profile."
+          : "Your domain-specific project report, uploaded by the Apna Intern team for your batch.",
         ready: projectReady,
-        statusLabel: projectReady ? "Ready" : "Not shared yet",
+        statusLabel: projectReady
+          ? domainProjectTemplateReady
+            ? "Auto-generated"
+            : "Ready"
+          : "Not available yet",
       },
     ],
-    [consentUrl, hasCertificate, projectReady]
+    [consentUrl, domainProjectTemplateReady, hasCertificate, projectReady]
   );
 
   const refreshIssueDate = useCallback(() => {
@@ -224,15 +283,26 @@ export function useStudentDocumentActions({
         setPreviewId("attendance");
         break;
       case "project":
-        if (projectUrlCandidates.length > 0) {
-          void (async () => {
+        void (async () => {
+          if (domainProjectTemplateReady) {
+            try {
+              await openAutoProjectReport();
+              return;
+            } catch (e) {
+              if (!(e instanceof ProjectReportGenerationError) || e.code !== "no_template") {
+                toast.error(e instanceof Error ? e.message : "Could not generate project report.");
+                return;
+              }
+            }
+          }
+          if (projectUrlCandidates.length > 0) {
             const url = await pickWorkingStorageUrl(projectUrlCandidates);
             if (url) window.open(url, "_blank", "noopener,noreferrer");
             else toast.error("Could not open project report.");
-          })();
-        } else {
-          toast.info("Project report has not been shared for your profile yet.");
-        }
+          } else {
+            toast.info(PROJECT_REPORT_DOMAIN_UNAVAILABLE);
+          }
+        })();
         break;
       default:
         break;
@@ -270,21 +340,33 @@ export function useStudentDocumentActions({
         await downloadAttendanceReport();
         break;
       case "project":
-        if (projectUrlCandidates.length > 0) {
-          setDownloading("project");
-          try {
+        setDownloading("project");
+        try {
+          if (domainProjectTemplateReady) {
+            try {
+              await downloadAutoProjectReport();
+              toast.success("Project report downloaded.");
+              return;
+            } catch (e) {
+              if (!(e instanceof ProjectReportGenerationError) || e.code !== "no_template") {
+                toast.error(e instanceof Error ? e.message : "Could not generate project report.");
+                return;
+              }
+            }
+          }
+          if (projectUrlCandidates.length > 0) {
             await downloadStorageFileWithFallback(
               projectUrlCandidates,
               projectReport?.file_name || "Project_Report.pdf"
             );
             toast.success("Project report downloaded.");
-          } catch {
-            toast.error("Could not download project report. Please try View instead.");
-          } finally {
-            setDownloading(null);
+          } else {
+            toast.info(PROJECT_REPORT_DOMAIN_UNAVAILABLE);
           }
-        } else {
-          toast.info("Project report has not been shared for your profile yet.");
+        } catch {
+          toast.error("Could not download project report. Please try View instead.");
+        } finally {
+          setDownloading(null);
         }
         break;
       default:

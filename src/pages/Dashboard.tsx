@@ -400,6 +400,7 @@ const Dashboard = () => {
     attendanceRecords: attendanceList,
     projectReports,
     hasCertificate: !!cert,
+    certificateNumber: cert?.certificate_id ? String(cert.certificate_id) : null,
     onOpenAcceptanceLetter: () => setIsOfferLetterOpen(true),
     onOpenCertificate: () => {
       if (!hasRequiredCertificateIdentityFields(profile)) {

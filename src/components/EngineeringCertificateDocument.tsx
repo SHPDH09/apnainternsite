@@ -43,7 +43,7 @@ function semesterNumber(raw: string): string {
 
 function EngineeringCertificatePage({
   data,
-  showSignature = true,
+  showSignature = false,
 }: {
   data: CertificateDisplayData;
   showSignature?: boolean;
@@ -311,7 +311,7 @@ function EngineeringCertificatePage({
 
 export const EngineeringCertificateDocument = forwardRef<HTMLDivElement, Props>(
   function EngineeringCertificateDocument(
-    { data, className = "", showSignature = true },
+    { data, className = "", showSignature = false },
     ref
   ) {
     return (

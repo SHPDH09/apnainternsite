@@ -365,14 +365,12 @@ export function StaffSecurityPanel({ isActive = true, onSignOutCurrent }: Securi
 type OwnAttendanceProps = {
   isActive?: boolean;
   profileImageUrl?: string | null;
-  staffId?: string | null;
   onFaceRegistered?: (profileImageUrl: string) => void;
 };
 
 export function StaffOwnAttendancePanel({
   isActive = true,
   profileImageUrl,
-  staffId,
   onFaceRegistered,
 }: OwnAttendanceProps) {
   const [rows, setRows] = useState<EmployeeAttendanceRow[]>([]);
@@ -412,7 +410,6 @@ export function StaffOwnAttendancePanel({
       </div>
       <StaffGeoFaceAttendanceMark
         profileImageUrl={profileImageUrl}
-        staffId={staffId}
         isActive={isActive}
         onFaceRegistered={onFaceRegistered}
         onMarked={() => void load()}

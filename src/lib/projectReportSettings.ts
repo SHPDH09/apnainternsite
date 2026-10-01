@@ -13,6 +13,11 @@ import {
   type ProjectReportFieldLayout,
   type ProjectReportSettings,
 } from "@/lib/projectReportTypes";
+import {
+  bundledProjectReportPdfPath,
+  mergeBundledProjectReportLayout,
+  resolveBundledProjectReportDomain,
+} from "@/lib/projectReportDomainLayouts";
 
 export type { ProjectReportDomainTemplate, ProjectReportFieldLayout, ProjectReportSettings };
 export { DEFAULT_PROJECT_REPORT_FIELD_LAYOUT };
@@ -31,14 +36,20 @@ function parseLayout(raw: unknown): ProjectReportFieldLayout {
 }
 
 function rowToTemplate(data: Record<string, unknown>): ProjectReportDomainTemplate {
+  const domainKey = String(data.domain_key || "");
+  const domainName = String(data.domain_name || "");
+  const parsed = parseLayout(data.field_layout);
+  const mergedLayout = mergeBundledProjectReportLayout(domainKey, parsed);
+  const bundled = resolveBundledProjectReportDomain(domainName || domainKey);
   return {
     id: String(data.id),
-    domain_name: String(data.domain_name || ""),
-    domain_key: String(data.domain_key || ""),
+    domain_name: domainName,
+    domain_key: domainKey,
     template_pdf_path: data.template_pdf_path ? String(data.template_pdf_path) : null,
     template_pdf_url: data.template_pdf_url ? String(data.template_pdf_url) : null,
     template_file_name: data.template_file_name ? String(data.template_file_name) : null,
-    field_layout: parseLayout(data.field_layout),
+    field_layout: mergedLayout,
+    template_version: mergedLayout.template_version,
     updated_at: data.updated_at ? String(data.updated_at) : undefined,
   };
 }
@@ -242,7 +253,28 @@ export async function fetchProjectReportDomainTemplate(
   if (exact) return exact;
 
   const fuzzy = all.find((row) => row.domain_name.toLowerCase() === domain.trim().toLowerCase());
-  return fuzzy || null;
+  if (fuzzy) return fuzzy;
+
+  const fuzzyBundled = all.find((row) => resolveBundledProjectReportDomain(row.domain_name)?.domainKey === resolveBundledProjectReportDomain(domain)?.domainKey);
+  if (fuzzyBundled) return fuzzyBundled;
+
+  const bundled = resolveBundledProjectReportDomain(domain);
+  if (!bundled) return null;
+
+  const origin =
+    typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+  const pdfUrl = origin ? `${origin}${bundled.bundledPdfPath}` : bundled.bundledPdfPath;
+
+  return {
+    id: `bundled-${bundled.domainKey}`,
+    domain_name: bundled.domainName,
+    domain_key: bundled.domainKey,
+    template_pdf_path: null,
+    template_pdf_url: pdfUrl,
+    template_file_name: "accounting-tally-gst.pdf",
+    field_layout: bundled.fieldLayout,
+    template_version: bundled.fieldLayout.template_version,
+  };
 }
 
 async function saveToRds(
@@ -332,12 +364,15 @@ export async function saveProjectReportDomainTemplate(
     pub.publicUrl;
   const publicUrl = `${String(cleanUrl).split("?")[0]}?v=${Date.now()}`;
 
+  const field_layout = mergeBundledProjectReportLayout(domainKey, {});
+
   const metadata = {
     domain_name: domainName,
     domain_key: domainKey,
     template_pdf_path: path,
     template_pdf_url: publicUrl,
     template_file_name: params.file.name,
+    field_layout,
     updated_by: params.uploadedBy || null,
   };
 
@@ -370,13 +405,22 @@ export async function saveProjectReportDomainTemplate(
 }
 
 export async function resolveTemplatePdfBytes(
-  template: Pick<ProjectReportDomainTemplate, "template_pdf_url">
+  template: Pick<ProjectReportDomainTemplate, "template_pdf_url" | "domain_key">
 ): Promise<ArrayBuffer | null> {
   const url = template.template_pdf_url?.trim();
-  if (!url) return null;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Could not load template PDF (${res.status}).`);
-  return res.arrayBuffer();
+  if (url) {
+    const res = await fetch(url);
+    if (res.ok) return res.arrayBuffer();
+  }
+  const bundledPath = template.domain_key
+    ? bundledProjectReportPdfPath(template.domain_key)
+    : null;
+  if (bundledPath && typeof window !== "undefined") {
+    const res = await fetch(bundledPath);
+    if (res.ok) return res.arrayBuffer();
+  }
+  if (url) throw new Error(`Could not load template PDF.`);
+  return null;
 }
 
 export async function resolveUniversityLogoBytes(logoUrl: string | null | undefined): Promise<Uint8Array | null> {

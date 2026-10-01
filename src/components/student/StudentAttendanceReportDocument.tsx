@@ -100,7 +100,7 @@ export const StudentAttendanceReportDocument = forwardRef<HTMLDivElement, Props>
                       pageLabel,
                     }
               }
-              showSignature={isLast}
+              showSignature={false}
               showLogos={isLast}
               showDocumentInfo={isLast}
               pageLabel={isFirst ? pageLabel : undefined}

@@ -419,13 +419,14 @@ const StaffDashboard = () => {
     if (!session) return;
     
     const { data: perms } = await supabase.from("admin_permissions").select("*").eq("user_id", session.user.id).maybeSingle();
-    const [{ data: staffById }, { data: staffByEmail }] = await Promise.all([
+    const [{ data: staffById }, { data: staffByUserId }, { data: staffByEmail }] = await Promise.all([
       supabase.from("admin_staff").select("*").eq("id", session.user.id).maybeSingle(),
+      supabase.from("admin_staff").select("*").eq("user_id", session.user.id).maybeSingle(),
       session.user.email
         ? supabase.from("admin_staff").select("*").eq("email", session.user.email).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
-    const staffRow = (staffById || staffByEmail) as AdminStaffProfile | null;
+    const staffRow = (staffById || staffByUserId || staffByEmail) as AdminStaffProfile | null;
     
     if (staffRow?.is_blocked) {
       toast.error("Your staff account is blocked. Contact an administrator.");
@@ -2140,7 +2141,6 @@ const StaffDashboard = () => {
             <StaffOwnAttendancePanel
               isActive={activeTab === "my-attendance"}
               profileImageUrl={staffProfile?.profile_image_url}
-              staffId={staffProfile?.id}
               onFaceRegistered={(url) => {
                 setStaffProfile((prev) => (prev ? { ...prev, profile_image_url: url } : prev));
               }}

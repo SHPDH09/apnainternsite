@@ -126,12 +126,6 @@ function resolvePublicSiteOrigin(): string {
   return "https://apnaintern.in";
 }
 
-function isS3AccessDenied(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  const name = err && typeof err === "object" && "name" in err ? String((err as { name?: string }).name) : "";
-  return /access denied|accessdenied|403/i.test(msg) || name === "AccessDenied";
-}
-
 async function uploadStaffFacePhotoRds(sessionSub: string, imageBuffer: Buffer): Promise<string> {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) {
@@ -178,8 +172,10 @@ async function uploadStaffFacePhoto(sessionSub: string, imageBase64: string): Pr
       );
       return publicLogoUrl(objectKey);
     } catch (err) {
-      if (!isS3AccessDenied(err)) throw err;
-      console.warn("[staff-office-rpc] S3 face photo denied, using RDS fallback");
+      console.warn(
+        "[staff-office-rpc] S3 face photo upload failed, using RDS fallback:",
+        err instanceof Error ? err.message : err
+      );
     }
   }
 

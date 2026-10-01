@@ -424,7 +424,7 @@ export function DocumentCustomizationPanel({ client, currentUserId, isActive = t
               naturalHeight={certificatePreviewVariant === "engineering" ? "210mm" : "297mm"}
               scale={certificatePreviewVariant === "engineering" ? 0.36 : 0.42}
             >
-              <IssuedCertificateDocument data={certificatePreviewData} showSignature />
+              <IssuedCertificateDocument data={certificatePreviewData} showSignature={false} />
             </DocumentTemplatePreviewPane>
           </div>
         </TabsContent>
