@@ -50,6 +50,8 @@ CREATE INDEX IF NOT EXISTS idx_site_blog_media_post
 const BLOG_S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'ap-south-1';
 const BLOG_LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || 'ezyintern-staging-logos';
 const BLOG_IMAGE_VERCEL_MAX_BYTES = 3_300_000;
+const BLOG_MEDIA_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 let blogEngPool: import('pg').Pool | null = null;
 let blogEngReady: Promise<void> | null = null;
@@ -837,6 +839,34 @@ async function deliverOutbound(
   await transporter.sendMail(mailOptions);
 }
 
+async function serveBlogMediaFromRds(res: VercelResponse, mediaId: string): Promise<void> {
+  if (!process.env.DATABASE_URL?.trim()) {
+    res.status(503).json({ ok: false, message: 'DATABASE_URL is not configured on this deployment' });
+    return;
+  }
+  try {
+    const { rows } = await blogEngagementQuery<{ content_type: string; data: Buffer }>(
+      `SELECT content_type, data FROM public.site_blog_media_assets WHERE id = $1::uuid LIMIT 1`,
+      [mediaId]
+    );
+    const row = rows[0];
+    if (!row?.data?.length) {
+      res.status(404).json({ ok: false, message: 'Image not found' });
+      return;
+    }
+    const contentType = String(row.content_type || 'application/octet-stream');
+    const buf = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Content-Length', String(buf.length));
+    res.status(200).send(buf);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[send-mail blog_media GET]', message);
+    res.status(503).json({ ok: false, message: 'Image temporarily unavailable' });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -849,6 +879,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
+  }
+
+  if (req.method === 'GET') {
+    const rawId = req.query.blog_media_id ?? req.query.id;
+    const id = (Array.isArray(rawId) ? rawId[0] : rawId)?.trim() || '';
+    if (BLOG_MEDIA_UUID_RE.test(id)) {
+      await serveBlogMediaFromRds(res, id);
+      return;
+    }
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
 
   if (req.method !== 'POST') {
@@ -919,7 +959,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       normalizedAction === 'blog_increment_view' ||
       normalizedAction === 'blog_get_view' ||
       normalizedAction === 'blog_submit_lead' ||
-      normalizedAction === 'blog_lookup_phone'
+      normalizedAction === 'blog_lookup_phone' ||
+      normalizedAction === 'blog_check_device'
     ) {
       if (!process.env.DATABASE_URL?.trim()) {
         return res.status(503).json({ ok: false, message: 'DATABASE_URL is not configured on this deployment' });
@@ -946,6 +987,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             [postId]
           );
           return res.status(200).json({ ok: true, view_count: Number(rows[0]?.view_count ?? 0) });
+        }
+
+        if (normalizedAction === 'blog_check_device') {
+          const deviceId = String(body.device_id || '').trim();
+          if (!deviceId) {
+            return res.status(200).json({ ok: true, unlocked: false });
+          }
+          const { rows } = await blogEngagementQuery<{ id: string }>(
+            `SELECT id FROM public.site_blog_leads WHERE device_id = $1 LIMIT 1`,
+            [deviceId]
+          );
+          return res.status(200).json({ ok: true, unlocked: rows.length > 0 });
         }
 
         if (normalizedAction === 'blog_submit_lead') {

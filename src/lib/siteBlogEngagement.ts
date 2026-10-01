@@ -125,13 +125,15 @@ type BlogInteractionAction =
   | "increment_view"
   | "get_view"
   | "submit_lead"
-  | "lookup_phone";
+  | "lookup_phone"
+  | "check_device";
 
 const SEND_MAIL_BLOG_ACTION: Record<BlogInteractionAction, string> = {
   increment_view: "blog_increment_view",
   get_view: "blog_get_view",
   submit_lead: "blog_submit_lead",
   lookup_phone: "blog_lookup_phone",
+  check_device: "blog_check_device",
 };
 
 async function postBlogViaSendMail(
@@ -176,6 +178,24 @@ export function markBlogLeadSubmitted(postId: string): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(BLOG_DEVICE_UNLOCK_KEY, "1");
   window.localStorage.setItem(`${LEAD_DONE_PREFIX}${postId}`, "1");
+}
+
+/** Restore device-wide unlock from RDS when localStorage was cleared on this browser. */
+export async function hydrateBlogReaderUnlockFromServer(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (isBlogReaderUnlockedOnDevice()) return true;
+  const deviceId = getOrCreateBlogDeviceId();
+  if (!deviceId) return false;
+  try {
+    const json = await postBlogViaSendMail("check_device", { device_id: deviceId });
+    if (json.unlocked === true) {
+      window.localStorage.setItem(BLOG_DEVICE_UNLOCK_KEY, "1");
+      return true;
+    }
+  } catch {
+    /* offline or API unavailable */
+  }
+  return false;
 }
 
 export function blogViewRecordedThisSession(postId: string): boolean {

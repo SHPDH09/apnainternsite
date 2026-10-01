@@ -63,7 +63,10 @@ import {
 } from "@/lib/siteBlogApi";
 import { cn } from "@/lib/utils";
 import { BlogLeadsPanel } from "@/components/admin/BlogLeadsPanel";
+import { AdminListPagination } from "@/components/admin/ui/AdminListPagination";
 import { formatBlogViewCount } from "@/lib/siteBlogApi";
+
+const BLOG_POSTS_PAGE_SIZE = 15;
 
 type Props = {
   client: SupabaseClient;
@@ -161,6 +164,7 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | BlogPostStatus>("all");
+  const [postsPage, setPostsPage] = useState(0);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editor, setEditor] = useState<EditorState>(EMPTY_EDITOR);
   const [editorTab, setEditorTab] = useState<"write" | "preview">("write");
@@ -215,6 +219,17 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
       );
     });
   }, [rows, search, filter]);
+
+  useEffect(() => {
+    setPostsPage(0);
+  }, [search, filter]);
+
+  const postsPageCount = Math.max(1, Math.ceil(filtered.length / BLOG_POSTS_PAGE_SIZE));
+  const safePostsPage = Math.min(postsPage, postsPageCount - 1);
+  const pagedPosts = filtered.slice(
+    safePostsPage * BLOG_POSTS_PAGE_SIZE,
+    (safePostsPage + 1) * BLOG_POSTS_PAGE_SIZE
+  );
 
   const openCreate = () => {
     setEditor({ ...EMPTY_EDITOR });
@@ -453,7 +468,7 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
         ) : (
           <ScrollArea className="mt-4 max-h-[520px]">
             <div className="space-y-2 pr-3">
-              {filtered.map((row) => (
+              {pagedPosts.map((row) => (
                 <div
                   key={row.id}
                   className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -515,6 +530,15 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
             </div>
           </ScrollArea>
         )}
+        {!loading && filtered.length > 0 ? (
+          <AdminListPagination
+            page={safePostsPage}
+            pageSize={BLOG_POSTS_PAGE_SIZE}
+            total={filtered.length}
+            onPageChange={setPostsPage}
+            label="Posts"
+          />
+        ) : null}
       </div>
 
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>

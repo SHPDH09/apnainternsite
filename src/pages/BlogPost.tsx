@@ -7,12 +7,14 @@ import { BlogLeadCaptureDialog } from "@/components/blog/BlogLeadCaptureDialog";
 import { BlogMarkdownContent } from "@/components/blog/BlogMarkdownContent";
 import { BlogReaderShell } from "@/components/blog/BlogReaderShell";
 import {
+  hydrateBlogReaderUnlockFromServer,
   isBlogReaderUnlockedOnDevice,
   blogViewRecordedThisSession,
   fetchBlogPostViewCount,
   incrementBlogPostView,
   markBlogViewRecorded,
 } from "@/lib/siteBlogEngagement";
+import { resolveBlogMarkdownAssetUrl } from "@/lib/storageUrl";
 import {
   estimateReadMinutes,
   fetchPublicBlogPostBySlug,
@@ -41,7 +43,10 @@ export default function BlogPost() {
         else {
           setPost(row);
           setViewCount(Number(row.view_count ?? 0));
-          const unlocked = isBlogReaderUnlockedOnDevice();
+          let unlocked = isBlogReaderUnlockedOnDevice();
+          if (!unlocked) {
+            unlocked = await hydrateBlogReaderUnlockFromServer();
+          }
           setLeadUnlocked(unlocked);
           setLeadOpen(!unlocked);
           document.title = `${row.meta_title || row.title} · Apna Intern`;
@@ -122,7 +127,7 @@ export default function BlogPost() {
         {post.cover_image_url ? (
           <div className="-mx-4 mb-8 overflow-hidden rounded-2xl sm:-mx-0 sm:mb-10">
             <img
-              src={post.cover_image_url}
+              src={resolveBlogMarkdownAssetUrl(post.cover_image_url) || post.cover_image_url}
               alt=""
               className="aspect-[16/9] w-full object-cover sm:aspect-[2/1]"
             />

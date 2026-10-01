@@ -15,8 +15,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { adminCardClass } from "@/components/admin/ui/adminStyles";
+import { AdminListPagination } from "@/components/admin/ui/AdminListPagination";
 import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
 import { formatBlogDate } from "@/lib/siteBlogApi";
+
+const BLOG_LEADS_PAGE_SIZE = 20;
 
 export type SiteBlogLead = {
   id: string;
@@ -46,6 +49,7 @@ export function BlogLeadsPanel({ client }: Props) {
   const [textSearch, setTextSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [leadsPage, setLeadsPage] = useState(0);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -92,6 +96,17 @@ export function BlogLeadsPanel({ client }: Props) {
       return true;
     });
   }, [rows, phoneSearch, textSearch, dateFrom, dateTo]);
+
+  useEffect(() => {
+    setLeadsPage(0);
+  }, [phoneSearch, textSearch, dateFrom, dateTo]);
+
+  const leadsPageCount = Math.max(1, Math.ceil(filtered.length / BLOG_LEADS_PAGE_SIZE));
+  const safeLeadsPage = Math.min(leadsPage, leadsPageCount - 1);
+  const pagedLeads = filtered.slice(
+    safeLeadsPage * BLOG_LEADS_PAGE_SIZE,
+    (safeLeadsPage + 1) * BLOG_LEADS_PAGE_SIZE
+  );
 
   const downloadCsv = () => {
     const header = ["Date", "Name", "Email", "Phone", "College", "Post title", "Post slug"];
@@ -160,7 +175,7 @@ export function BlogLeadsPanel({ client }: Props) {
           </Button>
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          Showing {filtered.length} of {rows.length} leads from blog reader popups.
+          {filtered.length} of {rows.length} leads match filters (paginated below).
         </p>
       </div>
 
@@ -183,7 +198,7 @@ export function BlogLeadsPanel({ client }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((r) => (
+              {pagedLeads.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="whitespace-nowrap text-xs text-slate-600">
                     {formatBlogDate(r.created_at) || "—"}
@@ -207,6 +222,15 @@ export function BlogLeadsPanel({ client }: Props) {
           </Table>
         </ScrollArea>
       )}
+      {!loading && filtered.length > 0 ? (
+        <AdminListPagination
+          page={safeLeadsPage}
+          pageSize={BLOG_LEADS_PAGE_SIZE}
+          total={filtered.length}
+          onPageChange={setLeadsPage}
+          label="Leads"
+        />
+      ) : null}
     </div>
   );
 }

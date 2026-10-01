@@ -138,7 +138,18 @@ export function resolveStorageUrl(url: string | null | undefined): string | null
 /** Blog inline images: RDS API paths, storage proxy, or legacy S3 URLs. */
 export function resolveBlogMarkdownAssetUrl(url: string | null | undefined): string | null {
   if (!url?.trim()) return null;
-  const trimmed = url.trim();
+  let trimmed = url.trim();
+  try {
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      const parsed = new URL(trimmed);
+      if (parsed.pathname === "/api/public/blog-media" || parsed.pathname.endsWith("/api/send-mail")) {
+        const id = parsed.searchParams.get("id") || parsed.searchParams.get("blog_media_id");
+        if (id) return `/api/public/blog-media?id=${encodeURIComponent(id)}`;
+      }
+    }
+  } catch {
+    /* keep trimmed */
+  }
   if (trimmed.startsWith("/api/public/blog-media")) return trimmed;
   if (trimmed.startsWith("api/public/blog-media")) return `/${trimmed.replace(/^\/+/, "")}`;
   const resolved = resolveStorageUrl(trimmed);

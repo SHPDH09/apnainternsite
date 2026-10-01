@@ -127,7 +127,8 @@ export function BlogLeadCaptureDialog({
           <DialogDescription className="text-left leading-relaxed">
             Use Chrome saved details (tap a field for autofill suggestions). We only save to our database when
             you press Submit — nothing is loaded from the server into this form.
-            Unlock <span className="font-medium text-slate-800">{postTitle}</span>.
+            Submit once on this device to unlock every blog article — you will not be asked again on this
+            browser. Unlock <span className="font-medium text-slate-800">{postTitle}</span>.
           </DialogDescription>
         </DialogHeader>
         <form
