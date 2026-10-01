@@ -27,6 +27,7 @@ import {
   Users,
   Wrench,
   Award,
+  Building2,
 } from "lucide-react";
 import { TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -325,6 +326,7 @@ export function buildAdminNavGroups(
       { kind: "tab", value: "gallery", label: "Gallery", icon: Image },
       { kind: "tab", value: "blog", label: "Blog & Vlog", icon: BookOpen },
       { kind: "tab", value: "home-cms", label: "Home Page Content", icon: LayoutDashboard },
+      { kind: "tab", value: "university-logos", label: "University Logos", icon: Building2 },
       { kind: "tab", value: "consult-letter", label: "Consent Form", icon: FileText },
       { kind: "tab", value: "popups", label: "Popups", icon: Bell },
       { kind: "tab", value: "contact-details", label: "Contact Details", icon: Phone },
