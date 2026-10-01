@@ -35,7 +35,7 @@ BEGIN
     SELECT lower(trim(u.email))
     INTO v_auth_email
     FROM public.students s
-    JOIN auth.users u ON u.id::text = NULLIF(trim(s.id), '')
+    JOIN auth.users u ON u.id::text = NULLIF(trim(s.id::text), '')
     WHERE lower(trim(s.email)) = v_email
     ORDER BY s.created_at DESC NULLS LAST
     LIMIT 1;
@@ -72,7 +72,7 @@ BEGIN
     SELECT lower(trim(u.email))
     INTO v_auth_email
     FROM public.students s
-    JOIN auth.users u ON u.id::text = NULLIF(trim(s.id), '')
+    JOIN auth.users u ON u.id::text = NULLIF(trim(s.id::text), '')
     WHERE lower(trim(s.email)) = v_emails[1]
     ORDER BY s.created_at DESC NULLS LAST
     LIMIT 1;
@@ -118,7 +118,7 @@ BEGIN
       SELECT lower(trim(u.email))
       INTO v_auth_email
       FROM public.students s
-      JOIN auth.users u ON u.id::text = NULLIF(trim(s.id), '')
+      JOIN auth.users u ON u.id::text = NULLIF(trim(s.id::text), '')
       WHERE lower(trim(s.email)) = v_emails[1]
       ORDER BY s.created_at DESC NULLS LAST
       LIMIT 1;

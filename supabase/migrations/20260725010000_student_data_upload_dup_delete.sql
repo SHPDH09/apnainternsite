@@ -345,11 +345,11 @@ BEGIN
       RETURN v_auth_email;
     END IF;
 
-    SELECT array_agg(DISTINCT NULLIF(trim(s.id), '') ORDER BY NULLIF(trim(s.id), ''))
+    SELECT array_agg(DISTINCT NULLIF(trim(s.id::text), '') ORDER BY NULLIF(trim(s.id::text), ''))
     INTO v_emails
     FROM public.students s
     WHERE lower(trim(s.email)) = v_email
-      AND NULLIF(trim(s.id), '') IS NOT NULL;
+      AND NULLIF(trim(s.id::text), '') IS NOT NULL;
 
     IF v_emails IS NOT NULL AND array_length(v_emails, 1) > 1 THEN
       RAISE EXCEPTION 'Multiple accounts use this email. Please sign in with your registration number instead.'
@@ -462,7 +462,7 @@ BEGIN
       SELECT lower(trim(u.email))
       INTO v_auth_email
       FROM public.students s
-      JOIN auth.users u ON u.id::text = NULLIF(trim(s.id), '')
+      JOIN auth.users u ON u.id::text = NULLIF(trim(s.id::text), '')
       WHERE lower(trim(s.email)) = v_emails[1]
       ORDER BY s.created_at DESC NULLS LAST
       LIMIT 1;

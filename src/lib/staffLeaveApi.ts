@@ -205,8 +205,9 @@ export async function reviewLeaveRequest(
     updated_at: new Date().toISOString(),
   };
   if (input.status === "approved") {
-    if (input.halfDayCheckInFrom) patch.half_day_check_in_from = input.halfDayCheckInFrom;
-    if (input.halfDayCheckInUntil) patch.half_day_check_in_until = input.halfDayCheckInUntil;
+    const toPgTime = (t: string) => (t.length === 5 ? `${t}:00` : t);
+    if (input.halfDayCheckInFrom) patch.half_day_check_in_from = toPgTime(input.halfDayCheckInFrom);
+    if (input.halfDayCheckInUntil) patch.half_day_check_in_until = toPgTime(input.halfDayCheckInUntil);
   }
   if (input.status === "rejected") {
     patch.half_day_check_in_from = null;

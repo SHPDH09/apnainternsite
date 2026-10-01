@@ -49,7 +49,9 @@ const faceRegisterSql = readSql("aws/scripts/90-rds-staff-face-register.sql");
 const halfDaySql =
   readSql("aws/scripts/91-rds-staff-half-day-leave.sql") +
   "\n\n" +
-  readSql("aws/scripts/92-rds-staff-half-day-attendance-rpc.sql");
+  readSql("aws/scripts/92-rds-staff-half-day-attendance-rpc.sql") +
+  "\n\n" +
+  readSql("aws/scripts/93-rds-fix-btrim-uuid.sql");
 const salaryBaseSql = readSql("aws/scripts/81-rds-staff-salary-account.sql");
 const salaryAdvancedSql = readSql("aws/scripts/86-rds-staff-salary-advanced.sql");
 
