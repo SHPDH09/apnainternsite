@@ -11,6 +11,8 @@ export type AdminStaffProfile = {
   aadhaar_number: string | null;
   pan_number: string | null;
   profile_image_url: string | null;
+  face_descriptor?: unknown | null;
+  face_registered_at?: string | null;
   employee_code?: string | null;
   is_blocked: boolean;
   created_at?: string;

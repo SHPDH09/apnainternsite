@@ -19,7 +19,9 @@ const STAFF_ATTENDANCE_RPCS: Record<string, string[]> = {
   admin_assign_staff_office: ["p_employee_id", "p_office_id"],
   admin_remove_staff_office_assignment: ["p_employee_id"],
   admin_list_staff_office_assignments: [],
+  admin_reset_staff_face: ["p_employee_id"],
   staff_register_face: ["p_face_descriptor", "p_photo_url"],
+  staff_update_profile_image: ["p_profile_image_url"],
   staff_self_attendance_status: [],
   staff_self_check_in: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
   staff_self_check_out: ["p_latitude", "p_longitude", "p_face_score", "p_gps_accuracy_m"],
@@ -155,9 +157,14 @@ async function uploadStaffFacePhotoRds(sessionSub: string, imageBuffer: Buffer):
 }
 
 /** Upload face photo to S3; on IAM AccessDenied store in RDS (same as blog CMS images). */
-async function uploadStaffFacePhoto(sessionSub: string, imageBase64: string): Promise<string> {
+async function uploadStaffProfilePhoto(
+  sessionSub: string,
+  imageBase64: string,
+  kind: "face" | "profile" = "face"
+): Promise<string> {
   const imageBuffer = decodeImageBase64(imageBase64);
-  const objectKey = `staff-profiles/${sessionSub}-face-${Date.now()}.jpg`;
+  const suffix = kind === "profile" ? "profile" : "face";
+  const objectKey = `staff-profiles/${sessionSub}-${suffix}-${Date.now()}.jpg`;
 
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
@@ -184,6 +191,10 @@ async function uploadStaffFacePhoto(sessionSub: string, imageBase64: string): Pr
   }
 
   return uploadStaffFacePhotoRds(sessionSub, imageBuffer);
+}
+
+async function uploadStaffFacePhoto(sessionSub: string, imageBase64: string): Promise<string> {
+  return uploadStaffProfilePhoto(sessionSub, imageBase64, "face");
 }
 
 async function applyStaffOfficeSql(databaseUrl: string, rpcName: string): Promise<void> {
@@ -293,6 +304,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({
           data: null,
           error: { message: "Profile photo is required for face registration" },
+        });
+      }
+    }
+
+    if (name === "staff_update_profile_image") {
+      const imageBase64 =
+        typeof args.p_image_base64 === "string" ? args.p_image_base64.trim() : "";
+      if (imageBase64) {
+        args.p_profile_image_url = await uploadStaffProfilePhoto(session.sub, imageBase64, "profile");
+        delete args.p_image_base64;
+      }
+      if (!args.p_profile_image_url || !String(args.p_profile_image_url).trim()) {
+        return res.status(400).json({
+          data: null,
+          error: { message: "Profile photo URL or image data is required" },
         });
       }
     }

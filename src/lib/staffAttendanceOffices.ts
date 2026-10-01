@@ -209,3 +209,10 @@ export async function removeStaffOfficeAssignment(employeeId: string): Promise<v
     p_employee_id: employeeId,
   });
 }
+
+export async function adminResetStaffFace(employeeId: string): Promise<{ ok: boolean }> {
+  const data = await callStaffOfficeRpc<{ ok?: boolean }>("admin_reset_staff_face", {
+    p_employee_id: employeeId,
+  });
+  return { ok: Boolean(data?.ok ?? true) };
+}

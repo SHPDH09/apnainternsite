@@ -12,6 +12,40 @@ const STORAGE_PUBLIC_RE = /\/storage\/v1\/object\/public\/([^/?#]+)\/([^?#]+)/;
 let modelsLoaded = false;
 let modelsLoading: Promise<void> | null = null;
 
+/** Warm face-api models while the user opens attendance (reduces capture wait). */
+export function preloadStaffFaceModels(): void {
+  void ensureFaceModels();
+}
+
+export async function waitForVideoReady(
+  video: HTMLVideoElement,
+  timeoutMs = 8000
+): Promise<void> {
+  if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const done = () => {
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        cleanup();
+        resolve();
+      }
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      video.removeEventListener("loadeddata", done);
+      video.removeEventListener("playing", done);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("Camera is taking too long. Check permissions and try again."));
+    }, timeoutMs);
+    video.addEventListener("loadeddata", done);
+    video.addEventListener("playing", done);
+    done();
+  });
+}
+
 async function loadFaceApi() {
   return import("@vladmandic/face-api");
 }
@@ -192,13 +226,25 @@ async function loadProfileImageForFaceMatch(
 
 async function descriptorFromImage(
   faceapi: Awaited<ReturnType<typeof loadFaceApi>>,
-  img: HTMLImageElement | HTMLVideoElement
+  img: HTMLImageElement | HTMLVideoElement,
+  attempts = 4
 ) {
-  const detection = await faceapi
-    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
-    .withFaceLandmarks()
-    .withFaceDescriptor();
-  return detection?.descriptor ?? null;
+  const thresholds = [0.45, 0.4, 0.35, 0.3];
+  for (let i = 0; i < attempts; i++) {
+    const scoreThreshold = thresholds[i] ?? 0.3;
+    const detection = await faceapi
+      .detectSingleFace(
+        img,
+        new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold })
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+    if (detection?.descriptor) return detection.descriptor;
+    if (i < attempts - 1) {
+      await new Promise((r) => setTimeout(r, 120));
+    }
+  }
+  return null;
 }
 
 /** Capture a JPEG frame from the live camera for profile / face registration upload. */
@@ -206,9 +252,7 @@ export async function captureVideoFrameBlob(
   video: HTMLVideoElement,
   quality = 0.92
 ): Promise<Blob> {
-  if (video.readyState < 2) {
-    throw new Error("Camera is not ready yet");
-  }
+  await waitForVideoReady(video);
   const canvas = document.createElement("canvas");
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -229,9 +273,7 @@ export async function extractFaceDescriptorFromVideo(
   liveVideo: HTMLVideoElement
 ): Promise<number[]> {
   const faceapi = await ensureFaceModels();
-  if (liveVideo.readyState < 2) {
-    throw new Error("Camera is not ready yet");
-  }
+  await waitForVideoReady(liveVideo);
   const desc = await descriptorFromImage(faceapi, liveVideo);
   if (!desc) {
     throw new Error("No face detected. Look at the camera in good lighting.");
@@ -246,9 +288,7 @@ export async function verifyStaffFaceMatchFromDescriptor(
 ): Promise<{ score: number; matched: boolean }> {
   const faceapi = await ensureFaceModels();
 
-  if (liveVideo.readyState < 2) {
-    throw new Error("Camera is not ready yet");
-  }
+  await waitForVideoReady(liveVideo);
 
   const profileDesc =
     storedDescriptor instanceof Float32Array
@@ -317,6 +357,7 @@ export async function startStaffCamera(video: HTMLVideoElement): Promise<MediaSt
   });
   video.srcObject = stream;
   await video.play();
+  await waitForVideoReady(video);
   return stream;
 }
 

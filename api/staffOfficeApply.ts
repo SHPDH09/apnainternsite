@@ -11,6 +11,7 @@ import {
   staffOfficeSelfAttendanceRpcSql,
   staffSalaryAdvancedSql,
   staffSalaryBaseSql,
+  staffProfileImageRpcSql,
 } from "./staffOfficeSqlChunks.js";
 
 type Queryable = {
@@ -21,6 +22,8 @@ type Queryable = {
 };
 
 const STAFF_FACE_REGISTER_RPC_NAMES = new Set(["staff_register_face"]);
+
+const STAFF_PROFILE_IMAGE_RPC_NAMES = new Set(["staff_update_profile_image"]);
 
 const STAFF_SELF_RPC_NAMES = new Set([
   "staff_self_attendance_status",
@@ -35,6 +38,7 @@ const STAFF_OFFICE_ADMIN_RPC_NAMES = new Set([
   "admin_assign_staff_office",
   "admin_remove_staff_office_assignment",
   "admin_list_staff_office_assignments",
+  "admin_reset_staff_face",
 ]);
 
 async function rpcExists(pool: Queryable, name: string): Promise<boolean> {
@@ -103,16 +107,30 @@ export async function applyStaffFaceRegisterBootstrap(pool: Queryable): Promise<
   await assertRpcs(pool, STAFF_FACE_REGISTER_REQUIRED_RPCS);
 }
 
+/** Idempotent patches for new admin RPCs on deployments that already had office CRUD. */
+export async function applyStaffAdminRpcPatches(pool: Queryable): Promise<void> {
+  if (!(await rpcExists(pool, "admin_reset_staff_face"))) {
+    await pool.query(staffOfficeAdminRpcSql());
+  }
+}
+
+/** Staff profile photo RPC (resolve staff row by user_id). */
+export async function applyStaffProfileImageBootstrap(pool: Queryable): Promise<void> {
+  await pool.query(staffProfileImageRpcSql());
+}
+
 /** Admin office CRUD + assignments — no salary SQL. */
 export async function applyStaffOfficeAdminBootstrap(pool: Queryable): Promise<void> {
   const ready = (await rpcExists(pool, "admin_list_staff_attendance_offices")) &&
     (await rpcExists(pool, "admin_assign_staff_office"));
-  if (ready) return;
-
-  await pool.query(staffOfficeEnsureSchemaSql());
-  await pool.query("SELECT public._ensure_staff_attendance_office_schema()");
-  await pool.query(staffOfficeAdminRpcSql());
-  await assertRpcs(pool, [...STAFF_OFFICE_REQUIRED_RPCS]);
+  if (!ready) {
+    await pool.query(staffOfficeEnsureSchemaSql());
+    await pool.query("SELECT public._ensure_staff_attendance_office_schema()");
+    await pool.query(staffOfficeAdminRpcSql());
+    await assertRpcs(pool, [...STAFF_OFFICE_REQUIRED_RPCS]);
+  } else {
+    await applyStaffAdminRpcPatches(pool);
+  }
 }
 
 /** Full bootstrap for rds-apply-all (office + salary). */
@@ -136,8 +154,9 @@ export async function applyStaffOfficeBootstrap(pool: Queryable): Promise<void> 
 
 export function staffOfficeBootstrapForRpc(
   rpcName: string
-): "self" | "face_register" | "admin" | "full" {
+): "self" | "face_register" | "profile_image" | "admin" | "full" {
   if (STAFF_FACE_REGISTER_RPC_NAMES.has(rpcName)) return "face_register";
+  if (STAFF_PROFILE_IMAGE_RPC_NAMES.has(rpcName)) return "profile_image";
   if (STAFF_SELF_RPC_NAMES.has(rpcName)) return "self";
   if (STAFF_OFFICE_ADMIN_RPC_NAMES.has(rpcName)) return "admin";
   return "full";
@@ -146,7 +165,11 @@ export function staffOfficeBootstrapForRpc(
 export async function applyStaffOfficeBootstrapForRpc(pool: Queryable, rpcName: string): Promise<void> {
   switch (staffOfficeBootstrapForRpc(rpcName)) {
     case "face_register":
-      return applyStaffFaceRegisterBootstrap(pool);
+      await applyStaffFaceRegisterBootstrap(pool);
+      return applyStaffProfileImageBootstrap(pool);
+    case "profile_image":
+      await applyStaffSelfOfficeBootstrap(pool);
+      return applyStaffProfileImageBootstrap(pool);
     case "self":
       return applyStaffSelfOfficeBootstrap(pool);
     case "admin":

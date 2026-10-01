@@ -42,6 +42,8 @@ import {
 } from "@/lib/staffSessions";
 import type { AdminStaffProfile } from "@/lib/staffProfile";
 import { resolveBlogMarkdownAssetUrl, resolveStorageUrl } from "@/lib/storageUrl";
+import { staffUpdateProfileImage } from "@/lib/staffSelfAttendance";
+import { blobToBase64 } from "@/lib/staffFacePhotoUpload";
 import { StaffGeoFaceAttendanceMark } from "@/components/staff/StaffGeoFaceAttendanceMark";
 
 type ProfileProps = {
@@ -100,22 +102,15 @@ export function StaffProfilePanel({
     }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `staff-profiles/${profile.id}-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("logos").upload(path, file, { upsert: true });
-      if (upErr) throw upErr;
-      const { data } = supabase.storage.from("logos").getPublicUrl(path);
-      const publicUrl = resolveStorageUrl(data.publicUrl) || data.publicUrl;
-      const { error: rpcErr } = await supabase.rpc("staff_update_profile_image", {
-        p_profile_image_url: publicUrl,
-      });
-      if (rpcErr) {
-        // Fallback direct update if RPC missing
-        const { error } = await supabase
-          .from("admin_staff")
-          .update({ profile_image_url: publicUrl, updated_at: new Date().toISOString() })
-          .eq("id", profile.id);
-        if (error) throw rpcErr;
+      const imageBase64 = await blobToBase64(file);
+      const result = await staffUpdateProfileImage({ imageBase64 });
+      const publicUrl =
+        resolveBlogMarkdownAssetUrl(result.profile_image_url || "") ||
+        resolveStorageUrl(result.profile_image_url || "") ||
+        result.profile_image_url ||
+        "";
+      if (!publicUrl) {
+        throw new Error("Upload succeeded but photo URL was missing");
       }
       setImageUrl(publicUrl);
       onProfileImageUpdated?.(publicUrl);
