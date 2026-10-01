@@ -60,8 +60,8 @@ export const DEFAULT_CERTIFICATE_TEMPLATE: CertificateTemplateConfig = {
   companyName: "Apna Intern",
   ceoName: "Ajeet Kumar",
   ceoTitle: "Founder & CEO",
-  signatureSrc: "/certificate/signature.png?v=7",
-  stampSrc: "/certificate/stamp.png",
+  signatureSrc: "",
+  stampSrc: "",
   assessmentCriteria: [
     "Technical Knowledge & Application",
     "Quality of Work & Task Completion",

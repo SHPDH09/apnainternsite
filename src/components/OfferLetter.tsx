@@ -15,6 +15,7 @@ import {
   CERTIFICATE_COMPANY,
   CERTIFICATE_SIGNATURE_SRC,
 } from "@/lib/certificateFormat";
+import { documentShowPreappliedSignature } from "@/lib/documentRenderPolicy";
 
 interface OfferLetterProps {
   profile: any;
@@ -158,20 +159,24 @@ export const OfferLetter = forwardRef<HTMLDivElement, OfferLetterProps>(({ profi
         </div>
 
         <div className="relative z-10 mt-6 w-full border-t border-slate-200 pt-4">
-          <div className="flex justify-end items-end gap-2 mb-2">
-            <img
-              src={signatureSrc}
-              alt={`Signature of ${ceoName}`}
-              className="h-[48px] w-auto max-w-[170px] object-contain"
-              crossOrigin="anonymous"
-            />
-            <img
-              src={stampSrc}
-              alt="Company stamp"
-              className="h-[48px] w-[48px] object-contain shrink-0"
-              crossOrigin="anonymous"
-            />
-          </div>
+          {documentShowPreappliedSignature() ? (
+            <div className="flex justify-end items-end gap-2 mb-2">
+              <img
+                src={signatureSrc}
+                alt={`Signature of ${ceoName}`}
+                className="h-[48px] w-auto max-w-[170px] object-contain"
+                crossOrigin="anonymous"
+              />
+              <img
+                src={stampSrc}
+                alt="Company stamp"
+                className="h-[48px] w-[48px] object-contain shrink-0"
+                crossOrigin="anonymous"
+              />
+            </div>
+          ) : (
+            <div className="mb-3 min-h-[52px]" aria-hidden />
+          )}
           <div className="text-right mb-3">
             <p className="text-[11px] font-bold text-slate-900">{ceoName}</p>
             <p className="text-[10px] font-semibold text-slate-700">{ceoTitle}</p>

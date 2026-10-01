@@ -17,7 +17,7 @@ type Props = {
  * otherwise the standard Certificate of Completion template.
  */
 export const IssuedCertificateDocument = forwardRef<HTMLDivElement, Props>(
-  function IssuedCertificateDocument({ data, className, showSignature = true }, ref) {
+  function IssuedCertificateDocument({ data, className, showSignature = false }, ref) {
     if (isEngineeringCertificateData(data)) {
       return (
         <EngineeringCertificateDocument

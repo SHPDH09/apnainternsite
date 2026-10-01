@@ -9,6 +9,7 @@ import {
   CERTIFICATE_SIGNATURE_SRC,
 } from "@/lib/certificateFormat";
 import { ACCEPTANCE_LETTER_ISSUE_DATE } from "@/lib/offerLetterProfile";
+import { documentShowPreappliedSignature } from "@/lib/documentRenderPolicy";
 
 export const DOCUMENT_PAGE = {
   width: "210mm",
@@ -85,7 +86,7 @@ export function DocumentHeader() {
 export function DocumentFooter({
   documentLabel,
   issueDate = ACCEPTANCE_LETTER_ISSUE_DATE,
-  showSignature = true,
+  showSignature = documentShowPreappliedSignature(),
   showLogos = true,
   showDocumentInfo = true,
   pageLabel,
@@ -191,7 +192,7 @@ export function DocumentPage({
   documentLabel,
   variant = "full",
   continuationHeader,
-  showSignature = true,
+  showSignature = documentShowPreappliedSignature(),
   showLogos = true,
   showDocumentInfo = true,
   pageLabel,

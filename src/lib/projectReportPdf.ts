@@ -11,12 +11,15 @@ import {
   type ProjectReportDomainSection,
   type ProjectReportMode,
 } from "@/lib/projectReportDomainContent";
+import type { DocumentPlaceholderValues } from "@/lib/studentDocumentPlaceholders";
+import type { ProjectReportTextSlot } from "@/lib/projectReportTypes";
 
 export type ProjectReportGenerateInput = {
   universityName: string;
   universityLogoUrl?: string | null;
   domain: string;
   mode: ProjectReportMode;
+  placeholders?: DocumentPlaceholderValues;
 };
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
@@ -90,6 +93,54 @@ function buildDomainContentLines(
   return out.filter((l, i, arr) => !(l === "" && arr[i + 1] === ""));
 }
 
+function drawCoverRect(page: PDFPage, slot: ProjectReportTextSlot) {
+  const w = slot.coverWidth ?? (slot.maxWidth || 200) + 8;
+  const h = slot.coverHeight ?? slot.size + 6;
+  page.drawRectangle({
+    x: slot.x - 2,
+    y: slot.y - 2,
+    width: w,
+    height: h,
+    color: rgb(1, 1, 1),
+    borderWidth: 0,
+  });
+}
+
+async function drawConfiguredPlaceholders(
+  pdfDoc: PDFDocument,
+  layout: ProjectReportFieldLayout,
+  values: DocumentPlaceholderValues,
+  font: PDFFont,
+  _fontBold: PDFFont
+) {
+  const pages = pdfDoc.getPages();
+  for (const box of layout.redactions || []) {
+    const page = pages[box.page];
+    if (!page) continue;
+    page.drawRectangle({
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+      color: rgb(1, 1, 1),
+      borderWidth: 0,
+    });
+  }
+
+  const slots = layout.placeholders || {};
+  for (const [key, positions] of Object.entries(slots)) {
+    const value = values[key as keyof DocumentPlaceholderValues];
+    if (!value?.trim()) continue;
+    for (const slot of positions || []) {
+      const page = pages[slot.page];
+      if (!page) continue;
+      drawCoverRect(page, slot);
+      const lines = wrapText(value, font, slot.size, slot.maxWidth || 360);
+      drawLines(page, font, lines, slot.x, slot.y, slot.size, slot.size + 3);
+    }
+  }
+}
+
 async function overlayDynamicFields(
   pdfDoc: PDFDocument,
   input: ProjectReportGenerateInput,
@@ -139,6 +190,9 @@ async function overlayDynamicFields(
   }
 
   if (options.fromDomainTemplate) {
+    if (input.placeholders) {
+      await drawConfiguredPlaceholders(pdfDoc, layout, input.placeholders, font, fontBold);
+    }
     return;
   }
 

@@ -68,6 +68,8 @@ export const StudentLogbookDocument = forwardRef<HTMLDivElement, Props>(
       ["Duration", fields.duration],
       ["Internship Starting Date", fields.startDate],
       ["Internship Ending Date", fields.endDate],
+      ["Academic Session", fields.session],
+      ["Internship Enrolment No.", fields.registrationNumber],
       ["Phone Number", fields.phone],
       ["Email ID", fields.email],
     ];
@@ -92,7 +94,7 @@ export const StudentLogbookDocument = forwardRef<HTMLDivElement, Props>(
                       pageLabel,
                     }
               }
-              showSignature={isLast}
+              showSignature={false}
               showLogos={isLast}
               showDocumentInfo={isLast}
               pageLabel={isFirst ? pageLabel : undefined}
