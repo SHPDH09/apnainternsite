@@ -23,6 +23,10 @@ function bearer(req: VercelRequest): string | null {
   return m?.[1]?.trim() || null;
 }
 
+const LAMBDA_AUTH =
+  process.env.LAMBDA_API_URL?.trim()?.replace(/\/$/, "") ||
+  "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging";
+
 async function verifySession(token: string): Promise<{ sub: string; email?: string } | null> {
   try {
     const jwt = await import("jsonwebtoken");
@@ -30,14 +34,44 @@ async function verifySession(token: string): Promise<{ sub: string; email?: stri
       process.env.LOCAL_JWT_SECRET ||
       process.env.SUPABASE_JWT_SECRET ||
       process.env.JWT_SECRET ||
-      "";
-    if (!secret) return null;
-    const decoded = jwt.default.verify(token, secret) as { sub?: string; email?: string };
-    if (!decoded?.sub) return null;
-    return { sub: decoded.sub, email: decoded.email };
+      "ezyintern-local-dev-secret-change-me";
+    const payload = jwt.default.verify(token, secret, { issuer: "ezyintern-local" }) as {
+      sub?: string;
+      email?: string;
+    };
+    if (payload?.sub) {
+      return { sub: String(payload.sub), email: payload.email ? String(payload.email) : undefined };
+    }
+  } catch {
+    /* fall through to Lambda auth */
+  }
+
+  try {
+    const res = await fetch(`${LAMBDA_AUTH}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const user = (await res.json().catch(() => null)) as {
+      id?: string;
+      sub?: string;
+      email?: string;
+    } | null;
+    const sub = user?.id || user?.sub;
+    return sub
+      ? { sub: String(sub), email: user?.email ? String(user.email) : undefined }
+      : null;
   } catch {
     return null;
   }
+}
+
+function parseExcludeUserId(raw: unknown, sessionSub: string): string {
+  const uuidRe =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const candidate = String(raw ?? sessionSub ?? "").trim();
+  if (uuidRe.test(candidate)) return candidate;
+  if (uuidRe.test(sessionSub)) return sessionSub;
+  throw new Error("Invalid session user id for validation.");
 }
 
 async function uniquenessRpcExists(pool: import("pg").Pool): Promise<boolean> {
@@ -62,6 +96,12 @@ async function applyGlobalStudentUniquenessSql(pool: import("pg").Pool): Promise
   }
   const sql = fs.readFileSync(fp, "utf8");
   await pool.query(sql);
+}
+
+async function applyValidateStudentUniquenessHotfix(pool: import("pg").Pool): Promise<void> {
+  const fp = path.join(process.cwd(), "aws/scripts/94-rds-validate-student-uniqueness-id-text.sql");
+  if (!fs.existsSync(fp)) return;
+  await pool.query(fs.readFileSync(fp, "utf8"));
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -100,6 +140,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!(await uniquenessRpcExists(pool))) {
       await applyGlobalStudentUniquenessSql(pool);
     }
+    await applyValidateStudentUniquenessHotfix(pool);
+
+    const excludeUserId = parseExcludeUserId(
+      body.excludeUserId ?? body.p_exclude_user_id,
+      session.sub
+    );
 
     const { rows } = await pool.query<{ result: unknown }>(
       `SELECT public.validate_student_uniqueness(
@@ -112,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body.registrationNumber ?? body.p_registration_number ?? null,
         body.universityName ?? body.p_university_name ?? null,
         body.universityRollNumber ?? body.p_university_roll_number ?? null,
-        body.excludeUserId ?? body.p_exclude_user_id ?? session.sub,
+        excludeUserId,
       ]
     );
 

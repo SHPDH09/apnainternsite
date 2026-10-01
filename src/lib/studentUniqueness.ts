@@ -58,8 +58,12 @@ function buildRpcArgs(input: ValidateStudentUniquenessInput) {
   };
 }
 
-function isMissingUniquenessRpc(msg: string): boolean {
-  return /validate_student_uniqueness|does not exist|42883|PGRST202/i.test(msg);
+function shouldUseUniquenessApiFallback(msg: string): boolean {
+  return (
+    /validate_student_uniqueness|does not exist|42883|PGRST202/i.test(msg) ||
+    /btrim\(uuid\)|invalid input syntax for type uuid|cannot cast|22P02|42846/i.test(msg) ||
+    /could not validate student data/i.test(msg)
+  );
 }
 
 async function validateStudentUniquenessViaApi(
@@ -126,17 +130,41 @@ async function validateStudentUniquenessViaApi(
   return parseRpcResult(json);
 }
 
-/** Server-side uniqueness check via RDS RPC — use before every create/update. */
+/** Browser: Vercel `/api/student-uniqueness` on RDS (hotfix SQL). Server: direct RPC. */
 export async function validateStudentUniqueness(
   client: SupabaseClient,
   input: ValidateStudentUniquenessInput
 ): Promise<StudentUniquenessResult> {
+  if (typeof window !== "undefined") {
+    return validateStudentUniquenessViaApi(client, input);
+  }
+
   const args = buildRpcArgs(input);
-  const { data, error } = await client.rpc("validate_student_uniqueness", args);
+  let data: unknown;
+  let error: { message?: string } | null = null;
+  try {
+    const res = await client.rpc("validate_student_uniqueness", args);
+    data = res.data;
+    error = res.error;
+  } catch (rpcErr) {
+    const msg = rpcErr instanceof Error ? rpcErr.message : String(rpcErr);
+    if (shouldUseUniquenessApiFallback(msg)) {
+      return validateStudentUniquenessViaApi(client, input);
+    }
+    return {
+      valid: false,
+      message: msg || "Could not validate student data.",
+      emailTaken: false,
+      phoneTaken: false,
+      rollNumberTaken: false,
+      registrationNumberTaken: false,
+      universityRollNumberTaken: false,
+    };
+  }
 
   if (error) {
     const msg = error.message || "";
-    if (isMissingUniquenessRpc(msg)) {
+    if (shouldUseUniquenessApiFallback(msg)) {
       return validateStudentUniquenessViaApi(client, input);
     }
     return {

@@ -171,6 +171,22 @@ GRANT EXECUTE ON FUNCTION public.report_student_field_duplicates() TO authentica
 -- Central validation RPC (pre-insert/update checks from app layer)
 -- ---------------------------------------------------------------------------
 
+CREATE OR REPLACE FUNCTION public._student_exclude_user_id(p_row_id unknown)
+RETURNS uuid
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+BEGIN
+  IF p_row_id IS NULL THEN
+    RETURN NULL;
+  END IF;
+  RETURN trim(p_row_id::text)::uuid;
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN NULL;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.validate_student_uniqueness(
   p_email text DEFAULT NULL,
   p_phone text DEFAULT NULL,
@@ -228,7 +244,7 @@ BEGIN
     IF EXISTS (
       SELECT 1 FROM public.students s
       WHERE public.normalize_student_email(s.email) = v_email
-        AND (p_exclude_user_id IS NULL OR s.id::uuid <> p_exclude_user_id)
+        AND (p_exclude_user_id IS NULL OR s.id::text IS DISTINCT FROM p_exclude_user_id::text)
     ) THEN
       v_email_taken := true;
     ELSIF EXISTS (
@@ -244,7 +260,7 @@ BEGIN
     IF EXISTS (
       SELECT 1 FROM public.students s
       WHERE public.normalize_phone_tail(s.contact_number) = v_phone
-        AND (p_exclude_user_id IS NULL OR s.id::uuid <> p_exclude_user_id)
+        AND (p_exclude_user_id IS NULL OR s.id::text IS DISTINCT FROM p_exclude_user_id::text)
     ) THEN
       v_phone_taken := true;
     ELSIF EXISTS (
@@ -274,7 +290,7 @@ BEGIN
       SELECT 1 FROM public.students s
       WHERE public.normalize_university_key(s.university_name) = v_uni
         AND public.normalize_student_roll_number(s.roll_number) = v_roll
-        AND (p_exclude_user_id IS NULL OR s.id::uuid <> p_exclude_user_id)
+        AND (p_exclude_user_id IS NULL OR s.id::text IS DISTINCT FROM p_exclude_user_id::text)
     ) THEN
       v_roll_taken := true;
     END IF;
@@ -284,7 +300,7 @@ BEGIN
     IF EXISTS (
       SELECT 1 FROM public.students s
       WHERE public.normalize_student_registration_number(s.registration_id) = v_reg
-        AND (p_exclude_user_id IS NULL OR s.id::uuid <> p_exclude_user_id)
+        AND (p_exclude_user_id IS NULL OR s.id::text IS DISTINCT FROM p_exclude_user_id::text)
     ) THEN
       v_reg_taken := true;
     END IF;
@@ -295,7 +311,7 @@ BEGIN
       SELECT 1 FROM public.students s
       WHERE public.normalize_university_key(s.university_name) = v_uni
         AND public.student_university_roll_from_meta_text(s.metadata::text) = v_uni_roll
-        AND (p_exclude_user_id IS NULL OR s.id::uuid <> p_exclude_user_id)
+        AND (p_exclude_user_id IS NULL OR s.id::text IS DISTINCT FROM p_exclude_user_id::text)
     ) THEN
       v_uni_roll_taken := true;
     END IF;
@@ -455,7 +471,7 @@ BEGIN
     NEW.registration_id,
     NEW.university_name,
     v_meta_roll,
-    NEW.id::uuid
+    public._student_exclude_user_id(NEW.id)
   );
   RETURN NEW;
 END;
