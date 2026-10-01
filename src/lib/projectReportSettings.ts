@@ -255,6 +255,9 @@ export async function fetchProjectReportDomainTemplate(
   const fuzzy = all.find((row) => row.domain_name.toLowerCase() === domain.trim().toLowerCase());
   if (fuzzy) return fuzzy;
 
+  const fuzzyBundled = all.find((row) => resolveBundledProjectReportDomain(row.domain_name)?.domainKey === resolveBundledProjectReportDomain(domain)?.domainKey);
+  if (fuzzyBundled) return fuzzyBundled;
+
   const bundled = resolveBundledProjectReportDomain(domain);
   if (!bundled) return null;
 

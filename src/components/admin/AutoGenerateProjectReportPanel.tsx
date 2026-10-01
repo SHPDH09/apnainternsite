@@ -57,6 +57,7 @@ import {
   type ProjectReportGenerateInput,
 } from "@/lib/projectReportPdf";
 import { ProjectReportPreviewDocument } from "@/components/student/ProjectReportPreviewDocument";
+import { inferProjectReportDomainFromFileName } from "@/lib/projectReportDomainFromFileName";
 
 type UniversityRow = {
   id: string;
@@ -176,15 +177,24 @@ export function AutoGenerateProjectReportPanel({
 
   const handleTemplateUpload = async (file: File | null) => {
     if (!file) return;
-    if (!uploadDomain.trim()) {
-      toast.error("Select a domain before uploading the project template.");
+    const inferredDomain = inferProjectReportDomainFromFileName(file.name);
+    const domainForUpload = (uploadDomain.trim() || inferredDomain || "").trim();
+    if (!domainForUpload) {
+      toast.error(
+        "Could not detect domain from file name. Select a domain or rename the file like Accounting_Tally_GST_Project_Report.pdf"
+      );
       return;
+    }
+    if (inferredDomain && inferredDomain !== uploadDomain.trim()) {
+      setUploadDomain(inferredDomain);
+      setGenerateDomain(inferredDomain);
+      toast.message(`Domain set to "${inferredDomain}" from file name.`);
     }
     setUploadingTemplate(true);
     try {
       await validateProjectReportPdfFile(file);
       const saved = await saveProjectReportDomainTemplate(supabase, {
-        domain: uploadDomain,
+        domain: domainForUpload,
         file,
         uploadedBy: currentUserId,
       });
@@ -285,10 +295,10 @@ export function AutoGenerateProjectReportPanel({
 
         <div className="grid md:grid-cols-2 gap-4 items-end">
           <div className="space-y-1.5">
-            <Label>Select Domain for Upload</Label>
+            <Label>Domain (auto from file name, or pick manually)</Label>
             <Select value={uploadDomain} onValueChange={setUploadDomain}>
               <SelectTrigger>
-                <SelectValue placeholder="Choose domain" />
+                <SelectValue placeholder="Choose domain or upload PDF first" />
               </SelectTrigger>
               <SelectContent>
                 {domainOptions.map((name) => (
@@ -304,13 +314,13 @@ export function AutoGenerateProjectReportPanel({
               ref={templateInputRef}
               type="file"
               accept="application/pdf,.pdf"
-              disabled={uploadingTemplate || !uploadDomain}
+              disabled={uploadingTemplate}
               className="hidden"
               onChange={(e) => void handleTemplateUpload(e.target.files?.[0] || null)}
             />
             <Button
               type="button"
-              disabled={uploadingTemplate || !uploadDomain}
+              disabled={uploadingTemplate}
               onClick={() => templateInputRef.current?.click()}
             >
               {uploadingTemplate ? (

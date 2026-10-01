@@ -154,10 +154,15 @@ async function overlayDynamicFields(
   const pages = pdfDoc.getPages();
   const section = resolveProjectReportDomainContent(input.domain);
 
+  const hasConfiguredPlaceholders =
+    options.fromDomainTemplate &&
+    Boolean(input.placeholders) &&
+    Object.keys(layout.placeholders || {}).length > 0;
+
   const logoLayout = layout.logo || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.logo!;
   const logoPage = pages[logoLayout.page] || pages[0];
   const logoImage = await embedLogo(pdfDoc, logoBytes);
-  if (logoImage && logoPage) {
+  if (logoImage && logoPage && !hasConfiguredPlaceholders) {
     logoPage.drawImage(logoImage, {
       x: logoLayout.x,
       y: logoLayout.y,
@@ -166,28 +171,30 @@ async function overlayDynamicFields(
     });
   }
 
-  const nameLayout = layout.universityName || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.universityName!;
-  const namePage = pages[nameLayout.page] || pages[0];
-  if (namePage) {
-    const nameLines = wrapText(
-      input.universityName,
-      fontBold,
-      nameLayout.size,
-      nameLayout.maxWidth || 360
-    );
-    drawLines(namePage, fontBold, nameLines, nameLayout.x, nameLayout.y, nameLayout.size, nameLayout.size + 4);
-  }
+  if (!hasConfiguredPlaceholders) {
+    const nameLayout = layout.universityName || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.universityName!;
+    const namePage = pages[nameLayout.page] || pages[0];
+    if (namePage) {
+      const nameLines = wrapText(
+        input.universityName,
+        fontBold,
+        nameLayout.size,
+        nameLayout.maxWidth || 360
+      );
+      drawLines(namePage, fontBold, nameLines, nameLayout.x, nameLayout.y, nameLayout.size, nameLayout.size + 4);
+    }
 
-  const modeLayout = layout.mode || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.mode!;
-  const modePage = pages[modeLayout.page] || pages[0];
-  if (modePage) {
-    modePage.drawText(`Mode: ${input.mode}`, {
-      x: modeLayout.x,
-      y: modeLayout.y,
-      size: modeLayout.size,
-      font: fontBold,
-      color: rgb(0.12, 0.25, 0.55),
-    });
+    const modeLayout = layout.mode || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.mode!;
+    const modePage = pages[modeLayout.page] || pages[0];
+    if (modePage) {
+      modePage.drawText(`Mode: ${input.mode}`, {
+        x: modeLayout.x,
+        y: modeLayout.y,
+        size: modeLayout.size,
+        font: fontBold,
+        color: rgb(0.12, 0.25, 0.55),
+      });
+    }
   }
 
   if (options.fromDomainTemplate) {
