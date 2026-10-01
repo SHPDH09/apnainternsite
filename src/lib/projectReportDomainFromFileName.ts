@@ -1,4 +1,5 @@
 import { ACCOUNTING_TALLY_GST_DOMAIN_NAME } from "@/lib/projectReportDomainLayouts/accountingTallyGst";
+import { AI_ETHICS_POLICY_RESEARCH_DOMAIN_NAME } from "@/lib/projectReportDomainLayouts/aiEthicsPolicyResearch";
 
 /**
  * Infer internship domain from project report PDF file names, e.g.
@@ -20,6 +21,14 @@ export function inferProjectReportDomainFromFileName(fileName: string): string |
     (normalized.includes("accounting") && normalized.includes("tally") && normalized.includes("gst"))
   ) {
     return ACCOUNTING_TALLY_GST_DOMAIN_NAME;
+  }
+
+  if (
+    normalized.includes("ai ethics") &&
+    normalized.includes("responsible") &&
+    (normalized.includes("policy") || normalized.includes("research") || normalized.includes("tech"))
+  ) {
+    return AI_ETHICS_POLICY_RESEARCH_DOMAIN_NAME;
   }
 
   const words = base.split(/[_-]+/).filter(Boolean);

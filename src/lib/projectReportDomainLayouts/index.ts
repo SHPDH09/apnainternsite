@@ -5,11 +5,20 @@ import {
   ACCOUNTING_TALLY_GST_DOMAIN_NAME,
   ACCOUNTING_TALLY_GST_FIELD_LAYOUT,
 } from "@/lib/projectReportDomainLayouts/accountingTallyGst";
+import {
+  AI_ETHICS_POLICY_RESEARCH_BUNDLED_PDF_PATH,
+  AI_ETHICS_POLICY_RESEARCH_DOMAIN_KEY,
+  AI_ETHICS_POLICY_RESEARCH_DOMAIN_NAME,
+  AI_ETHICS_POLICY_RESEARCH_FIELD_LAYOUT,
+} from "@/lib/projectReportDomainLayouts/aiEthicsPolicyResearch";
 
 export {
   ACCOUNTING_TALLY_GST_BUNDLED_PDF_PATH,
   ACCOUNTING_TALLY_GST_DOMAIN_KEY,
   ACCOUNTING_TALLY_GST_DOMAIN_NAME,
+  AI_ETHICS_POLICY_RESEARCH_BUNDLED_PDF_PATH,
+  AI_ETHICS_POLICY_RESEARCH_DOMAIN_KEY,
+  AI_ETHICS_POLICY_RESEARCH_DOMAIN_NAME,
 };
 
 type BundledDomainConfig = {
@@ -25,6 +34,12 @@ const BUNDLED: BundledDomainConfig[] = [
     domainKey: ACCOUNTING_TALLY_GST_DOMAIN_KEY,
     fieldLayout: ACCOUNTING_TALLY_GST_FIELD_LAYOUT,
     bundledPdfPath: ACCOUNTING_TALLY_GST_BUNDLED_PDF_PATH,
+  },
+  {
+    domainName: AI_ETHICS_POLICY_RESEARCH_DOMAIN_NAME,
+    domainKey: AI_ETHICS_POLICY_RESEARCH_DOMAIN_KEY,
+    fieldLayout: AI_ETHICS_POLICY_RESEARCH_FIELD_LAYOUT,
+    bundledPdfPath: AI_ETHICS_POLICY_RESEARCH_BUNDLED_PDF_PATH,
   },
 ];
 
@@ -45,6 +60,13 @@ export function resolveBundledProjectReportDomain(domain: string): BundledDomain
     return BUNDLED[0];
   }
   if (key === "accounting tally gst") return BUNDLED[0];
+  if (
+    /ai ethics/.test(key) &&
+    /responsible/.test(key) &&
+    (/technology/.test(key) || /tech/.test(key) || /policy/.test(key))
+  ) {
+    return BUNDLED.find((b) => b.domainKey === AI_ETHICS_POLICY_RESEARCH_DOMAIN_KEY) || null;
+  }
   return null;
 }
 
