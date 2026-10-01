@@ -30,6 +30,11 @@ function mergeAcademicInfoIntoStudent(
   academic: Record<string, unknown>
 ): Record<string, unknown> {
   const pick = (key: string) => (hasText(student[key]) ? student[key] : academic[key]);
+  const internship_domain = hasText(student.internship_domain)
+    ? student.internship_domain
+    : hasText(academic.internship_domain)
+      ? academic.internship_domain
+      : pick("course");
   return {
     ...student,
     university_name: pick("university_name"),
@@ -39,8 +44,13 @@ function mergeAcademicInfoIntoStudent(
     academic_session: pick("academic_session"),
     class_semester: pick("class_semester"),
     roll_number: pick("roll_number"),
-    course: pick("course"),
     subject: pick("subject"),
+    internship_domain,
+    course: hasText(student.internship_domain)
+      ? student.internship_domain
+      : hasText(student.course)
+        ? student.course
+        : internship_domain,
   };
 }
 

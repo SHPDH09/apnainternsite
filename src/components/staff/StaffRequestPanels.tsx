@@ -119,7 +119,14 @@ function LeaveTab({ isActive, currentUserId }: Props) {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Leave Type</Label>
-            <Select value={leaveType} onValueChange={(v) => setLeaveType(v as LeaveType)}>
+            <Select
+              value={leaveType}
+              onValueChange={(v) => {
+                const next = v as LeaveType;
+                setLeaveType(next);
+                if (next === "half_day" && fromDate) setToDate(fromDate);
+              }}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -135,13 +142,31 @@ function LeaveTab({ isActive, currentUserId }: Props) {
           <div className="space-y-1.5 sm:col-span-2 grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>From Date</Label>
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              <Input
+                type="date"
+                value={fromDate}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  if (leaveType === "half_day") setToDate(e.target.value);
+                }}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>To Date</Label>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              <Input
+                type="date"
+                value={toDate}
+                disabled={leaveType === "half_day"}
+                onChange={(e) => setToDate(e.target.value)}
+              />
             </div>
           </div>
+          {leaveType === "half_day" ? (
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              Half-day is for one date only. After admin approves, they will set your check-in time
+              window for attendance.
+            </p>
+          ) : null}
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Reason / Description</Label>
             <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why do you need leave?" />
@@ -204,6 +229,11 @@ function LeaveTab({ isActive, currentUserId }: Props) {
                   <TableCell>{statusBadge(r.status)}</TableCell>
                   <TableCell className="max-w-[14rem] text-sm text-muted-foreground">
                     {r.admin_remarks || "—"}
+                    {r.leave_type === "half_day" && r.status === "approved" && r.half_day_check_in_from ? (
+                      <span className="mt-1 block text-[11px] text-sky-800">
+                        Check-in window: {r.half_day_check_in_from}–{r.half_day_check_in_until} IST
+                      </span>
+                    ) : null}
                     {r.reviewed_at ? (
                       <span className="mt-1 block text-[10px]">
                         {REQUEST_STATUS_LABELS[r.status]} · {new Date(r.reviewed_at).toLocaleString()}

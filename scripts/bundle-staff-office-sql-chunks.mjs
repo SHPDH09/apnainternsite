@@ -46,6 +46,10 @@ const selfSql =
   "\n\n" +
   readSql("aws/scripts/89-rds-staff-office-employee-id-resolve.sql");
 const faceRegisterSql = readSql("aws/scripts/90-rds-staff-face-register.sql");
+const halfDaySql =
+  readSql("aws/scripts/91-rds-staff-half-day-leave.sql") +
+  "\n\n" +
+  readSql("aws/scripts/92-rds-staff-half-day-attendance-rpc.sql");
 const salaryBaseSql = readSql("aws/scripts/81-rds-staff-salary-account.sql");
 const salaryAdvancedSql = readSql("aws/scripts/86-rds-staff-salary-advanced.sql");
 
@@ -54,11 +58,12 @@ ${emitChunks("STAFF_OFFICE_ENSURE_SCHEMA_CHUNKS", "staffOfficeEnsureSchemaSql", 
 ${emitChunks("STAFF_OFFICE_ADMIN_RPC_CHUNKS", "staffOfficeAdminRpcSql", adminSql)}
 ${emitChunks("STAFF_OFFICE_SELF_RPC_CHUNKS", "staffOfficeSelfAttendanceRpcSql", selfSql)}
 ${emitChunks("STAFF_FACE_REGISTER_RPC_CHUNKS", "staffFaceRegisterRpcSql", faceRegisterSql)}
+${emitChunks("STAFF_HALF_DAY_CHUNKS", "staffHalfDayAttendanceSql", halfDaySql)}
 ${emitChunks("STAFF_SALARY_BASE_CHUNKS", "staffSalaryBaseSql", salaryBaseSql)}
 ${emitChunks("STAFF_SALARY_ADVANCED_CHUNKS", "staffSalaryAdvancedSql", salaryAdvancedSql)}
 /** @deprecated Use ensure + call ensure() + admin RPCs instead of one-shot apply. */
 export function staffOfficeBootstrapSql(): string {
-  return staffOfficeEnsureSchemaSql() + staffOfficeAdminRpcSql() + staffOfficeSelfAttendanceRpcSql() + staffFaceRegisterRpcSql();
+  return staffOfficeEnsureSchemaSql() + staffOfficeAdminRpcSql() + staffOfficeSelfAttendanceRpcSql() + staffFaceRegisterRpcSql() + staffHalfDayAttendanceSql();
 }
 export const STAFF_OFFICE_REQUIRED_RPCS = [
   "admin_list_staff_attendance_offices",

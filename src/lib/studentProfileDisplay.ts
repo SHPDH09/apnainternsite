@@ -24,8 +24,9 @@ export function syncStudentProfileMetadata(
   copy("class_semester", "semester", "classSem");
   copy("roll_number", "rollNo");
   copy("university_roll_number", "universityRollNumber");
-  copy("course");
+  copy("university_registration_number", "universityRegistrationNumber", "registrationNo");
   copy("internship_domain");
+  copy("course", "internship_domain");
   copy("internship_duration");
   copy("joining_date");
   copy("completion_date");
@@ -134,10 +135,12 @@ export function enrichStudentProfileForDisplay<T extends Record<string, unknown>
     str(profile.university_roll_number) ||
     str(m.university_roll_number) ||
     str(m.universityRollNumber);
-  const course =
-    str(profile.course) || str(profile.internship_domain) || str(m.course);
   const internship_domain =
-    str(profile.internship_domain) || str(profile.course) || str(m.course);
+    str(profile.internship_domain) ||
+    str(m.internship_domain) ||
+    str(profile.course) ||
+    str(m.course);
+  const course = internship_domain;
   const subject = str(profile.subject) || str(m.subject);
   const internship_mode = resolveInternshipModeForUniversity(
     university_name,

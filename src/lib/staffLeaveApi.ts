@@ -4,7 +4,7 @@ import { publicStorageObjectUrl, resolveStorageUrl } from "@/lib/storageUrl";
 const BUCKET = "logos";
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-export type LeaveType = "casual" | "sick" | "earned" | "unpaid" | "other";
+export type LeaveType = "casual" | "sick" | "earned" | "unpaid" | "other" | "half_day";
 export type RequestStatus = "pending" | "approved" | "rejected";
 
 export type StaffLeaveRequest = {
@@ -21,6 +21,8 @@ export type StaffLeaveRequest = {
   admin_remarks: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  half_day_check_in_from: string | null;
+  half_day_check_in_until: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -31,6 +33,7 @@ export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   earned: "Earned Leave",
   unpaid: "Unpaid Leave",
   other: "Other",
+  half_day: "Half Day",
 };
 
 export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
@@ -59,9 +62,19 @@ function mapLeave(row: Record<string, unknown>): StaffLeaveRequest {
     admin_remarks: (row.admin_remarks as string) || null,
     reviewed_by: (row.reviewed_by as string) || null,
     reviewed_at: (row.reviewed_at as string) || null,
+    half_day_check_in_from: formatLeaveTime(row.half_day_check_in_from),
+    half_day_check_in_until: formatLeaveTime(row.half_day_check_in_until),
     created_at: String(row.created_at || ""),
     updated_at: String(row.updated_at || ""),
   };
+}
+
+function formatLeaveTime(raw: unknown): string | null {
+  if (raw == null || raw === "") return null;
+  const s = String(raw);
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (m) return `${m[1].padStart(2, "0")}:${m[2]}`;
+  return s;
 }
 
 async function uploadAttachment(
@@ -139,6 +152,9 @@ export async function createLeaveRequest(
   if (!input.fromDate || !input.toDate) throw new Error("From and To dates are required.");
   if (input.toDate < input.fromDate) throw new Error("To date must be on or after From date.");
   if (!input.reason.trim()) throw new Error("Reason is required.");
+  if (input.leaveType === "half_day" && input.fromDate !== input.toDate) {
+    throw new Error("Half-day leave must be for a single date (From and To must match).");
+  }
 
   let attachment_url: string | null = null;
   let attachment_path: string | null = null;
@@ -177,17 +193,25 @@ export async function reviewLeaveRequest(
     status: "approved" | "rejected";
     adminRemarks?: string;
     reviewedBy: string;
+    halfDayCheckInFrom?: string | null;
+    halfDayCheckInUntil?: string | null;
   }
 ): Promise<void> {
-  const { error } = await client
-    .from("staff_leave_requests")
-    .update({
-      status: input.status,
-      admin_remarks: input.adminRemarks?.trim() || null,
-      reviewed_by: input.reviewedBy,
-      reviewed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  const patch: Record<string, unknown> = {
+    status: input.status,
+    admin_remarks: input.adminRemarks?.trim() || null,
+    reviewed_by: input.reviewedBy,
+    reviewed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  if (input.status === "approved") {
+    if (input.halfDayCheckInFrom) patch.half_day_check_in_from = input.halfDayCheckInFrom;
+    if (input.halfDayCheckInUntil) patch.half_day_check_in_until = input.halfDayCheckInUntil;
+  }
+  if (input.status === "rejected") {
+    patch.half_day_check_in_from = null;
+    patch.half_day_check_in_until = null;
+  }
+  const { error } = await client.from("staff_leave_requests").update(patch).eq("id", id);
   if (error) throw error;
 }
