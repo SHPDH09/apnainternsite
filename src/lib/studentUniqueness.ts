@@ -66,6 +66,31 @@ function shouldUseUniquenessApiFallback(msg: string): boolean {
   );
 }
 
+function shouldRetryUniquenessViaRpc(status: number, msg: string): boolean {
+  return status === 405 || status === 404 || status === 503 || /method not allowed/i.test(msg);
+}
+
+async function validateStudentUniquenessViaRpc(
+  client: SupabaseClient,
+  input: ValidateStudentUniquenessInput
+): Promise<StudentUniquenessResult> {
+  const args = buildRpcArgs(input);
+  const { data, error } = await client.rpc("validate_student_uniqueness", args);
+  if (error) {
+    const msg = error.message || "";
+    return {
+      valid: false,
+      message: msg || "Could not validate student data.",
+      emailTaken: false,
+      phoneTaken: false,
+      rollNumberTaken: false,
+      registrationNumberTaken: false,
+      universityRollNumberTaken: false,
+    };
+  }
+  return parseRpcResult(data);
+}
+
 async function validateStudentUniquenessViaApi(
   client: SupabaseClient,
   input: ValidateStudentUniquenessInput
@@ -116,9 +141,16 @@ async function validateStudentUniquenessViaApi(
 
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
+    const message = String(json.message || "Could not validate student data.");
+    if (shouldRetryUniquenessViaRpc(res.status, message)) {
+      const rpcResult = await validateStudentUniquenessViaRpc(client, input);
+      if (rpcResult.valid || !shouldUseUniquenessApiFallback(rpcResult.message)) {
+        return rpcResult;
+      }
+    }
     return {
       valid: false,
-      message: String(json.message || "Could not validate student data."),
+      message,
       emailTaken: false,
       phoneTaken: false,
       rollNumberTaken: false,
@@ -130,12 +162,16 @@ async function validateStudentUniquenessViaApi(
   return parseRpcResult(json);
 }
 
-/** Browser: Vercel `/api/student-uniqueness` on RDS (hotfix SQL). Server: direct RPC. */
+/** Browser: RDS RPC first; `/api/student-uniqueness` when RPC schema is stale. Server: direct RPC. */
 export async function validateStudentUniqueness(
   client: SupabaseClient,
   input: ValidateStudentUniquenessInput
 ): Promise<StudentUniquenessResult> {
   if (typeof window !== "undefined") {
+    const rpcResult = await validateStudentUniquenessViaRpc(client, input);
+    if (rpcResult.valid || !shouldUseUniquenessApiFallback(rpcResult.message)) {
+      return rpcResult;
+    }
     return validateStudentUniquenessViaApi(client, input);
   }
 

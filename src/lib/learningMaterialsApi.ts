@@ -35,6 +35,29 @@ export type LearningMaterialRow = {
 const BUCKET = "learning-materials";
 const MAX_BYTES = 25 * 1024 * 1024;
 
+async function ensureLearningMaterialsTable(client: SupabaseClient): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const { data: sessionData } = await client.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) return false;
+
+  const origin = window.location.origin.replace(/\/$/, "");
+  const res = await fetch(`${origin}/api/ensure-learning-materials`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  }).catch(() => null);
+  return Boolean(res?.ok);
+}
+
+function isMissingLearningMaterialsTable(error: { message?: string; code?: string } | null): boolean {
+  const msg = String(error?.message || "");
+  const code = String(error?.code || "");
+  return code === "42P01" || /learning_materials.*does not exist|relation.*learning_materials/i.test(msg);
+}
+
 function mapMaterialRow(row: LearningMaterialRow): LearningMaterialRow {
   const candidates = storageObjectUrlCandidates(BUCKET, row.file_path, row.file_url);
   const primary =
@@ -87,13 +110,20 @@ export function materialMatchesStudent(
 }
 
 export async function fetchLearningMaterials(
-  client: SupabaseClient
+  client: SupabaseClient,
+  retried = false
 ): Promise<LearningMaterialRow[]> {
   const { data, error } = await client
     .from("learning_materials")
     .select("*")
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) {
+    if (!retried && isMissingLearningMaterialsTable(error)) {
+      const ready = await ensureLearningMaterialsTable(client);
+      if (ready) return fetchLearningMaterials(client, true);
+    }
+    throw error;
+  }
   return ((data || []) as LearningMaterialRow[]).map(mapMaterialRow);
 }
 
