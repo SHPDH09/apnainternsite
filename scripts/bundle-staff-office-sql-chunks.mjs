@@ -54,6 +54,7 @@ const halfDaySql =
   readSql("aws/scripts/93-rds-fix-btrim-uuid.sql");
 const salaryBaseSql = readSql("aws/scripts/81-rds-staff-salary-account.sql");
 const salaryAdvancedSql = readSql("aws/scripts/86-rds-staff-salary-advanced.sql");
+const profileImageSql = readSql("aws/scripts/95-rds-staff-profile-image-user-id.sql");
 
 const body = `/** Bundled staff office + salary SQL for Vercel (generated — run scripts/bundle-staff-office-sql-chunks.mjs). */
 ${emitChunks("STAFF_OFFICE_ENSURE_SCHEMA_CHUNKS", "staffOfficeEnsureSchemaSql", ensureSql)}
@@ -63,6 +64,7 @@ ${emitChunks("STAFF_FACE_REGISTER_RPC_CHUNKS", "staffFaceRegisterRpcSql", faceRe
 ${emitChunks("STAFF_HALF_DAY_CHUNKS", "staffHalfDayAttendanceSql", halfDaySql)}
 ${emitChunks("STAFF_SALARY_BASE_CHUNKS", "staffSalaryBaseSql", salaryBaseSql)}
 ${emitChunks("STAFF_SALARY_ADVANCED_CHUNKS", "staffSalaryAdvancedSql", salaryAdvancedSql)}
+${emitChunks("STAFF_PROFILE_IMAGE_RPC_CHUNKS", "staffProfileImageRpcSql", profileImageSql)}
 /** @deprecated Use ensure + call ensure() + admin RPCs instead of one-shot apply. */
 export function staffOfficeBootstrapSql(): string {
   return staffOfficeEnsureSchemaSql() + staffOfficeAdminRpcSql() + staffOfficeSelfAttendanceRpcSql() + staffFaceRegisterRpcSql() + staffHalfDayAttendanceSql();
@@ -74,6 +76,7 @@ export const STAFF_OFFICE_REQUIRED_RPCS = [
   "admin_assign_staff_office",
   "admin_remove_staff_office_assignment",
   "admin_list_staff_office_assignments",
+  "admin_reset_staff_face",
 ];
 export const STAFF_SELF_OFFICE_REQUIRED_RPCS = [
   "_haversine_meters",
@@ -89,6 +92,7 @@ export const STAFF_FACE_REGISTER_REQUIRED_RPCS = [
   "_staff_row_for_attendance",
   "staff_register_face",
 ];
+export const STAFF_PROFILE_IMAGE_REQUIRED_RPCS = ["staff_update_profile_image"];
 export const STAFF_SALARY_REQUIRED_RPCS = [
   "admin_list_staff_salary_holidays",
   "admin_upsert_staff_salary_holiday",

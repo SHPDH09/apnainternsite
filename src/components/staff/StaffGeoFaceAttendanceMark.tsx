@@ -36,6 +36,7 @@ import {
 import {
   captureVideoFrameBlob,
   extractFaceDescriptorFromVideo,
+  preloadStaffFaceModels,
   startStaffCamera,
   stopStaffCamera,
   verifyStaffFaceMatchFromDescriptor,
@@ -86,6 +87,10 @@ export function StaffGeoFaceAttendanceMark({
   useEffect(() => {
     if (isActive) void loadStatus();
   }, [isActive, loadStatus]);
+
+  useEffect(() => {
+    if (isActive) preloadStaffFaceModels();
+  }, [isActive]);
 
   useEffect(() => {
     if (!isActive) {

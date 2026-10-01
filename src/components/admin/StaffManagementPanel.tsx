@@ -8,6 +8,7 @@ import {
   Trash2,
   UserPlus,
   Users,
+  ScanFace,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -63,6 +64,7 @@ import {
   AdminStaffRequirementsPanel,
 } from "@/components/admin/StaffRequestAdminPanels";
 import { resolveStorageUrl } from "@/lib/storageUrl";
+import { adminResetStaffFace } from "@/lib/staffAttendanceOffices";
 
 type Props = {
   staff: AdminStaffProfile[];
@@ -101,6 +103,7 @@ export function StaffManagementPanel({
   const [editForm, setEditForm] = useState<StaffProfileFormFields>(emptyStaffProfileForm());
   const [editPerms, setEditPerms] = useState<StaffPermissions>(emptyStaffPermissions());
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [resetFaceTarget, setResetFaceTarget] = useState<AdminStaffProfile | null>(null);
 
   const employees = useMemo(
     () =>
@@ -203,6 +206,29 @@ export function StaffManagementPanel({
     } finally {
       setProcessing(false);
     }
+  };
+
+  const confirmResetFace = async () => {
+    if (!resetFaceTarget) return;
+    setProcessing(true);
+    try {
+      await adminResetStaffFace(resetFaceTarget.id);
+      toast.success(
+        `${resetFaceTarget.full_name || resetFaceTarget.email || "Staff"} can register their face again from the staff panel.`
+      );
+      setResetFaceTarget(null);
+      await onRefresh();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Could not reset face");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const staffFaceRegistered = (member: AdminStaffProfile) => {
+    const fd = member.face_descriptor;
+    if (member.face_registered_at) return true;
+    return Array.isArray(fd) && fd.length >= 64;
   };
 
   const toggleBlock = async (member: AdminStaffProfile) => {
@@ -414,15 +440,26 @@ export function StaffManagementPanel({
                       </TableCell>
                       <TableCell className="text-sm">{member.mobile_number || "—"}</TableCell>
                       <TableCell>
-                        {member.is_blocked ? (
-                          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                            Blocked
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                            Active
-                          </Badge>
-                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                          {member.is_blocked ? (
+                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                              Blocked
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                              Active
+                            </Badge>
+                          )}
+                          {staffFaceRegistered(member) ? (
+                            <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-200">
+                              Face OK
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">
+                              No face
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -447,6 +484,16 @@ export function StaffManagementPanel({
                             ) : (
                               <Ban className="size-4" />
                             )}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-violet-600"
+                            title="Reset face registration"
+                            disabled={processing || !staffFaceRegistered(member)}
+                            onClick={() => setResetFaceTarget(member)}
+                          >
+                            <ScanFace className="size-4" />
                           </Button>
                           <Button
                             size="icon"
@@ -508,6 +555,28 @@ export function StaffManagementPanel({
           />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!resetFaceTarget} onOpenChange={(open) => !open && setResetFaceTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset face registration?</DialogTitle>
+            <DialogDescription>
+              {resetFaceTarget?.full_name || resetFaceTarget?.email} will need to register their face
+              again from the staff attendance panel. Profile photo is kept; only attendance face data is
+              cleared.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetFaceTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={processing} onClick={() => void confirmResetFace()}>
+              {processing ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+              Reset face
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

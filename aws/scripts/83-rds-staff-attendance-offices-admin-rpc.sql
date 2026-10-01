@@ -212,6 +212,47 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.admin_reset_staff_face(p_employee_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_staff_id uuid;
+BEGIN
+  PERFORM public._assert_admin_attendance_offices();
+
+  IF p_employee_id IS NULL THEN
+    RAISE EXCEPTION 'Employee id is required';
+  END IF;
+
+  SELECT s.id INTO v_staff_id
+  FROM public.admin_staff s
+  WHERE s.id = p_employee_id OR s.user_id = p_employee_id
+  ORDER BY CASE WHEN s.id = p_employee_id THEN 0 ELSE 1 END
+  LIMIT 1;
+
+  IF v_staff_id IS NULL THEN
+    RAISE EXCEPTION 'Staff profile not found' USING ERRCODE = 'P0002';
+  END IF;
+
+  UPDATE public.admin_staff
+  SET
+    face_descriptor = NULL,
+    face_registered_at = NULL,
+    updated_at = now()
+  WHERE id = v_staff_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'employee_id', p_employee_id,
+    'staff_id', v_staff_id,
+    'face_registered', false
+  );
+END;
+$$;
+
 GRANT EXECUTE ON FUNCTION public.admin_list_staff_attendance_offices(boolean) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_upsert_staff_attendance_office(
   uuid, text, text, double precision, double precision, integer, numeric, boolean, boolean, boolean
@@ -220,3 +261,4 @@ GRANT EXECUTE ON FUNCTION public.admin_delete_staff_attendance_office(uuid) TO a
 GRANT EXECUTE ON FUNCTION public.admin_assign_staff_office(uuid, uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_remove_staff_office_assignment(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_list_staff_office_assignments() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_reset_staff_face(uuid) TO authenticated;

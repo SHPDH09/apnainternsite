@@ -195,6 +195,22 @@ export async function staffSelfCheckIn(input: {
   });
 }
 
+export async function staffUpdateProfileImage(input: {
+  imageBase64: string;
+}): Promise<{ ok: boolean; profile_image_url?: string }> {
+  const data = await callStaffSelfRpc<{
+    ok?: boolean;
+    profile_image_url?: string;
+  }>("staff_update_profile_image", {
+    p_image_base64: input.imageBase64,
+  });
+
+  return {
+    ok: Boolean(data?.ok ?? true),
+    profile_image_url: data?.profile_image_url,
+  };
+}
+
 export async function staffRegisterFace(input: {
   faceDescriptor: number[];
   imageBase64: string;
