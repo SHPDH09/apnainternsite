@@ -92,7 +92,11 @@ import {
   isAllowedConsentLetterFile,
   uploadConsentLetterToStorage,
 } from "@/lib/studentDocuments";
-import { Eye, EyeOff, Loader2, CheckCircle2, MessageSquare, Info, Upload, FileText } from "lucide-react";
+import { Eye, EyeOff, Loader2, CheckCircle2, MessageSquare, Info, Upload, FileText, Mic } from "lucide-react";
+import {
+  VoiceRegistrationAssistant,
+  type VoiceRegistrationValues,
+} from "@/components/VoiceRegistrationAssistant";
 import { z } from "zod";
 import {
   Dialog,
@@ -150,6 +154,16 @@ export const RegistrationForm = ({
     phone?: string;
   }>({});
   const [checkingRegistration, setCheckingRegistration] = useState(false);
+  const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
+
+  const applyVoiceRegistration = (values: VoiceRegistrationValues) => {
+    if (values.fullName) setFullName(values.fullName);
+    if (values.parentName) setParentName(values.parentName);
+    if (values.gender) setGender(values.gender);
+    if (values.contact) setContact(values.contact.replace(/\D/g, "").slice(0, 10));
+    if (values.email) setEmail(values.email);
+    toast.success("Personal details filled from voice. Please review before submitting.");
+  };
 
   // Step 2
   const [unis, setUnis] = useState<University[]>([]);
@@ -1558,11 +1572,23 @@ export const RegistrationForm = ({
         ref={(el) => { sectionRefs.current[0] = el; }}
         className="mb-8 scroll-mt-24 rounded-xl border p-4 sm:p-5 space-y-4"
       >
-        <h3 className="text-sm font-black text-primary flex items-center gap-2">
-          <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-xs">1</span>
-          Personal details
-          {isSectionComplete(1) && <CheckCircle2 className="size-4 text-emerald-600" />}
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-black text-primary flex items-center gap-2">
+            <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-xs">1</span>
+            Personal details
+            {isSectionComplete(1) && <CheckCircle2 className="size-4 text-emerald-600" />}
+          </h3>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={() => setVoiceAssistantOpen(true)}
+          >
+            <Mic className="size-3.5" />
+            Voice assistant
+          </Button>
+        </div>
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5"><Label className="text-xs">Full Name *</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="h-8 text-sm" /></div>
             <div className="space-y-1.5">
@@ -1987,6 +2013,13 @@ export const RegistrationForm = ({
         initialDomain={course}
         saving={beuSaving}
         onSubmit={handleBeuModalSubmit}
+      />
+
+      <VoiceRegistrationAssistant
+        open={voiceAssistantOpen}
+        onOpenChange={setVoiceAssistantOpen}
+        fields={["fullName", "parentName", "gender", "contact", "email"]}
+        onConfirm={applyVoiceRegistration}
       />
 
       <Dialog open={rosterAlreadyRegisteredOpen} onOpenChange={setRosterAlreadyRegisteredOpen}>

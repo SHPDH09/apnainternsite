@@ -14,7 +14,11 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { Loader2, CheckCircle2, Eye, EyeOff, ShieldCheck, Mic } from "lucide-react";
+import {
+  VoiceRegistrationAssistant,
+  type VoiceRegistrationValues,
+} from "@/components/VoiceRegistrationAssistant";
 import { formatRupees } from "@/lib/feeRules";
 import { resolveStudentFeeBreakdown } from "@/lib/collegeFees";
 import { uploadConsentLetterToStorage } from "@/lib/studentDocuments";
@@ -332,6 +336,27 @@ export const PrefilledRegistrationForm = ({
 
   // Optional signed consent form (PDF/JPG/PNG ≤ 75 KB).
   const [consentFile, setConsentFile] = useState<File | null>(null);
+  const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
+
+  const applyVoiceRegistration = (values: VoiceRegistrationValues) => {
+    if (values.fullName) setFullName(values.fullName);
+    if (values.parentName) setParentName(values.parentName);
+    if (values.gender) setGender(normalizeGender(values.gender) || values.gender);
+    if (values.contact) setContact(normalisePhone(values.contact));
+    if (values.email) setEmail(values.email.trim().toLowerCase());
+    if (values.dob) {
+      const iso = /^\d{4}-\d{2}-\d{2}$/.test(values.dob)
+        ? values.dob
+        : null;
+      if (iso) {
+        const [, y, mo, d] = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/) || [];
+        if (y && mo && d) setDob(`${d}/${mo}/${y}`);
+      } else {
+        setDob(values.dob);
+      }
+    }
+    toast.success("Details filled from voice. Please review before submitting.");
+  };
 
   const [universityId, setUniversityId] = useState<string>(data.university_id || "");
   const [collegeId, setCollegeId] = useState<string>(data.college_id || "");
@@ -822,6 +847,24 @@ export const PrefilledRegistrationForm = ({
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setVoiceAssistantOpen(true)}
+        >
+          <Mic className="size-4" />
+          Full-screen voice assistant
+        </Button>
+      </div>
+      <VoiceRegistrationAssistant
+        open={voiceAssistantOpen}
+        onOpenChange={setVoiceAssistantOpen}
+        fields={["fullName", "parentName", "gender", "dob", "contact", "email"]}
+        onConfirm={applyVoiceRegistration}
+      />
       <Card className="p-4 bg-emerald-50/60 border-emerald-200 flex items-start gap-3">
         <ShieldCheck className="size-5 text-emerald-600 shrink-0 mt-0.5" />
         <div className="text-sm">
