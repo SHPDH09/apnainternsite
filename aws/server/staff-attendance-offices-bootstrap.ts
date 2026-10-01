@@ -13,6 +13,7 @@ const STAFF_SELF_RPC_FIX_SQL = "aws/scripts/89-rds-staff-office-employee-id-reso
 const STAFF_FACE_REGISTER_SQL = "aws/scripts/90-rds-staff-face-register.sql";
 const STAFF_HALF_DAY_SQL = "aws/scripts/91-rds-staff-half-day-leave.sql";
 const STAFF_HALF_DAY_RPC_SQL = "aws/scripts/92-rds-staff-half-day-attendance-rpc.sql";
+const STAFF_BTRIM_UUID_FIX_SQL = "aws/scripts/93-rds-fix-btrim-uuid.sql";
 const OFFICES_SQL = "aws/scripts/82-rds-staff-attendance-offices.sql";
 
 const OFFICE_TABLES = new Set(["staff_attendance_offices", "staff_office_assignments"]);
@@ -317,6 +318,7 @@ async function ensureStaffSelfOfficeRpcs(): Promise<void> {
     STAFF_FACE_REGISTER_SQL,
     STAFF_HALF_DAY_SQL,
     STAFF_HALF_DAY_RPC_SQL,
+    STAFF_BTRIM_UUID_FIX_SQL,
   ]) {
     try {
       await runSqlFile(rel);

@@ -1,4 +1,84 @@
--- Mirror of aws/scripts/30-rds-fix-resolve-login-registration.sql
+-- Hotfix: function pg_catalog.btrim(uuid) does not exist
+-- Usually trim/btrim on students.id when the column is uuid (not text).
+
+CREATE OR REPLACE FUNCTION public.safe_text_to_jsonb(p_raw uuid)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT public.safe_text_to_jsonb(p_raw::text);
+$$;
+
+REVOKE ALL ON FUNCTION public.safe_text_to_jsonb(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.safe_text_to_jsonb(uuid) TO anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public._staff_leave_auth_ids(p_user_id uuid)
+RETURNS uuid[]
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT coalesce(array_agg(DISTINCT x), ARRAY[]::uuid[])
+  FROM (
+    SELECT p_user_id AS x
+    UNION
+    SELECT s.user_id
+    FROM public.admin_staff s
+    WHERE s.user_id IS NOT NULL
+      AND (s.id = p_user_id OR s.user_id = p_user_id)
+    UNION
+    SELECT s.id
+    FROM public.admin_staff s
+    WHERE s.id = p_user_id OR s.user_id = p_user_id
+  ) t
+  WHERE x IS NOT NULL;
+$$;
+
+GRANT EXECUTE ON FUNCTION public._staff_leave_auth_ids(uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public._staff_half_day_approval(p_user_id uuid, p_date date)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT jsonb_build_object(
+    'leave_request_id', lr.id,
+    'check_in_from_minutes', public._ist_minutes_from_time(lr.half_day_check_in_from),
+    'check_in_until_minutes', public._ist_minutes_from_time(lr.half_day_check_in_until),
+    'check_in_from', to_char(lr.half_day_check_in_from, 'HH24:MI'),
+    'check_in_until', to_char(lr.half_day_check_in_until, 'HH24:MI')
+  )
+  FROM public.staff_leave_requests lr
+  WHERE lr.staff_id = ANY(public._staff_leave_auth_ids(p_user_id))
+    AND lr.leave_type = 'half_day'
+    AND lr.status = 'approved'
+    AND p_date BETWEEN lr.from_date AND lr.to_date
+    AND lr.half_day_check_in_from IS NOT NULL
+    AND lr.half_day_check_in_until IS NOT NULL
+  ORDER BY lr.reviewed_at DESC NULLS LAST, lr.created_at DESC
+  LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION public._staff_on_full_day_approved_leave(p_user_id uuid, p_date date)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.staff_leave_requests lr
+    WHERE lr.staff_id = ANY(public._staff_leave_auth_ids(p_user_id))
+      AND lr.status = 'approved'
+      AND lr.leave_type <> 'half_day'
+      AND p_date BETWEEN lr.from_date AND lr.to_date
+  );
+$$;
 
 CREATE OR REPLACE FUNCTION public.resolve_login_email(p_identifier text)
 RETURNS text

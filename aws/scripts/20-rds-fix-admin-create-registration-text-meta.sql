@@ -101,10 +101,10 @@ BEGIN
     v_meta := '{}'::jsonb;
   END IF;
 
-  SELECT NULLIF(trim(s.id), '')::uuid INTO v_uid
+  SELECT NULLIF(trim(s.id::text), '')::uuid INTO v_uid
   FROM public.students s
   WHERE lower(trim(s.email)) = v_email
-    AND NULLIF(trim(s.id), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    AND NULLIF(trim(s.id::text), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ORDER BY s.created_at DESC
   LIMIT 1;
 

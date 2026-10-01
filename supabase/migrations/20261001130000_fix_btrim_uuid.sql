@@ -1,0 +1,1 @@
+-- See aws/scripts/93-rds-fix-btrim-uuid.sql (applied on RDS via staff attendance bootstrap).
