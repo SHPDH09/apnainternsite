@@ -2,7 +2,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ScrollableDialogBody, scrollableDialogShellClass } from "@/components/ui/scrollable-dialog";
 import { StudentLogbookDocument } from "@/components/student/StudentLogbookDocument";
 import { StudentAttendanceReportDocument } from "@/components/student/StudentAttendanceReportDocument";
+import { ProjectReportPreviewDocument } from "@/components/student/ProjectReportPreviewDocument";
 import type { StudentDocumentId } from "@/hooks/useStudentDocumentActions";
+import type { ProjectReportMode } from "@/lib/projectReportDomainContent";
 import type { StudentDocumentFields } from "@/lib/studentPortalDocuments";
 
 type AttendanceRecord = { marked_at?: string | null };
@@ -10,6 +12,7 @@ type AttendanceRecord = { marked_at?: string | null };
 const TITLES: Partial<Record<StudentDocumentId, string>> = {
   logbook: "Internship Logbook",
   attendance: "Attendance Report",
+  project: "Project Report",
 };
 
 type Props = {
@@ -19,6 +22,12 @@ type Props = {
   fields: StudentDocumentFields;
   attendanceRecords: AttendanceRecord[];
   issueDate?: string;
+  projectPreview?: {
+    universityName: string;
+    universityLogoUrl?: string | null;
+    domain: string;
+    mode: ProjectReportMode;
+  } | null;
 };
 
 export function StudentDocumentPreviewDialog({
@@ -28,6 +37,7 @@ export function StudentDocumentPreviewDialog({
   fields,
   attendanceRecords,
   issueDate,
+  projectPreview,
 }: Props) {
   const title = documentId ? TITLES[documentId] || "Document preview" : "Document preview";
 
@@ -50,6 +60,14 @@ export function StudentDocumentPreviewDialog({
             <StudentAttendanceReportDocument
               fields={fields}
               attendanceRecords={attendanceRecords}
+              issueDate={issueDate}
+            />
+          ) : documentId === "project" && projectPreview ? (
+            <ProjectReportPreviewDocument
+              universityName={projectPreview.universityName}
+              universityLogoUrl={projectPreview.universityLogoUrl}
+              domain={projectPreview.domain}
+              mode={projectPreview.mode}
               issueDate={issueDate}
             />
           ) : null}
