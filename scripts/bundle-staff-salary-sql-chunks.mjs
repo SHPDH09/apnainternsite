@@ -36,10 +36,12 @@ function emitChunks(constName, fnName, sql) {
 }
 
 const baseSql = readSql("aws/scripts/81-rds-staff-salary-account.sql");
+const resolveSql = readSql("aws/scripts/96-rds-staff-salary-employee-resolve.sql");
 const advancedSql = readSql("aws/scripts/86-rds-staff-salary-advanced.sql");
 
 const body = `/** Bundled staff salary SQL for Vercel (generated — run scripts/bundle-staff-salary-sql-chunks.mjs). */
 ${emitChunks("STAFF_SALARY_BASE_CHUNKS", "staffSalaryBaseSql", baseSql)}
+${emitChunks("STAFF_SALARY_RESOLVE_CHUNKS", "staffSalaryResolveSql", resolveSql)}
 ${emitChunks("STAFF_SALARY_ADVANCED_CHUNKS", "staffSalaryAdvancedSql", advancedSql)}
 export const STAFF_SALARY_REQUIRED_RPCS = [
   "admin_list_staff_salary_holidays",
@@ -49,6 +51,7 @@ export const STAFF_SALARY_REQUIRED_RPCS = [
   "admin_upsert_staff_paid_leave_grant",
   "admin_generate_staff_salary",
   "admin_mark_staff_salary_paid",
+  "staff_list_my_paid_salary_slips",
 ];
 `;
 

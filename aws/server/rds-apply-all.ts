@@ -71,10 +71,12 @@ export const STAFF_SALARY_REQUIRED_RPCS = [
   "admin_upsert_staff_paid_leave_grant",
   "admin_generate_staff_salary",
   "admin_mark_staff_salary_paid",
+  "staff_list_my_paid_salary_slips",
 ] as const;
 
 const STAFF_SALARY_SQL_FILES = [
   "aws/scripts/81-rds-staff-salary-account.sql",
+  "aws/scripts/96-rds-staff-salary-employee-resolve.sql",
   "aws/scripts/86-rds-staff-salary-advanced.sql",
 ] as const;
 

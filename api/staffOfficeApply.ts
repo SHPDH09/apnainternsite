@@ -11,6 +11,7 @@ import {
   staffOfficeSelfAttendanceRpcSql,
   staffSalaryAdvancedSql,
   staffSalaryBaseSql,
+  staffSalaryResolveSql,
   staffProfileImageRpcSql,
 } from "./staffOfficeSqlChunks.js";
 
@@ -142,6 +143,7 @@ export async function applyStaffOfficeBootstrap(pool: Queryable): Promise<void> 
   await pool.query(staffFaceRegisterRpcSql());
   await applyStaffHalfDayAttendanceBootstrap(pool);
   await pool.query(staffSalaryBaseSql());
+  await pool.query(staffSalaryResolveSql());
   await pool.query(staffSalaryAdvancedSql());
 
   await assertRpcs(pool, [

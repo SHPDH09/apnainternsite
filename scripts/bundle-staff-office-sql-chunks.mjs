@@ -53,6 +53,7 @@ const halfDaySql =
   "\n\n" +
   readSql("aws/scripts/93-rds-fix-btrim-uuid.sql");
 const salaryBaseSql = readSql("aws/scripts/81-rds-staff-salary-account.sql");
+const salaryResolveSql = readSql("aws/scripts/96-rds-staff-salary-employee-resolve.sql");
 const salaryAdvancedSql = readSql("aws/scripts/86-rds-staff-salary-advanced.sql");
 const profileImageSql = readSql("aws/scripts/95-rds-staff-profile-image-user-id.sql");
 
@@ -63,6 +64,7 @@ ${emitChunks("STAFF_OFFICE_SELF_RPC_CHUNKS", "staffOfficeSelfAttendanceRpcSql", 
 ${emitChunks("STAFF_FACE_REGISTER_RPC_CHUNKS", "staffFaceRegisterRpcSql", faceRegisterSql)}
 ${emitChunks("STAFF_HALF_DAY_CHUNKS", "staffHalfDayAttendanceSql", halfDaySql)}
 ${emitChunks("STAFF_SALARY_BASE_CHUNKS", "staffSalaryBaseSql", salaryBaseSql)}
+${emitChunks("STAFF_SALARY_RESOLVE_CHUNKS", "staffSalaryResolveSql", salaryResolveSql)}
 ${emitChunks("STAFF_SALARY_ADVANCED_CHUNKS", "staffSalaryAdvancedSql", salaryAdvancedSql)}
 ${emitChunks("STAFF_PROFILE_IMAGE_RPC_CHUNKS", "staffProfileImageRpcSql", profileImageSql)}
 /** @deprecated Use ensure + call ensure() + admin RPCs instead of one-shot apply. */
@@ -101,6 +103,7 @@ export const STAFF_SALARY_REQUIRED_RPCS = [
   "admin_upsert_staff_paid_leave_grant",
   "admin_generate_staff_salary",
   "admin_mark_staff_salary_paid",
+  "staff_list_my_paid_salary_slips",
 ];
 `;
 

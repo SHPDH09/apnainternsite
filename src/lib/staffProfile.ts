@@ -1,5 +1,6 @@
 export type AdminStaffProfile = {
   id: string;
+  user_id?: string | null;
   email: string;
   full_name: string | null;
   role_tag: string | null;

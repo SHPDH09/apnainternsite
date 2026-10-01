@@ -115,6 +115,47 @@ export function formatSalaryMonth(isoDate: string): string {
   }
 }
 
+/** Auth user id used in staff_salary_setup / staff_salary_slips (not always admin_staff.id). */
+export function resolveStaffSalaryEmployeeId(
+  member: { id: string; user_id?: string | null }
+): string {
+  const uid = member.user_id?.trim();
+  return uid || member.id;
+}
+
+export function staffSalaryEmployeeIdSet(member: { id: string; user_id?: string | null }): string[] {
+  const authId = resolveStaffSalaryEmployeeId(member);
+  return authId === member.id ? [member.id] : [authId, member.id];
+}
+
+async function resolveMySalaryEmployeeIds(): Promise<string[]> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const uid = sessionData.session?.user?.id;
+  if (!uid) return [];
+
+  const ids = new Set<string>([uid]);
+  const email = sessionData.session?.user?.email?.trim();
+  const { data: byId } = await supabase
+    .from("admin_staff")
+    .select("id,user_id")
+    .eq("id", uid)
+    .maybeSingle();
+  const { data: byUser } = await supabase
+    .from("admin_staff")
+    .select("id,user_id")
+    .eq("user_id", uid)
+    .maybeSingle();
+  const { data: byEmail } = email
+    ? await supabase.from("admin_staff").select("id,user_id").eq("email", email).maybeSingle()
+    : { data: null };
+
+  for (const row of [byId, byUser, byEmail]) {
+    if (row?.id) ids.add(String(row.id));
+    if (row?.user_id) ids.add(String(row.user_id));
+  }
+  return [...ids];
+}
+
 export function calcGrossFromSetup(setup: Pick<
   StaffSalarySetupRow,
   "basic_salary" | "hra" | "special_allowance" | "other_allowances"
@@ -180,9 +221,20 @@ export async function upsertStaffSalarySetup(input: {
   return data as StaffSalarySetupRow;
 }
 
-/** Paid salary slips for the signed-in staff member (RLS: employee_id = auth.uid()). */
+/** Paid salary slips for the signed-in staff member only. */
 export async function listMyPaidSalarySlips(): Promise<StaffSalarySlipRow[]> {
   await ensureStaffSalarySchema();
+
+  try {
+    const { data, error } = await supabase.rpc("staff_list_my_paid_salary_slips");
+    if (!error && Array.isArray(data)) {
+      return data as StaffSalarySlipRow[];
+    }
+  } catch {
+    /* fallback below */
+  }
+
+  const myIds = new Set(await resolveMySalaryEmployeeIds());
   const { data, error } = await supabase
     .from("staff_salary_slips")
     .select("*")
@@ -191,7 +243,8 @@ export async function listMyPaidSalarySlips(): Promise<StaffSalarySlipRow[]> {
     .order("paid_at", { ascending: false });
 
   if (error) throw new Error(rpcError(error));
-  return (data || []) as StaffSalarySlipRow[];
+  const rows = (data || []) as StaffSalarySlipRow[];
+  return rows.filter((row) => myIds.has(String(row.employee_id)));
 }
 
 export async function listStaffSalarySlips(opts?: {

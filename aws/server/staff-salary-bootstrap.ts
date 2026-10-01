@@ -5,6 +5,7 @@ import { query } from "./db.js";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const BASE_SQL = "aws/scripts/81-rds-staff-salary-account.sql";
+const RESOLVE_SQL = "aws/scripts/96-rds-staff-salary-employee-resolve.sql";
 const ADVANCED_SQL = "aws/scripts/86-rds-staff-salary-advanced.sql";
 
 const SALARY_RPCS = [
@@ -15,6 +16,7 @@ const SALARY_RPCS = [
   "admin_upsert_staff_paid_leave_grant",
   "admin_generate_staff_salary",
   "admin_mark_staff_salary_paid",
+  "staff_list_my_paid_salary_slips",
 ] as const;
 
 function resolveSqlPath(rel: string): string {
@@ -59,7 +61,8 @@ export function isStaffSalaryRpc(name: string): boolean {
     name === "admin_list_staff_paid_leave_grants" ||
     name === "admin_upsert_staff_paid_leave_grant" ||
     name === "admin_generate_staff_salary" ||
-    name === "admin_mark_staff_salary_paid"
+    name === "admin_mark_staff_salary_paid" ||
+    name === "staff_list_my_paid_salary_slips"
   );
 }
 
@@ -81,9 +84,17 @@ export function isStaffSalaryRpcMissingError(err: unknown): boolean {
 
 /** Idempotent RDS bootstrap for staff salary tables + RPCs (81 then 86). */
 export async function ensureStaffSalarySchema(): Promise<{ ok: true }> {
-  if (await rpcsReady()) return { ok: true };
+  if (await rpcsReady()) {
+    if (await functionExists("staff_list_my_paid_salary_slips")) return { ok: true };
+    try {
+      await runSqlFile(RESOLVE_SQL);
+    } catch {
+      /* idempotent */
+    }
+    if (await functionExists("staff_list_my_paid_salary_slips")) return { ok: true };
+  }
 
-  for (const rel of [BASE_SQL, ADVANCED_SQL]) {
+  for (const rel of [BASE_SQL, RESOLVE_SQL, ADVANCED_SQL]) {
     try {
       await runSqlFile(rel);
     } catch (err) {
