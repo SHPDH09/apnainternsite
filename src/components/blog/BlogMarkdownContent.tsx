@@ -1,7 +1,33 @@
+import { useCallback, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { resolveBlogMarkdownAssetUrl } from "@/lib/storageUrl";
+import { extractBlogMediaAssetId, resolveBlogMarkdownAssetUrl } from "@/lib/storageUrl";
 import { cn } from "@/lib/utils";
+
+function BlogMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
+  const resolved = resolveBlogMarkdownAssetUrl(typeof src === "string" ? src : undefined) || src || "";
+  const [activeSrc, setActiveSrc] = useState(resolved);
+
+  const onError = useCallback(() => {
+    const fallback = resolveBlogMarkdownAssetUrl(src);
+    if (fallback && fallback !== activeSrc) setActiveSrc(fallback);
+  }, [src, activeSrc]);
+
+  if (!activeSrc) return null;
+
+  return (
+    <figure className="my-8">
+      <img
+        src={activeSrc}
+        alt={alt || ""}
+        className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200/80 shadow-md"
+        loading="lazy"
+        onError={onError}
+      />
+      {alt ? <figcaption className="mt-2 text-center text-sm text-slate-500">{alt}</figcaption> : null}
+    </figure>
+  );
+}
 
 type Props = {
   content: string;
@@ -33,20 +59,7 @@ export function BlogMarkdownContent({ content, className }: Props) {
               {children}
             </a>
           ),
-          img: ({ src, alt, ...props }) => (
-            <figure className="my-8">
-              <img
-                src={resolveBlogMarkdownAssetUrl(typeof src === "string" ? src : undefined) || src}
-                alt={alt || ""}
-                className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200/80 shadow-md"
-                loading="lazy"
-                {...props}
-              />
-              {alt ? (
-                <figcaption className="mt-2 text-center text-sm text-slate-500">{alt}</figcaption>
-              ) : null}
-            </figure>
-          ),
+          img: ({ src, alt }) => <BlogMarkdownImage src={typeof src === "string" ? src : undefined} alt={alt} />,
         }}
       >
         {content}

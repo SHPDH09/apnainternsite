@@ -135,23 +135,54 @@ export function resolveStorageUrl(url: string | null | undefined): string | null
 }
 
 /** Build a public URL for a freshly uploaded object. */
-/** Blog inline images: RDS API paths, storage proxy, or legacy S3 URLs. */
+const BLOG_MEDIA_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function blogMediaServePath(mediaId: string): string {
+  return `/api/send-mail?id=${encodeURIComponent(mediaId)}`;
+}
+
+export function extractBlogMediaAssetId(url: string | null | undefined): string | null {
+  if (!url?.trim()) return null;
+  try {
+    const parsed = url.trim().startsWith("http")
+      ? new URL(url.trim())
+      : new URL(url.trim(), "https://apnaintern.in");
+    const id = (parsed.searchParams.get("id") || parsed.searchParams.get("blog_media_id") || "").trim();
+    return BLOG_MEDIA_ID_RE.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Normalize legacy /api/public/blog-media and absolute URLs to Vercel send-mail GET. */
 export function resolveBlogMarkdownAssetUrl(url: string | null | undefined): string | null {
   if (!url?.trim()) return null;
-  let trimmed = url.trim();
+  const trimmed = url.trim();
   try {
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-      const parsed = new URL(trimmed);
-      if (parsed.pathname === "/api/public/blog-media" || parsed.pathname.endsWith("/api/send-mail")) {
-        const id = parsed.searchParams.get("id") || parsed.searchParams.get("blog_media_id");
-        if (id) return `/api/public/blog-media?id=${encodeURIComponent(id)}`;
-      }
+    const parsed = trimmed.startsWith("http://") || trimmed.startsWith("https://")
+      ? new URL(trimmed)
+      : new URL(trimmed, "https://apnaintern.in");
+    const path = parsed.pathname.replace(/\/$/, "");
+    if (path === "/api/public/blog-media" || path === "/api/send-mail") {
+      const id = (parsed.searchParams.get("id") || parsed.searchParams.get("blog_media_id") || "").trim();
+      if (BLOG_MEDIA_ID_RE.test(id)) return blogMediaServePath(id);
     }
   } catch {
-    /* keep trimmed */
+    /* fall through */
   }
-  if (trimmed.startsWith("/api/public/blog-media")) return trimmed;
-  if (trimmed.startsWith("api/public/blog-media")) return `/${trimmed.replace(/^\/+/, "")}`;
+  if (trimmed.startsWith("/api/public/blog-media") || trimmed.startsWith("api/public/blog-media")) {
+    try {
+      const parsed = new URL(trimmed.startsWith("/") ? `https://apnaintern.in${trimmed}` : `https://apnaintern.in/${trimmed}`);
+      const id = (parsed.searchParams.get("id") || "").trim();
+      if (BLOG_MEDIA_ID_RE.test(id)) return blogMediaServePath(id);
+    } catch {
+      /* keep */
+    }
+  }
+  if (trimmed.startsWith("/api/send-mail") || trimmed.startsWith("api/send-mail")) {
+    return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  }
   const resolved = resolveStorageUrl(trimmed);
   return resolved || trimmed;
 }

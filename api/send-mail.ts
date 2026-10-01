@@ -245,7 +245,8 @@ async function uploadBlogImageToRdsInline(input: {
     [id, input.postId, input.subfolder, input.fileName, contentType, input.imageBuffer]
   );
   const origin = resolvePublicSiteOrigin();
-  const url = `${origin}/api/public/blog-media?id=${encodeURIComponent(id)}`;
+  /** Same-origin send-mail is whitelisted on Vercel; /api/public/blog-media rewrite is easy to miss in deploy order. */
+  const url = `${origin}/api/send-mail?id=${encodeURIComponent(id)}`;
   return { url, path: `rds:site_blog_media_assets/${id}` };
 }
 
