@@ -28,6 +28,7 @@ import ensureStaffAttendanceOffices from "../../api/ensure-staff-attendance-offi
 import staffOfficeRpc from "../../api/staff-office-rpc";
 import studentUniqueness from "../../api/student-uniqueness";
 import ensureLearningMaterials from "../../api/ensure-learning-materials";
+import ensureStudentUniqueness from "../../api/ensure-student-uniqueness";
 import partnerApplicationSubmit from "../../api/partner-application-submit";
 import adminPartnerRegister from "../../api/admin-partner-register";
 import rdsApplyAll from "./rds-apply-all-route.js";
@@ -252,6 +253,7 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/ensure-staff-attendance-offices", handler: ensureStaffAttendanceOffices },
     { method: "post", path: "/api/staff-office-rpc", handler: staffOfficeRpc },
     { method: "post", path: "/api/student-uniqueness", handler: studentUniqueness },
+    { method: "post", path: "/api/ensure-student-uniqueness", handler: ensureStudentUniqueness },
     { method: "post", path: "/api/ensure-learning-materials", handler: ensureLearningMaterials },
     { method: "post", path: "/api/partner-application-submit", handler: partnerApplicationSubmit },
     {

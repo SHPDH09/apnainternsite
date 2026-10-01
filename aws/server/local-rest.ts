@@ -30,6 +30,11 @@ import {
   isStaffSalaryRpc,
   isStaffSalaryRpcMissingError,
 } from "./staff-salary-bootstrap";
+import {
+  ensureStudentUniquenessSchema,
+  isValidateStudentUniquenessMissingError,
+  isValidateStudentUniquenessRpc,
+} from "./student-uniqueness-bootstrap";
 import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
 
 function jwtFromRequest(req: Request) {
@@ -639,7 +644,7 @@ export async function restRpc(req: Request, res: Response) {
     >;
     const jwt = jwtFromRequest(req);
     if (isTsRpc(name)) {
-      if (name.startsWith("admin_") && !jwt) {
+      if ((name.startsWith("admin_") || name.startsWith("student_")) && !jwt) {
         res.status(401).json({ message: "JWT required" });
         return;
       }
@@ -687,6 +692,17 @@ export async function restRpc(req: Request, res: Response) {
       }
     }
 
+    if (isValidateStudentUniquenessRpc(name)) {
+      try {
+        await ensureStudentUniquenessSchema();
+      } catch (bootstrapErr) {
+        console.warn(
+          "[rest/rpc] student uniqueness pre-bootstrap:",
+          String(bootstrapErr).slice(0, 240)
+        );
+      }
+    }
+
     const invokeRpc = async () =>
       def
         ? await callRpc(name, def.args, body, jwt)
@@ -718,12 +734,15 @@ export async function restRpc(req: Request, res: Response) {
         isStaffAttendanceOfficesRpc(name) && isStaffAttendanceOfficesRpcMissingError(firstErr);
       const shouldBootstrapSalary =
         isStaffSalaryRpc(name) && isStaffSalaryRpcMissingError(firstErr);
+      const shouldBootstrapUniqueness =
+        isValidateStudentUniquenessRpc(name) && isValidateStudentUniquenessMissingError(firstErr);
 
       if (
         !shouldBootstrapRegistration &&
         !shouldBootstrapUpload &&
         !shouldBootstrapOffices &&
-        !shouldBootstrapSalary
+        !shouldBootstrapSalary &&
+        !shouldBootstrapUniqueness
       ) {
         throw firstErr;
       }
@@ -743,6 +762,10 @@ export async function restRpc(req: Request, res: Response) {
       if (shouldBootstrapSalary) {
         console.warn("[rest/rpc] staff salary RPC failed, applying bootstrap and retrying:", msg);
         await ensureStaffSalarySchema();
+      }
+      if (shouldBootstrapUniqueness) {
+        console.warn("[rest/rpc] validate_student_uniqueness failed, applying bootstrap and retrying:", msg);
+        await ensureStudentUniquenessSchema();
       }
       const data = await invokeRpc();
       res.json(data);

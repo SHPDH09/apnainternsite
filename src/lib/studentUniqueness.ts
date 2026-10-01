@@ -18,7 +18,15 @@ export type StudentUniquenessResult = {
 };
 
 function parseRpcResult(data: unknown): StudentUniquenessResult {
-  const row = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  let parsed: unknown = data;
+  if (typeof data === "string") {
+    try {
+      parsed = JSON.parse(data) as unknown;
+    } catch {
+      parsed = data;
+    }
+  }
+  const row = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
   return {
     valid: row.valid === true,
     message: String(row.message || "").trim(),
@@ -60,10 +68,55 @@ function buildRpcArgs(input: ValidateStudentUniquenessInput) {
 
 function shouldUseUniquenessApiFallback(msg: string): boolean {
   return (
-    /validate_student_uniqueness|does not exist|42883|PGRST202/i.test(msg) ||
+    /validate_student_uniqueness|does not exist on RDS|does not exist|42883|PGRST202/i.test(msg) ||
     /btrim\(uuid\)|invalid input syntax for type uuid|cannot cast|22P02|42846/i.test(msg) ||
-    /could not validate student data/i.test(msg)
+    /could not validate student data/i.test(msg) ||
+    /student validation could not be initialized/i.test(msg)
   );
+}
+
+function isInfrastructureValidationFailure(msg: string): boolean {
+  const m = msg.trim();
+  if (!m) return true;
+  return (
+    shouldUseUniquenessApiFallback(m) ||
+    /method not allowed/i.test(m) ||
+    /DATABASE_URL is not configured/i.test(m) ||
+    /authorization bearer token required/i.test(m)
+  );
+}
+
+async function bootstrapStudentUniquenessSchema(client: SupabaseClient): Promise<boolean> {
+  try {
+    const { error } = await client.rpc("student_ensure_uniqueness_schema");
+    if (!error) return true;
+    if (!shouldUseUniquenessApiFallback(error.message || "")) return false;
+  } catch {
+    /* fall through to HTTP ensure */
+  }
+
+  if (typeof window === "undefined") return false;
+
+  const { data: sessionData } = await client.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) return false;
+
+  const origin = window.location.origin.replace(/\/$/, "");
+  for (const path of ["/api/ensure-student-uniqueness", "/api/student-uniqueness"]) {
+    const res = await fetch(`${origin}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: "bootstrap@invalid.local",
+        excludeUserId: sessionData.session?.user?.id,
+      }),
+    }).catch(() => null);
+    if (res?.ok) return true;
+  }
+  return false;
 }
 
 function shouldRetryUniquenessViaRpc(status: number, msg: string): boolean {
@@ -162,17 +215,41 @@ async function validateStudentUniquenessViaApi(
   return parseRpcResult(json);
 }
 
-/** Browser: RDS RPC first; `/api/student-uniqueness` when RPC schema is stale. Server: direct RPC. */
+async function validateWithBootstrapRetry(
+  client: SupabaseClient,
+  input: ValidateStudentUniquenessInput
+): Promise<StudentUniquenessResult> {
+  let rpcResult = await validateStudentUniquenessViaRpc(client, input);
+  if (rpcResult.valid || !shouldUseUniquenessApiFallback(rpcResult.message)) {
+    return rpcResult;
+  }
+
+  if (await bootstrapStudentUniquenessSchema(client)) {
+    rpcResult = await validateStudentUniquenessViaRpc(client, input);
+    if (rpcResult.valid || !shouldUseUniquenessApiFallback(rpcResult.message)) {
+      return rpcResult;
+    }
+  }
+
+  const apiResult = await validateStudentUniquenessViaApi(client, input);
+  if (apiResult.valid || !isInfrastructureValidationFailure(apiResult.message)) {
+    return apiResult;
+  }
+
+  if (await bootstrapStudentUniquenessSchema(client)) {
+    return validateStudentUniquenessViaRpc(client, input);
+  }
+
+  return apiResult;
+}
+
+/** Browser: RDS RPC + bootstrap; `/api/student-uniqueness` when RPC schema is stale. Server: direct RPC. */
 export async function validateStudentUniqueness(
   client: SupabaseClient,
   input: ValidateStudentUniquenessInput
 ): Promise<StudentUniquenessResult> {
   if (typeof window !== "undefined") {
-    const rpcResult = await validateStudentUniquenessViaRpc(client, input);
-    if (rpcResult.valid || !shouldUseUniquenessApiFallback(rpcResult.message)) {
-      return rpcResult;
-    }
-    return validateStudentUniquenessViaApi(client, input);
+    return validateWithBootstrapRetry(client, input);
   }
 
   const args = buildRpcArgs(input);
@@ -223,6 +300,13 @@ export async function assertStudentUniqueness(
 ): Promise<void> {
   const result = await validateStudentUniqueness(client, input);
   if (!result.valid) {
+    if (isInfrastructureValidationFailure(result.message)) {
+      console.warn(
+        "[student-uniqueness] Pre-save validation unavailable; continuing save:",
+        result.message
+      );
+      return;
+    }
     throw new Error(result.message || "Duplicate student data.");
   }
 }

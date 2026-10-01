@@ -1,22 +1,28 @@
-import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Warm RDS validate_student_uniqueness via Vercel (applies migration 20260726120000 if needed). */
-export async function warmStudentUniquenessValidation(): Promise<void> {
+/** Warm RDS validate_student_uniqueness (applies SQL on Lambda when missing). */
+export async function warmStudentUniquenessValidation(client?: SupabaseClient): Promise<void> {
   if (typeof window === "undefined") return;
-  const { data } = await supabase.auth.getSession();
+
+  const { supabase } = await import("@/integrations/supabase/client");
+  const db = client ?? supabase;
+  const { data } = await db.auth.getSession();
   const token = data.session?.access_token;
   if (!token) return;
 
+  try {
+    await db.rpc("student_ensure_uniqueness_schema");
+    return;
+  } catch {
+    /* fall through */
+  }
+
   const origin = window.location.origin.replace(/\/$/, "");
-  await fetch(`${origin}/api/student-uniqueness`, {
+  await fetch(`${origin}/api/ensure-student-uniqueness`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      email: data.session?.user?.email || "warmup@invalid.local",
-      excludeUserId: data.session?.user?.id,
-    }),
   }).catch(() => undefined);
 }
