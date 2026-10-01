@@ -840,27 +840,35 @@ async function deliverOutbound(
   await transporter.sendMail(mailOptions);
 }
 
+async function loadBlogMediaFromRds(
+  mediaId: string
+): Promise<{ contentType: string; buf: Buffer } | null> {
+  const { rows } = await blogEngagementQuery<{ content_type: string; data: Buffer }>(
+    `SELECT content_type, data FROM public.site_blog_media_assets WHERE id = $1::uuid LIMIT 1`,
+    [mediaId]
+  );
+  const row = rows[0];
+  if (!row?.data?.length) return null;
+  const contentType = String(row.content_type || 'application/octet-stream');
+  const buf = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
+  return { contentType, buf };
+}
+
 async function serveBlogMediaFromRds(res: VercelResponse, mediaId: string): Promise<void> {
   if (!process.env.DATABASE_URL?.trim()) {
     res.status(503).json({ ok: false, message: 'DATABASE_URL is not configured on this deployment' });
     return;
   }
   try {
-    const { rows } = await blogEngagementQuery<{ content_type: string; data: Buffer }>(
-      `SELECT content_type, data FROM public.site_blog_media_assets WHERE id = $1::uuid LIMIT 1`,
-      [mediaId]
-    );
-    const row = rows[0];
-    if (!row?.data?.length) {
+    const loaded = await loadBlogMediaFromRds(mediaId);
+    if (!loaded) {
       res.status(404).json({ ok: false, message: 'Image not found' });
       return;
     }
-    const contentType = String(row.content_type || 'application/octet-stream');
-    const buf = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
-    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Type', loaded.contentType);
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.setHeader('Content-Length', String(buf.length));
-    res.status(200).send(buf);
+    res.setHeader('Content-Length', String(loaded.buf.length));
+    res.status(200).send(loaded.buf);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[send-mail blog_media GET]', message);
@@ -929,6 +937,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (cid && recipient) return 'college_admin_welcome';
       return '';
     })();
+
+    if (normalizedAction === 'blog_get_media') {
+      if (!process.env.DATABASE_URL?.trim()) {
+        return res.status(503).json({ ok: false, message: 'DATABASE_URL is not configured on this deployment' });
+      }
+      const mediaId = String(body.media_id || body.id || '').trim();
+      if (!BLOG_MEDIA_UUID_RE.test(mediaId)) {
+        return res.status(400).json({ ok: false, message: 'Invalid media id' });
+      }
+      try {
+        const loaded = await loadBlogMediaFromRds(mediaId);
+        if (!loaded) {
+          return res.status(404).json({ ok: false, message: 'Image not found' });
+        }
+        if (loaded.buf.length > BLOG_IMAGE_VERCEL_MAX_BYTES) {
+          return res.status(413).json({ ok: false, message: 'Image too large' });
+        }
+        return res.status(200).json({
+          ok: true,
+          content_type: loaded.contentType,
+          data_base64: loaded.buf.toString('base64'),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail blog_get_media]', message);
+        return res.status(503).json({ ok: false, message: 'Image temporarily unavailable' });
+      }
+    }
 
     if (normalizedAction === 'ensure_blog_cms') {
       const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();

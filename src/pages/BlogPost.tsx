@@ -14,7 +14,7 @@ import {
   incrementBlogPostView,
   markBlogViewRecorded,
 } from "@/lib/siteBlogEngagement";
-import { resolveBlogMarkdownAssetUrl } from "@/lib/storageUrl";
+import { useBlogMediaSrc } from "@/hooks/useBlogMediaSrc";
 import {
   estimateReadMinutes,
   fetchPublicBlogPostBySlug,
@@ -109,6 +109,7 @@ export default function BlogPost() {
 
   const tags = Array.isArray(post.tags) ? post.tags : [];
   const contentLocked = !leadUnlocked;
+  const coverSrc = useBlogMediaSrc(post.cover_image_url);
 
   return (
     <BlogReaderShell>
@@ -124,10 +125,10 @@ export default function BlogPost() {
         }}
       />
       <article className="blog-article">
-        {post.cover_image_url ? (
+        {coverSrc ? (
           <div className="-mx-4 mb-8 overflow-hidden rounded-2xl sm:-mx-0 sm:mb-10">
             <img
-              src={resolveBlogMarkdownAssetUrl(post.cover_image_url) || post.cover_image_url}
+              src={coverSrc}
               alt=""
               className="aspect-[16/9] w-full object-cover sm:aspect-[2/1]"
             />

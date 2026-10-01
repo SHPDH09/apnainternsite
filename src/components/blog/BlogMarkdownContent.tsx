@@ -1,17 +1,10 @@
-import { useCallback, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { extractBlogMediaAssetId, resolveBlogMarkdownAssetUrl } from "@/lib/storageUrl";
+import { useBlogMediaSrc } from "@/hooks/useBlogMediaSrc";
 import { cn } from "@/lib/utils";
 
 function BlogMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
-  const resolved = resolveBlogMarkdownAssetUrl(typeof src === "string" ? src : undefined) || src || "";
-  const [activeSrc, setActiveSrc] = useState(resolved);
-
-  const onError = useCallback(() => {
-    const fallback = resolveBlogMarkdownAssetUrl(src);
-    if (fallback && fallback !== activeSrc) setActiveSrc(fallback);
-  }, [src, activeSrc]);
+  const activeSrc = useBlogMediaSrc(typeof src === "string" ? src : undefined);
 
   if (!activeSrc) return null;
 
@@ -22,7 +15,6 @@ function BlogMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
         alt={alt || ""}
         className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200/80 shadow-md"
         loading="lazy"
-        onError={onError}
       />
       {alt ? <figcaption className="mt-2 text-center text-sm text-slate-500">{alt}</figcaption> : null}
     </figure>
