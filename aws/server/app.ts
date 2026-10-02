@@ -39,6 +39,7 @@ import { ensureAllCmsTables } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import { ensureProjectReportSchema } from "./project-report-bootstrap";
+import { ensureLearningMaterialsSchema } from "./learning-materials-bootstrap";
 import { ensureStaffAttendanceOfficesSchema } from "./staff-attendance-offices-bootstrap";
 import { ensureStaffSalarySchema } from "./staff-salary-bootstrap";
 import {
@@ -174,6 +175,14 @@ async function buildApp(): Promise<Express> {
       }
     } catch (err) {
       console.warn("[project-report-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const learningMaterials = await ensureLearningMaterialsSchema();
+      if (learningMaterials.applied) {
+        console.log("[learning-materials-bootstrap] applied learning_materials schema");
+      }
+    } catch (err) {
+      console.warn("[learning-materials-bootstrap] startup ensure failed:", err);
     }
     try {
       await ensureStaffAttendanceOfficesSchema();

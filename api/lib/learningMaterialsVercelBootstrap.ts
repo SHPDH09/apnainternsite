@@ -1,30 +1,42 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { query } from "./db.js";
+/**
+ * Vercel-safe RDS bootstrap for learning_materials (no aws/server imports).
+ */
+import type { QueryResultRow } from "pg";
 
+let pool: import("pg").Pool | null = null;
 let bootstrapped = false;
 
-const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-const SQL_BASENAME = "97-rds-learning-materials.sql";
-
-function resolveSqlPath(): string {
-  const bundled = path.join(moduleDir, "sql", SQL_BASENAME);
-  if (fs.existsSync(bundled)) return bundled;
-  const scripts = path.join(moduleDir, "../scripts", SQL_BASENAME);
-  if (fs.existsSync(scripts)) return scripts;
-  return path.resolve(moduleDir, "../..", "aws/scripts", SQL_BASENAME);
+function pgPoolConfig(databaseUrl: string) {
+  return {
+    connectionString: databaseUrl
+      .replace(/([?&])sslmode=[^&]*/gi, "$1")
+      .replace(/[?&]$/, ""),
+    ssl: /rds\.amazonaws\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+    max: 1,
+    connectionTimeoutMillis: 20000,
+  };
 }
 
-async function tableExists(): Promise<boolean> {
-  const { rows } = await query<{ exists: boolean }>(
+async function getPool(): Promise<import("pg").Pool> {
+  if (pool) return pool;
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL is not configured on this deployment");
+  }
+  const pg = await import("pg");
+  pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
+  return pool;
+}
+
+async function tableExists(client: import("pg").Pool): Promise<boolean> {
+  const { rows } = await client.query<{ exists: boolean }>(
     `SELECT to_regclass('public.learning_materials') IS NOT NULL AS exists`
   );
   return Boolean(rows[0]?.exists);
 }
 
-async function applyLearningMaterialsCore(): Promise<void> {
-  await query(`
+async function applyLearningMaterialsCore(client: import("pg").Pool): Promise<void> {
+  await client.query(`
     CREATE TABLE IF NOT EXISTS public.learning_materials (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       title text NOT NULL,
@@ -46,13 +58,13 @@ async function applyLearningMaterialsCore(): Promise<void> {
     );
   `);
 
-  await query(`
+  await client.query(`
     CREATE INDEX IF NOT EXISTS idx_learning_materials_type_active
       ON public.learning_materials (material_type, is_active, created_at DESC);
   `);
 
   try {
-    await query(`
+    await client.query(`
       ALTER TABLE public.learning_materials ENABLE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS "Admins manage learning materials" ON public.learning_materials;
       CREATE POLICY "Admins manage learning materials"
@@ -77,38 +89,34 @@ async function applyLearningMaterialsCore(): Promise<void> {
         USING (is_active = true);
     `);
   } catch {
-    await query(`ALTER TABLE public.learning_materials DISABLE ROW LEVEL SECURITY`);
+    await client.query(`ALTER TABLE public.learning_materials DISABLE ROW LEVEL SECURITY`);
   }
 
-  await query(`
+  await client.query(`
     GRANT SELECT, INSERT, UPDATE, DELETE ON public.learning_materials TO authenticated;
     GRANT SELECT ON public.learning_materials TO anon;
   `);
 }
 
-/** Idempotent RDS bootstrap for learning_materials (student dashboard + admin uploads). */
 export async function ensureLearningMaterialsSchema(): Promise<{ ok: true; applied: boolean }> {
-  if (bootstrapped && (await tableExists())) {
+  const client = await getPool();
+  if (bootstrapped && (await tableExists(client))) {
     return { ok: true, applied: false };
   }
-
-  if (await tableExists()) {
+  if (await tableExists(client)) {
     bootstrapped = true;
     return { ok: true, applied: false };
   }
-
-  const fp = resolveSqlPath();
-  if (fs.existsSync(fp)) {
-    try {
-      await query(fs.readFileSync(fp, "utf8"));
-    } catch {
-      await applyLearningMaterialsCore();
-    }
-  } else {
-    await applyLearningMaterialsCore();
-  }
-
+  await applyLearningMaterialsCore(client);
   bootstrapped = true;
-  console.log("[learning-materials-bootstrap] learning_materials ready");
   return { ok: true, applied: true };
+}
+
+export async function learningMaterialsQuery<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: unknown[]
+) {
+  await ensureLearningMaterialsSchema();
+  const client = await getPool();
+  return client.query<T>(text, params);
 }

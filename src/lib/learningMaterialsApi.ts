@@ -62,17 +62,56 @@ async function ensureLearningMaterialsViaSendMail(client: SupabaseClient): Promi
 
 async function ensureLearningMaterialsTable(client: SupabaseClient): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  if (await ensureLearningMaterialsViaSendMail(client)) return true;
+
   const headers = await adminAuthHeaders(client);
   if (!headers) return false;
-
   const origin = window.location.origin.replace(/\/$/, "");
   const direct = await fetch(`${origin}/api/ensure-learning-materials`, {
     method: "POST",
     headers,
   }).catch(() => null);
-  if (direct?.ok) return true;
+  return Boolean(direct?.ok);
+}
 
-  return ensureLearningMaterialsViaSendMail(client);
+const VERCEL_STORAGE_RELAY_MAX_BYTES = 3_300_000;
+
+async function fileToBase64(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary);
+}
+
+async function uploadLearningMaterialViaSendMail(
+  client: SupabaseClient,
+  path: string,
+  file: File
+): Promise<{ ok: boolean; publicUrl?: string }> {
+  if (file.size > VERCEL_STORAGE_RELAY_MAX_BYTES) return { ok: false };
+  const headers = await adminAuthHeaders(client);
+  if (!headers) return { ok: false };
+  const origin = window.location.origin.replace(/\/$/, "");
+  const fileBase64 = await fileToBase64(file);
+  const res = await fetch(`${origin}/api/send-mail`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "upload_learning_material_storage",
+      object_path: path,
+      file_name: file.name,
+      content_type: file.type || "application/octet-stream",
+      file_base64: fileBase64,
+    }),
+  }).catch(() => null);
+  if (!res?.ok) return { ok: false };
+  const json = (await res.json().catch(() => null)) as {
+    publicUrl?: string;
+    url?: string;
+  } | null;
+  const publicUrl = json?.publicUrl || json?.url;
+  return publicUrl ? { ok: true, publicUrl } : { ok: false };
 }
 
 function isMissingLearningMaterialsTable(error: { message?: string; code?: string } | null): boolean {
@@ -159,7 +198,7 @@ async function uploadWithRetry(
   path: string,
   file: File,
   contentType?: string
-): Promise<{ error: { message: string } | null }> {
+): Promise<{ error: { message: string } | null; relayPublicUrl?: string }> {
   let lastErr: { message: string } | null = null;
   for (let attempt = 0; attempt < 4; attempt++) {
     const { error } = await client.storage.from(BUCKET).upload(path, file, {
@@ -170,6 +209,12 @@ async function uploadWithRetry(
     lastErr = error;
     if (!/503|502|504|timeout|unavailable/i.test(error.message)) break;
     await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  if (lastErr && /503|502|504|timeout|unavailable/i.test(lastErr.message)) {
+    const relay = await uploadLearningMaterialViaSendMail(client, path, file);
+    if (relay.ok && relay.publicUrl) {
+      return { error: null, relayPublicUrl: relay.publicUrl };
+    }
   }
   return { error: lastErr };
 }
@@ -184,7 +229,7 @@ export async function uploadLearningMaterialFile(
   }
   const safeName = file.name.replace(/[^\w.\-]+/g, "_");
   const path = `${createdBy}/${Date.now()}-${safeName}`;
-  const { error } = await uploadWithRetry(client, path, file);
+  const { error, relayPublicUrl } = await uploadWithRetry(client, path, file);
   if (error) {
     if (/bucket not found/i.test(error.message)) {
       throw new Error(
@@ -195,6 +240,7 @@ export async function uploadLearningMaterialFile(
   }
   const { data } = client.storage.from(BUCKET).getPublicUrl(path);
   const publicUrl =
+    relayPublicUrl ||
     publicStorageObjectUrl(BUCKET, path) ||
     resolveStorageUrl(data.publicUrl) ||
     data.publicUrl;
@@ -212,6 +258,7 @@ export async function insertLearningMaterial(
     createdBy: string;
   }
 ): Promise<LearningMaterialRow> {
+  await ensureLearningMaterialsTable(client);
   const { path, publicUrl } = await uploadLearningMaterialFile(
     client,
     input.file,
@@ -236,7 +283,13 @@ export async function insertLearningMaterial(
     })
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) {
+    if (isMissingLearningMaterialsTable(error)) {
+      const ready = await ensureLearningMaterialsTable(client);
+      if (ready) return insertLearningMaterial(client, input);
+    }
+    throw error;
+  }
   return mapMaterialRow(data as LearningMaterialRow);
 }
 

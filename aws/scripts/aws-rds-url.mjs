@@ -26,25 +26,36 @@ function parseEnvFile(filePath) {
   return out;
 }
 
+function isPlaceholderDatabaseUrl(url) {
+  if (!url || typeof url !== "string") return true;
+  const u = url.trim();
+  if (!u) return true;
+  if (/:(PASSWORD|YOUR_PASSWORD|changeme|change-me)@/i.test(u)) return true;
+  if (/postgresql:\/\/postgres:PASSWORD@/i.test(u)) return true;
+  return false;
+}
+
 /** Load DATABASE_URL for AWS RDS (Postgres engine). */
 export function loadAwsRdsDatabaseUrl() {
-  const direct =
-    process.env.DATABASE_URL?.trim() ||
-    process.env.AWS_RDS_DATABASE_URL?.trim() ||
-    process.env.AWS_RDS_URL?.trim();
-  if (direct) return direct.replace(/^["']|["']$/g, "");
-
   const fileEnv = {
     ...parseEnvFile(path.join(root, ".env")),
     ...parseEnvFile(path.join(root, ".env.awsrds")),
     ...parseEnvFile(path.join(root, ".env.awsrds.local")),
   };
 
-  const fromFile =
-    fileEnv.DATABASE_URL || fileEnv.AWS_RDS_DATABASE_URL || fileEnv.AWS_RDS_URL;
-  const localFile = fromFile && /127\.0\.0\.1|localhost/.test(fromFile);
-  if (fromFile && !localFile) {
-    return fromFile.replace(/^["']|["']$/g, "");
+  const directCandidates = [
+    process.env.DATABASE_URL?.trim(),
+    process.env.AWS_RDS_DATABASE_URL?.trim(),
+    process.env.AWS_RDS_URL?.trim(),
+    fileEnv.DATABASE_URL,
+    fileEnv.AWS_RDS_DATABASE_URL,
+    fileEnv.AWS_RDS_URL,
+  ].filter(Boolean);
+
+  for (const raw of directCandidates) {
+    const direct = String(raw).replace(/^["']|["']$/g, "");
+    if (/127\.0\.0\.1|localhost/.test(direct)) continue;
+    if (!isPlaceholderDatabaseUrl(direct)) return direct;
   }
 
   const host =
@@ -56,19 +67,18 @@ export function loadAwsRdsDatabaseUrl() {
   const db = process.env.AWS_RDS_DATABASE || fileEnv.AWS_RDS_DATABASE || "ezyintern";
   const port = process.env.AWS_RDS_PORT || fileEnv.AWS_RDS_PORT || "5432";
 
-  if (user && pass) {
+  if (user && pass && !/^(PASSWORD|YOUR_PASSWORD)$/i.test(pass)) {
     const encUser = encodeURIComponent(user);
     const encPass = encodeURIComponent(pass);
     return `postgresql://${encUser}:${encPass}@${host}:${port}/${db}?sslmode=require`;
   }
 
-  if (fromFile) return fromFile.replace(/^["']|["']$/g, "");
-
   throw new Error(
-    "AWS RDS credentials missing.\n" +
-      "Set DATABASE_URL or AWS_RDS_DATABASE_URL in Cursor Environment secrets, OR set:\n" +
+    "AWS RDS credentials missing or still using placeholder PASSWORD.\n" +
+      "Set DATABASE_URL (real password) in Cursor Environment secrets, OR set:\n" +
       "  AWS_RDS_HOST, AWS_RDS_USER, AWS_RDS_PASSWORD, AWS_RDS_DATABASE\n" +
-      "Example host: database-1-instance-1.cgve8kwacke8.us-east-1.rds.amazonaws.com"
+      "Staging host: ezyintern-staging-db.c5makww6eq8y.ap-south-1.rds.amazonaws.com (user ezyintern)\n" +
+      "Alternate: database-1-instance-1.cgve8kwacke8.us-east-1.rds.amazonaws.com (user postgres)"
   );
 }
 
