@@ -32,60 +32,102 @@ export async function validateProjectReportTemplateFile(file: File): Promise<voi
   }
 }
 
-async function adminBearerToken(client: SupabaseClient): Promise<string> {
+async function adminAuthHeaders(client: SupabaseClient): Promise<Record<string, string>> {
   await ensureAdminAuthSession(client, { extendWindow: true, attempts: 3 });
   const { data } = await client.auth.getSession();
   const token = data.session?.access_token?.trim();
   if (!token) {
     throw new Error("Your admin session expired. Refresh the page and sign in again.");
   }
-  return token;
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
 }
 
-function resolveConvertApiUrl(): string {
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return `${window.location.origin.replace(/\/$/, "")}/api/project-report-docx-to-pdf`;
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Could not read the Word file."));
+        return;
+      }
+      const base64 = result.includes(",") ? result.split(",").pop() || "" : result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error("Could not read the Word file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function convertViaSendMail(client: SupabaseClient, file: File): Promise<File | null> {
+  if (typeof window === "undefined") return null;
+  const headers = await adminAuthHeaders(client);
+  const docx_base64 = await fileToBase64(file);
+  const origin = window.location.origin.replace(/\/$/, "");
+  const res = await fetch(`${origin}/api/send-mail`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "convert_project_report_docx",
+      payload: {
+        docx_base64,
+        file_name: file.name,
+      },
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    success?: boolean;
+    pdf_base64?: string;
+    file_name?: string;
+    message?: string;
+  };
+  if (!res.ok || json.success === false || !json.pdf_base64) {
+    return null;
   }
-  return "/api/project-report-docx-to-pdf";
+  const binary = atob(json.pdf_base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const pdfName = json.file_name || file.name.replace(/\.docx?$/i, ".pdf");
+  return new File([bytes], pdfName, { type: "application/pdf" });
 }
 
-/** Convert admin Word upload to PDF via API (LibreOffice on server). */
+async function convertViaMultipartApi(client: SupabaseClient, file: File): Promise<File | null> {
+  const headers = await adminAuthHeaders(client);
+  delete headers["Content-Type"];
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const origin =
+    typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+  const res = await fetch(`${origin}/api/project-report-docx-to-pdf`, {
+    method: "POST",
+    headers: { Authorization: headers.Authorization },
+    body: form,
+  });
+  if (!res.ok) return null;
+  const pdfBlob = await res.blob();
+  if (!pdfBlob.size) return null;
+  return new File([pdfBlob], file.name.replace(/\.docx?$/i, ".pdf"), { type: "application/pdf" });
+}
+
+/** Convert admin Word upload to PDF (send-mail first, then direct API). */
 export async function convertProjectReportDocxToPdfFile(
   client: SupabaseClient,
   file: File
 ): Promise<File> {
   if (!isProjectReportDocxFile(file)) return file;
 
-  const token = await adminBearerToken(client);
-  const form = new FormData();
-  form.append("file", file, file.name);
+  const viaMail = await convertViaSendMail(client, file).catch(() => null);
+  if (viaMail?.size) return viaMail;
 
-  const res = await fetch(resolveConvertApiUrl(), {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  });
+  const viaApi = await convertViaMultipartApi(client, file).catch(() => null);
+  if (viaApi?.size) return viaApi;
 
-  if (!res.ok) {
-    let message = `Word to PDF conversion failed (${res.status}).`;
-    try {
-      const json = (await res.json()) as { message?: string };
-      if (json.message) message = json.message;
-    } catch {
-      const text = await res.text().catch(() => "");
-      if (text) message = text.slice(0, 400);
-    }
-    throw new Error(
-      `${message} You can also open the document in Microsoft Word and use Save as PDF, then upload the PDF.`
-    );
-  }
-
-  const pdfBlob = await res.blob();
-  if (!pdfBlob.size) {
-    throw new Error("Word conversion returned an empty PDF.");
-  }
-  const pdfName = file.name.replace(/\.docx?$/i, ".pdf");
-  return new File([pdfBlob], pdfName, { type: "application/pdf" });
+  throw new Error(
+    "Word could not be converted to PDF on the server. Save the document as PDF from Microsoft Word (File → Save as PDF) and upload the PDF file instead."
+  );
 }
 
 export async function prepareProjectReportTemplatePdfFile(

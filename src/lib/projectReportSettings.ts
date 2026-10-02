@@ -210,10 +210,35 @@ export async function ensureProjectReportTemplatesTable(client: SupabaseClient):
   return projectReportFallbackWritable(client);
 }
 
+export function listBundledProjectReportDomainTemplates(): ProjectReportDomainTemplate[] {
+  const rows: ProjectReportDomainTemplate[] = [];
+  const seen = new Set<string>();
+  for (const name of BUNDLED_PROJECT_REPORT_DOMAIN_NAMES) {
+    const bundled = getBundledProjectReportTemplate(name);
+    if (bundled && !seen.has(bundled.domain_key)) {
+      rows.push({ ...bundled });
+      seen.add(bundled.domain_key);
+    }
+  }
+  return rows;
+}
+
+function mergeWithBundledTemplates(rows: ProjectReportDomainTemplate[]): ProjectReportDomainTemplate[] {
+  const merged = [...rows];
+  const seen = new Set(merged.map((r) => r.domain_key));
+  for (const bundled of listBundledProjectReportDomainTemplates()) {
+    if (!seen.has(bundled.domain_key)) {
+      merged.push(bundled);
+      seen.add(bundled.domain_key);
+    }
+  }
+  return merged.sort((a, b) => a.domain_name.localeCompare(b.domain_name));
+}
+
 export async function fetchProjectReportDomainTemplates(
   client: SupabaseClient
 ): Promise<ProjectReportDomainTemplate[]> {
-  const fallbackRows = await fetchProjectReportFallbackTemplates(client);
+  const fallbackRows = await fetchProjectReportFallbackTemplates(client).catch(() => [] as ProjectReportDomainTemplate[]);
 
   try {
     await ensureProjectReportTemplatesTable(client);
@@ -222,25 +247,23 @@ export async function fetchProjectReportDomainTemplates(
       .select("*")
       .order("domain_name", { ascending: true });
     if (error) {
-      if (isProjectReportTableMissingError(error)) return fallbackRows;
-      throw error;
+      if (isProjectReportTableMissingError(error)) {
+        return mergeWithBundledTemplates(fallbackRows);
+      }
+      console.warn("[project-report] template list:", error.message);
+      return mergeWithBundledTemplates(fallbackRows);
     }
     const merged = mergeTemplates(
       (data || []).map((row) => rowToTemplate(row as Record<string, unknown>)),
       fallbackRows
     );
-    const seen = new Set(merged.map((r) => r.domain_key));
-    for (const name of BUNDLED_PROJECT_REPORT_DOMAIN_NAMES) {
-      const bundled = getBundledProjectReportTemplate(name);
-      if (bundled && !seen.has(bundled.domain_key)) {
-        merged.push(bundled);
-        seen.add(bundled.domain_key);
-      }
-    }
-    return merged.sort((a, b) => a.domain_name.localeCompare(b.domain_name));
+    return mergeWithBundledTemplates(merged);
   } catch (err) {
-    if (isProjectReportTableMissingError(err)) return fallbackRows;
-    throw err;
+    if (isProjectReportTableMissingError(err)) {
+      return mergeWithBundledTemplates(fallbackRows);
+    }
+    console.warn("[project-report] template list failed:", err);
+    return mergeWithBundledTemplates(fallbackRows);
   }
 }
 

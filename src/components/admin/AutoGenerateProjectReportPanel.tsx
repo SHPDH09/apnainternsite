@@ -43,6 +43,7 @@ import {
   fetchProjectReportDomainTemplate,
   fetchProjectReportDomainTemplates,
   formatProjectReportUploadError,
+  listBundledProjectReportDomainTemplates,
   saveProjectReportDomainTemplate,
   type ProjectReportDomainTemplate,
 } from "@/lib/projectReportSettings";
@@ -147,7 +148,9 @@ export function AutoGenerateProjectReportPanel({
       setDomainTemplates(rows);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load domain templates.";
-      toast.error(msg);
+      console.warn("[project-report] load templates:", msg);
+      setDomainTemplates(listBundledProjectReportDomainTemplates());
+      toast.error("Could not load saved templates from the server. Bundled templates are still available.");
     } finally {
       setLoadingTemplates(false);
     }

@@ -1189,6 +1189,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    if (normalizedAction === 'convert_project_report_docx') {
+      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
+      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) {
+        return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
+      }
+      const session = await verifyBearerSessionInline(tokenMatch[1]);
+      if (!session?.sub) {
+        return res.status(401).json({ success: false, message: 'Invalid or expired session' });
+      }
+      try {
+        if (process.env.DATABASE_URL?.trim()) {
+          const { assertAdminUserId } = await import('../aws/server/project-report-template-save.js');
+          await assertAdminUserId(session.sub);
+        }
+        const payload =
+          body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)
+            ? (body.payload as Record<string, unknown>)
+            : body;
+        const base64 = String(payload.docx_base64 || payload.base64 || '').trim();
+        const fileName = String(payload.file_name || payload.fileName || 'template.docx').trim();
+        if (!base64) {
+          return res.status(400).json({ success: false, message: 'docx_base64 is required.' });
+        }
+        const docx = Buffer.from(base64, 'base64');
+        if (docx.length < 100) {
+          return res.status(400).json({ success: false, message: 'Invalid Word file data.' });
+        }
+        if (docx.length > 20 * 1024 * 1024) {
+          return res.status(400).json({ success: false, message: 'Word file must be 20 MB or smaller.' });
+        }
+        const { convertDocxBufferToPdf, isDocxMime } = await import(
+          '../aws/server/project-report-docx-to-pdf.js'
+        );
+        if (!isDocxMime('', fileName)) {
+          return res.status(400).json({ success: false, message: 'Please upload a Word (.docx) file.' });
+        }
+        const pdf = await convertDocxBufferToPdf(docx);
+        const pdfName = fileName.replace(/\.docx?$/i, '.pdf');
+        return res.status(200).json({
+          success: true,
+          ok: true,
+          pdf_base64: pdf.toString('base64'),
+          file_name: pdfName,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail convert_project_report_docx]', message);
+        return res.status(503).json({ success: false, message });
+      }
+    }
+
     if (
       normalizedAction === 'ensure_project_report_templates' ||
       normalizedAction === 'save_project_report_template'
