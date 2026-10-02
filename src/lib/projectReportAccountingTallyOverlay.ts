@@ -1,13 +1,13 @@
-import { rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import type { ProjectReportStudentSnapshot } from "@/lib/projectReportStudentSnapshot";
 
 const COVER = {
   universityLine: { x: 108, y: 667, width: 380, size: 11 },
   collegeLine: { x: 108, y: 639, width: 380, size: 11 },
-  programmeCourseLine: { x: 148, y: 453, width: 200, size: 10 },
-  domainLine: { x: 280, y: 436, width: 260, size: 10 },
-  sessionLine: { x: 240, y: 114.7, width: 200, size: 10 },
-  valueX: 282,
+  degreeBand: { x: 72, y: 448, width: 468, height: 22 },
+  branchBand: { x: 72, y: 428, width: 468, height: 22 },
+  sessionLine: { x: 240, y: 114.7, width: 220, size: 10 },
+  valueX: 290,
   nameY: 395.7,
   registrationY: 375.6,
   rollY: 355.4,
@@ -19,45 +19,26 @@ const COVER = {
   sessionY: 234.3,
   submissionY: 173.8,
   fieldSize: 10,
+  /** Template “UNIVERSITY LOGO (paste here)” block */
+  logoBox: { x: 235, y: 706, width: 142, height: 88 },
 } as const;
 
-type TextSlot = {
-  page: number;
-  x: number;
-  y: number;
-  size?: number;
-};
+type TextSlot = { page: number; x: number; y: number; size?: number };
 
 function drawValue(page: PDFPage, font: PDFFont, text: string, slot: TextSlot) {
   const value = String(text || "").trim();
   if (!value || value === "—") return;
-  const size = slot.size ?? 10;
-  page.drawText(value.slice(0, 100), {
+  page.drawText(value.slice(0, 110), {
     x: slot.x,
     y: slot.y,
-    size,
+    size: slot.size ?? 10,
     font,
     color: rgb(0.05, 0.05, 0.12),
   });
 }
 
 function paintWhite(page: PDFPage, x: number, y: number, width: number, height: number) {
-  page.drawRectangle({
-    x,
-    y,
-    width,
-    height,
-    color: rgb(1, 1, 1),
-    borderWidth: 0,
-  });
-}
-
-function maskCoverHeaderPlaceholders(page: PDFPage, options: { hideLogoCaption: boolean }) {
-  paintWhite(page, 108, 646, 385, 24);
-  paintWhite(page, 142, 618, 352, 24);
-  if (options.hideLogoCaption) {
-    paintWhite(page, 218, 696, 168, 52);
-  }
+  page.drawRectangle({ x, y, width, height, color: rgb(1, 1, 1), borderWidth: 0 });
 }
 
 function drawCentered(
@@ -80,17 +61,81 @@ function drawCentered(
   });
 }
 
-function maskAndFillLine(page: PDFPage, y: number, x: number, width: number, height: number) {
-  paintWhite(page, x, y - 2, width, height);
+function maskLineBand(page: PDFPage, y: number, height = 18) {
+  paintWhite(page, 68, y - 4, 460, height);
 }
 
-/** Cover + certificate/declaration/acknowledgement — aligned to template rules. */
+function drawLinesAt(
+  page: PDFPage,
+  font: PDFFont,
+  lines: string[],
+  x: number,
+  startY: number,
+  size: number,
+  lineHeight: number
+) {
+  let y = startY;
+  for (const line of lines) {
+    if (line) {
+      page.drawText(line.slice(0, 120), {
+        x,
+        y,
+        size,
+        font,
+        color: rgb(0.05, 0.05, 0.12),
+      });
+    }
+    y -= lineHeight;
+  }
+}
+
+function drawLabelValueLines(
+  page: PDFPage,
+  font: PDFFont,
+  rows: Array<{ label: string; value: string }>,
+  x: number,
+  startY: number,
+  size: number,
+  lineHeight: number
+) {
+  let y = startY;
+  for (const row of rows) {
+    const value = String(row.value || "").trim();
+    if (!value || value === "—") {
+      y -= lineHeight;
+      continue;
+    }
+    page.drawText(`${row.label} ${value}`.slice(0, 80), {
+      x,
+      y,
+      size,
+      font,
+      color: rgb(0.05, 0.05, 0.12),
+    });
+    y -= lineHeight;
+  }
+}
+
+export function drawAccountingTallyCoverLogo(page: PDFPage, logo: PDFImage | null) {
+  const box = COVER.logoBox;
+  /* Template corner brackets + “UNIVERSITY LOGO” caption */
+  paintWhite(page, 198, 696, 218, 102);
+  if (!logo) return;
+
+  const scale = Math.min(box.width / logo.width, box.height / logo.height);
+  const w = logo.width * scale;
+  const h = logo.height * scale;
+  const x = box.x + (box.width - w) / 2;
+  const y = box.y + (box.height - h) / 2;
+  page.drawImage(logo, { x, y, width: w, height: h });
+}
+
 export function overlayAccountingTallyStudentFields(
   pages: PDFPage[],
   font: PDFFont,
   fontBold: PDFFont,
   student: ProjectReportStudentSnapshot,
-  extras: { collegeName: string; universityName: string; hideLogoCaption?: boolean }
+  extras: { collegeName: string; universityName: string }
 ) {
   const collegeLine = extras.collegeName || student.collegeName;
   const uniLine = extras.universityName || student.universityName;
@@ -98,33 +143,42 @@ export function overlayAccountingTallyStudentFields(
   const domain = student.internshipDomain || "—";
   const uniReg = student.universityRegistrationNumber;
   const uniRoll = student.universityRollNumber;
+  const session = student.sessionDisplay || student.academicSession;
+  const bodySize = 10;
+  const bodyX = 72;
+  const lineHeight = 17.6;
 
   const page0 = pages[0];
   if (page0) {
-    maskCoverHeaderPlaceholders(page0, {
-      hideLogoCaption: extras.hideLogoCaption !== false,
-    });
+    paintWhite(page0, 175, 678, 260, 28);
+    paintWhite(page0, 108, 646, 385, 24);
+    paintWhite(page0, 142, 618, 352, 24);
+
     drawCentered(page0, fontBold, uniLine, COVER.universityLine);
     drawCentered(page0, fontBold, collegeLine, COVER.collegeLine);
-    drawValue(page0, font, programmeCourse, {
-      page: 0,
-      x: COVER.programmeCourseLine.x,
-      y: COVER.programmeCourseLine.y,
-      size: COVER.programmeCourseLine.size,
-    });
-    drawValue(page0, font, domain, {
-      page: 0,
-      x: COVER.domainLine.x,
-      y: COVER.domainLine.y,
-      size: COVER.domainLine.size,
+
+    paintWhite(page0, COVER.degreeBand.x, COVER.degreeBand.y, COVER.degreeBand.width, COVER.degreeBand.height);
+    drawCentered(page0, fontBold, `${programmeCourse} (Course / Degree)`, {
+      x: COVER.degreeBand.x,
+      y: 452.3,
+      width: COVER.degreeBand.width,
+      size: 10,
     });
 
-    if (student.sessionDisplay) {
-      paintWhite(page0, 238, 110, 200, 14);
-      drawValue(page0, font, `Session: ${student.sessionDisplay}`, {
-        page: 0,
-        x: COVER.sessionLine.x,
+    paintWhite(page0, COVER.branchBand.x, COVER.branchBand.y, COVER.branchBand.width, COVER.branchBand.height);
+    drawCentered(page0, font, `Branch / Specialization: ${domain}`, {
+      x: COVER.branchBand.x,
+      y: 435.6,
+      width: COVER.branchBand.width,
+      size: 10,
+    });
+
+    if (session) {
+      paintWhite(page0, 200, 108, 260, 16);
+      drawCentered(page0, font, `Session: ${session}`, {
+        x: 200,
         y: COVER.sessionLine.y,
+        width: 260,
         size: COVER.sessionLine.size,
       });
     }
@@ -138,7 +192,7 @@ export function overlayAccountingTallyStudentFields(
       { y: COVER.courseY, text: programmeCourse },
       { y: COVER.branchY, text: domain },
       { y: COVER.semesterY, text: student.semester },
-      { y: COVER.sessionY, text: student.sessionDisplay || student.academicSession },
+      { y: COVER.sessionY, text: session },
       { y: COVER.submissionY, text: student.submissionDate },
     ];
     for (const row of coverFields) {
@@ -151,63 +205,69 @@ export function overlayAccountingTallyStudentFields(
     }
   }
 
-  const certificate: Array<{ slot: TextSlot; text: string; mask?: { x: number; w: number; h: number } }> = [
-    { slot: { page: 1, x: 118, y: 650.9, size: 10 }, text: student.studentName, mask: { x: 115, w: 200, h: 14 } },
-    { slot: { page: 1, x: 72, y: 632.7, size: 10 }, text: uniReg, mask: { x: 70, w: 140, h: 14 } },
-    { slot: { page: 1, x: 292, y: 632.7, size: 10 }, text: uniRoll, mask: { x: 288, w: 120, h: 14 } },
-    { slot: { page: 1, x: 74, y: 614.5, size: 10 }, text: programmeCourse, mask: { x: 70, w: 300, h: 14 } },
-    {
-      slot: { page: 1, x: 74, y: 596.2, size: 10 },
-      text: `${domain}, ${student.semester}, ${student.sessionDisplay || student.academicSession}`,
-      mask: { x: 70, w: 480, h: 14 },
-    },
-    { slot: { page: 1, x: 238, y: 534.5, size: 10 }, text: programmeCourse, mask: { x: 234, w: 200, h: 14 } },
-    { slot: { page: 1, x: 74, y: 516.2, size: 10 }, text: uniLine, mask: { x: 70, w: 400, h: 14 } },
-  ];
+  const cert = pages[1];
+  if (cert) {
+    paintWhite(cert, 68, 574, 460, 98);
+    const certLines = [
+      `Mr./Ms. ${student.studentName}, Registration No. ${uniReg}, Roll No. ${uniRoll},`,
+      `a student of ${programmeCourse} (Course) in ${domain} (Branch),`,
+      `Semester ${student.semester}, Session ${session}.`,
+    ];
+    drawLinesAt(cert, font, certLines, bodyX, 650.9, bodySize, lineHeight);
 
-  const declarationPage = pages[2];
-  if (declarationPage) {
-    maskAndFillLine(declarationPage, 712.7, 70, 460, 16);
-    drawValue(declarationPage, font, student.studentName, { page: 2, x: 82, y: 712.7, size: 10 });
-    drawValue(declarationPage, font, uniReg, { page: 2, x: 368, y: 712.7, size: 10 });
-
-    maskAndFillLine(declarationPage, 694.4, 70, 460, 16);
-    drawValue(declarationPage, font, uniRoll, { page: 2, x: 118, y: 694.4, size: 10 });
-    drawValue(declarationPage, font, programmeCourse, { page: 2, x: 300, y: 694.4, size: 10 });
-
-    maskAndFillLine(declarationPage, 676.2, 70, 460, 16);
-    drawValue(declarationPage, font, domain, { page: 2, x: 192, y: 676.2, size: 10 });
-
-    maskAndFillLine(declarationPage, 657.9, 70, 460, 16);
-    drawValue(declarationPage, font, collegeLine, { page: 2, x: 74, y: 657.9, size: 10 });
-
-    maskAndFillLine(declarationPage, 639.7, 70, 460, 16);
-    drawValue(declarationPage, font, uniLine, { page: 2, x: 74, y: 639.7, size: 10 });
-
-    maskAndFillLine(declarationPage, 279.6, 340, 220, 14);
-    drawValue(declarationPage, font, student.studentName, { page: 2, x: 398, y: 279.6, size: 10 });
-    maskAndFillLine(declarationPage, 266.8, 350, 200, 14);
-    drawValue(declarationPage, font, uniRoll, { page: 2, x: 418, y: 266.8, size: 10 });
-    drawValue(declarationPage, font, student.submissionDate, { page: 2, x: 118, y: 279.6, size: 10 });
+    maskLineBand(cert, 534.5, 16);
+    drawValue(cert, font, `degree of ${programmeCourse} of ${uniLine}.`, {
+      page: 1,
+      x: bodyX,
+      y: 534.5,
+      size: bodySize,
+    });
+    maskLineBand(cert, 516.2, 14);
   }
 
-  const acknowledgement: Array<{ slot: TextSlot; text: string; maskW: number }> = [
-    { slot: { page: 3, x: 398, y: 318.6, size: 10 }, text: student.studentName, maskW: 170 },
-    { slot: { page: 3, x: 418, y: 305.5, size: 10 }, text: uniRoll, maskW: 150 },
-    { slot: { page: 3, x: 468, y: 292.7, size: 10 }, text: uniReg, maskW: 110 },
-  ];
+  const decl = pages[2];
+  if (decl) {
+    paintWhite(decl, 68, 632, 460, 92);
+    const declIntro = [
+      `I, ${student.studentName}, Registration No. ${uniReg},`,
+      `Roll No. ${uniRoll}, a student of ${programmeCourse} (Course) in ${domain} (Branch) at`,
+      `${collegeLine} (College), affiliated to ${uniLine} (University),`,
+      `hereby declare that the project`,
+    ];
+    drawLinesAt(decl, font, declIntro, bodyX, 712.7, bodySize, lineHeight);
 
-  for (const row of certificate) {
-    const page = pages[row.slot.page];
-    if (!page) continue;
-    if (row.mask) maskAndFillLine(page, row.slot.y, row.mask.x, row.mask.w, row.mask.h);
-    drawValue(page, font, row.text, row.slot);
+    paintWhite(decl, 72, 276, 210, 14);
+    drawValue(decl, font, student.submissionDate, { page: 2, x: 118, y: 279.6, size: bodySize });
+    paintWhite(decl, 340, 260, 210, 28);
+    drawLabelValueLines(
+      decl,
+      font,
+      [
+        { label: "Name:", value: student.studentName },
+        { label: "Roll No.:", value: uniRoll },
+      ],
+      346,
+      279.6,
+      bodySize,
+      12.8
+    );
   }
 
-  for (const row of acknowledgement) {
-    const page = pages[row.slot.page];
-    if (!page) continue;
-    maskAndFillLine(page, row.slot.y, row.slot.x - 4, row.maskW, 14);
-    drawValue(page, font, row.text, row.slot);
+  const ack = pages[3];
+  if (ack) {
+    paintWhite(ack, 318, 288, 230, 38);
+    drawLabelValueLines(
+      ack,
+      font,
+      [
+        { label: "Name:", value: student.studentName },
+        { label: "Roll No.:", value: uniRoll },
+        { label: "Registration No.:", value: uniReg },
+      ],
+      328,
+      318.6,
+      bodySize,
+      13
+    );
   }
 }

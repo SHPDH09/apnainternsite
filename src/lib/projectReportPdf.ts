@@ -11,7 +11,10 @@ import {
   type ProjectReportDomainSection,
   type ProjectReportMode,
 } from "@/lib/projectReportDomainContent";
-import { overlayAccountingTallyStudentFields } from "@/lib/projectReportAccountingTallyOverlay";
+import {
+  drawAccountingTallyCoverLogo,
+  overlayAccountingTallyStudentFields,
+} from "@/lib/projectReportAccountingTallyOverlay";
 import { isAccountingTallyGstBundledTemplate } from "@/lib/projectReportBundledTemplates";
 import type { ProjectReportStudentSnapshot } from "@/lib/projectReportStudentSnapshot";
 
@@ -113,13 +116,22 @@ async function overlayDynamicFields(
   const logoLayout = layout.logo || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.logo!;
   const logoPage = pages[logoLayout.page] || pages[0];
   const logoImage = await embedLogo(pdfDoc, logoBytes);
-  if (logoImage && logoPage) {
+  const drawLogoOnCover = () => {
+    if (!logoImage || !logoPage) return;
+    if (accountingTemplate) {
+      drawAccountingTallyCoverLogo(logoPage, logoImage);
+      return;
+    }
     logoPage.drawImage(logoImage, {
       x: logoLayout.x,
       y: logoLayout.y,
       width: logoLayout.width,
       height: logoLayout.height,
     });
+  };
+
+  if (!accountingTemplate) {
+    drawLogoOnCover();
   }
 
   if (!accountingTemplate) {
@@ -153,8 +165,8 @@ async function overlayDynamicFields(
       overlayAccountingTallyStudentFields(pages, font, fontBold, input.student, {
         collegeName: input.student.collegeName,
         universityName: input.universityName,
-        hideLogoCaption: !!logoBytes?.length,
       });
+      drawLogoOnCover();
     }
     return;
   }
