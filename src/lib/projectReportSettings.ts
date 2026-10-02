@@ -17,6 +17,7 @@ import {
   BUNDLED_PROJECT_REPORT_DOMAIN_NAMES,
   getBundledProjectReportTemplate,
 } from "@/lib/projectReportBundledTemplates";
+import { prepareProjectReportTemplatePdfFile } from "@/lib/projectReportDocxUpload";
 
 export type { ProjectReportDomainTemplate, ProjectReportFieldLayout, ProjectReportSettings };
 export { DEFAULT_PROJECT_REPORT_FIELD_LAYOUT };
@@ -312,12 +313,13 @@ export async function saveProjectReportDomainTemplate(
   const domainKey = normalizeProjectReportDomainKey(domainName);
   if (!domainKey) throw new Error("Select a domain before uploading.");
 
-  await validateProjectReportPdfFile(params.file);
-
   const sessionOk = await ensureAdminAuthSession(client, { extendWindow: true, attempts: 4 });
   if (!sessionOk) {
     throw new Error("Your admin session expired. Refresh the page, sign in again, then retry the upload.");
   }
+
+  const pdfFile = await prepareProjectReportTemplatePdfFile(client, params.file);
+  await validateProjectReportPdfFile(pdfFile);
 
   await ensureProjectReportTemplatesTable(client);
 
@@ -326,10 +328,10 @@ export async function saveProjectReportDomainTemplate(
     await client.storage.from(BUCKET).remove([existing.template_pdf_path]).catch(() => undefined);
   }
 
-  const safeName = params.file.name.replace(/[^\w.-]+/g, "_").slice(0, 120);
+  const safeName = pdfFile.name.replace(/[^\w.-]+/g, "_").slice(0, 120);
   const path = `project-report-templates/${domainKey.replace(/\s+/g, "-")}/${Date.now()}-${safeName}`;
 
-  const { error: uploadErr } = await client.storage.from(BUCKET).upload(path, params.file, {
+  const { error: uploadErr } = await client.storage.from(BUCKET).upload(path, pdfFile, {
     upsert: true,
     contentType: "application/pdf",
   });

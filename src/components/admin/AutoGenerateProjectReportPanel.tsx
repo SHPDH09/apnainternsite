@@ -44,9 +44,9 @@ import {
   fetchProjectReportDomainTemplates,
   formatProjectReportUploadError,
   saveProjectReportDomainTemplate,
-  validateProjectReportPdfFile,
   type ProjectReportDomainTemplate,
 } from "@/lib/projectReportSettings";
+import { validateProjectReportTemplateFile } from "@/lib/projectReportDocxUpload";
 import {
   PROJECT_REPORT_MODES,
   type ProjectReportMode,
@@ -182,7 +182,7 @@ export function AutoGenerateProjectReportPanel({
     }
     setUploadingTemplate(true);
     try {
-      await validateProjectReportPdfFile(file);
+      await validateProjectReportTemplateFile(file);
       const saved = await saveProjectReportDomainTemplate(supabase, {
         domain: uploadDomain,
         file,
@@ -253,9 +253,9 @@ export function AutoGenerateProjectReportPanel({
           Auto Generate Project Report
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Step 1: upload a project report PDF <strong>domain-wise</strong>. Step 2: select a
-          university and generate — the chosen domain&apos;s project template is used with that
-          university&apos;s name, logo, and selected mode.
+          Step 1: upload a project report template <strong>domain-wise</strong> (Word .docx or PDF).
+          It is stored as PDF for students. Step 2: select a university and generate — the chosen
+          domain&apos;s template is used with that university&apos;s name, logo, and selected mode.
         </p>
       </div>
 
@@ -267,8 +267,8 @@ export function AutoGenerateProjectReportPanel({
             </Badge>
             <h3 className="text-lg font-bold">Domain-wise Project Template Upload</h3>
             <p className="text-sm text-muted-foreground">
-              Each domain gets its own project report PDF (Web Development, Data Science, etc.).
-              Upload once per domain; replace anytime.
+              Each domain gets its own template (Web Development, Data Science, etc.). Upload Word
+              (.docx) or PDF once per domain; students always download PDF from their dashboard.
             </p>
           </div>
           <Button
@@ -303,7 +303,7 @@ export function AutoGenerateProjectReportPanel({
             <Input
               ref={templateInputRef}
               type="file"
-              accept="application/pdf,.pdf"
+              accept=".docx,.doc,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
               disabled={uploadingTemplate || !uploadDomain}
               className="hidden"
               onChange={(e) => void handleTemplateUpload(e.target.files?.[0] || null)}
@@ -333,7 +333,7 @@ export function AutoGenerateProjectReportPanel({
         ) : domainTemplates.length === 0 ? (
           <div className="rounded-xl border border-dashed border-amber-300/80 bg-amber-50/50 p-4 text-sm text-amber-900">
             No domain templates uploaded yet. Select a domain above and upload its project report
-            PDF.
+            (Word or PDF).
           </div>
         ) : (
           <div className="rounded-xl border overflow-hidden">
