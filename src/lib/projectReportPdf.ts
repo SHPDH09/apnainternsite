@@ -11,12 +11,16 @@ import {
   type ProjectReportDomainSection,
   type ProjectReportMode,
 } from "@/lib/projectReportDomainContent";
+import { overlayAccountingTallyStudentFields } from "@/lib/projectReportAccountingTallyOverlay";
+import { isAccountingTallyGstBundledTemplate } from "@/lib/projectReportBundledTemplates";
+import type { ProjectReportStudentSnapshot } from "@/lib/projectReportStudentSnapshot";
 
 export type ProjectReportGenerateInput = {
   universityName: string;
   universityLogoUrl?: string | null;
   domain: string;
   mode: ProjectReportMode;
+  student?: ProjectReportStudentSnapshot;
 };
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
@@ -95,7 +99,7 @@ async function overlayDynamicFields(
   input: ProjectReportGenerateInput,
   layout: ProjectReportFieldLayout,
   logoBytes: Uint8Array | null,
-  options: { fromDomainTemplate: boolean }
+  options: { fromDomainTemplate: boolean; domainTemplate?: ProjectReportDomainTemplate | null }
 ) {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -139,6 +143,16 @@ async function overlayDynamicFields(
   }
 
   if (options.fromDomainTemplate) {
+    if (
+      input.student &&
+      isAccountingTallyGstBundledTemplate(options.domainTemplate || null, input.domain)
+    ) {
+      overlayAccountingTallyStudentFields(pages, font, input.student, {
+        collegeName: input.student.collegeName,
+        universityName: input.universityName,
+        mode: input.mode,
+      });
+    }
     return;
   }
 
@@ -190,7 +204,10 @@ export async function generateProjectReportPdfBlob(
 
   if (templateBytes) {
     const pdfDoc = await PDFDocument.load(templateBytes);
-    await overlayDynamicFields(pdfDoc, input, layout, logoBytes, { fromDomainTemplate: true });
+    await overlayDynamicFields(pdfDoc, input, layout, logoBytes, {
+      fromDomainTemplate: true,
+      domainTemplate: domainTemplate,
+    });
     const bytes = await pdfDoc.save();
     return new Blob([bytes], { type: "application/pdf" });
   }

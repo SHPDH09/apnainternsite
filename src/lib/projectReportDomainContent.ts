@@ -111,6 +111,34 @@ export const PROJECT_REPORT_DOMAIN_CONTENT: Record<string, ProjectReportDomainSe
       "A digital marketing internship covering SEO, social media campaigns, content strategy, and performance analytics.",
     toolsTechnologies: ["Google Analytics", "Meta Business Suite", "Canva", "SEO tools"],
   }),
+  "accounting & tally with gst": section({
+    projectTitle: "Accounting, Tally & GST Internship Project",
+    introduction:
+      "This project report covers fundamentals of financial accounting, computerised accounting with TallyPrime, and Goods and Services Tax (GST) compliance in India, including a structured case study.",
+    objectives: [
+      "Understand double-entry bookkeeping, ledgers, and trial balance",
+      "Record transactions in TallyPrime including GST vouchers",
+      "Prepare basic GST returns and compliance documentation",
+    ],
+    toolsTechnologies: ["TallyPrime", "Microsoft Excel", "GST Portal", "Accounting worksheets"],
+    expectedOutcomes: [
+      "Completed accounting and GST case study",
+      "TallyPrime company data with sample vouchers",
+      "Project report aligned with university internship norms",
+    ],
+  }),
+  accounting: section({
+    projectTitle: "Accounting Internship Project",
+    introduction:
+      "An accounting internship project covering financial accounting fundamentals, Tally-based bookkeeping, and introductory GST compliance.",
+    toolsTechnologies: ["TallyPrime", "Microsoft Excel", "GST Portal"],
+  }),
+  gst: section({
+    projectTitle: "GST & Accounting Internship Project",
+    introduction:
+      "This report documents GST compliance concepts integrated with computerised accounting using TallyPrime.",
+    toolsTechnologies: ["TallyPrime", "GST Portal", "Microsoft Excel"],
+  }),
   "python development": section({
     projectTitle: "Python Development Internship Project",
     introduction:

@@ -25,6 +25,7 @@ import {
   type ProjectReportMode,
 } from "@/lib/projectReportDomainContent";
 import { downloadProjectReportPdf } from "@/lib/projectReportPdf";
+import { resolveProjectReportStudentSnapshot } from "@/lib/projectReportStudentSnapshot";
 import { studentInternshipMode } from "@/lib/internshipMode";
 import { createElement } from "react";
 
@@ -127,6 +128,7 @@ export function useStudentDocumentActions({
       universityLogoUrl: universityLogoUrl ?? null,
       domain,
       mode,
+      student: resolveProjectReportStudentSnapshot(profile),
     };
   }, [profile, fields.domain, fields.university, universityLogoUrl]);
 

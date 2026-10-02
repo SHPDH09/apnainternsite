@@ -13,6 +13,7 @@ import {
   type ProjectReportFieldLayout,
   type ProjectReportSettings,
 } from "@/lib/projectReportTypes";
+import { getBundledProjectReportTemplate } from "@/lib/projectReportBundledTemplates";
 
 export type { ProjectReportDomainTemplate, ProjectReportFieldLayout, ProjectReportSettings };
 export { DEFAULT_PROJECT_REPORT_FIELD_LAYOUT };
@@ -220,10 +221,19 @@ export async function fetchProjectReportDomainTemplates(
       if (isProjectReportTableMissingError(error)) return fallbackRows;
       throw error;
     }
-    return mergeTemplates(
+    const merged = mergeTemplates(
       (data || []).map((row) => rowToTemplate(row as Record<string, unknown>)),
       fallbackRows
     );
+    const seen = new Set(merged.map((r) => r.domain_key));
+    for (const name of ["Accounting & Tally with GST", "Accounting", "GST"] as const) {
+      const bundled = getBundledProjectReportTemplate(name);
+      if (bundled && !seen.has(bundled.domain_key)) {
+        merged.push(bundled);
+        seen.add(bundled.domain_key);
+      }
+    }
+    return merged.sort((a, b) => a.domain_name.localeCompare(b.domain_name));
   } catch (err) {
     if (isProjectReportTableMissingError(err)) return fallbackRows;
     throw err;
@@ -242,7 +252,9 @@ export async function fetchProjectReportDomainTemplate(
   if (exact) return exact;
 
   const fuzzy = all.find((row) => row.domain_name.toLowerCase() === domain.trim().toLowerCase());
-  return fuzzy || null;
+  if (fuzzy) return fuzzy;
+
+  return getBundledProjectReportTemplate(domain);
 }
 
 async function saveToRds(
@@ -372,9 +384,13 @@ export async function saveProjectReportDomainTemplate(
 export async function resolveTemplatePdfBytes(
   template: Pick<ProjectReportDomainTemplate, "template_pdf_url">
 ): Promise<ArrayBuffer | null> {
-  const url = template.template_pdf_url?.trim();
-  if (!url) return null;
-  const res = await fetch(url);
+  const rawUrl = template.template_pdf_url?.trim();
+  if (!rawUrl) return null;
+  const url =
+    rawUrl.startsWith("/") && typeof window !== "undefined"
+      ? `${window.location.origin.replace(/\/$/, "")}${rawUrl}`
+      : rawUrl;
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`Could not load template PDF (${res.status}).`);
   return res.arrayBuffer();
 }
