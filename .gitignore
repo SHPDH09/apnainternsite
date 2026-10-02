@@ -31,3 +31,6 @@ aws/sam/samconfig.toml
 .env
 .env*.local
 .wrangler/
+captures/
+meta-blog.json
+meta-mail.json
