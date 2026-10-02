@@ -19,7 +19,7 @@ type Queryable = {
   query: (
     sql: string,
     values?: unknown[]
-  ) => Promise<{ rows: Record<string, boolean>[] }>;
+  ) => Promise<{ rows: Array<Record<string, unknown>> }>;
 };
 
 const STAFF_FACE_REGISTER_RPC_NAMES = new Set(["staff_register_face"]);
@@ -43,14 +43,14 @@ const STAFF_OFFICE_ADMIN_RPC_NAMES = new Set([
 ]);
 
 async function rpcExists(pool: Queryable, name: string): Promise<boolean> {
-  const { rows } = await pool.query<{ ok: boolean }>(
+  const { rows } = await pool.query(
     `SELECT EXISTS (
       SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public' AND p.proname = $1
     ) AS ok`,
     [name]
   );
-  return Boolean(rows[0]?.ok);
+  return Boolean((rows[0] as { ok?: boolean } | undefined)?.ok);
 }
 
 /** Schema + RPC updates for half-day leave (idempotent CREATE OR REPLACE). */
@@ -67,8 +67,9 @@ async function assertRpcs(pool: Queryable, names: string[]): Promise<void> {
       WHERE n.nspname = 'public' AND p.proname = '${name}'
     ) AS "${name}"`
   );
-  const { rows } = await pool.query<Record<string, boolean>>(`SELECT ${checks.join(", ")}`);
-  const missing = names.filter((n) => !rows[0]?.[n]);
+  const { rows } = await pool.query(`SELECT ${checks.join(", ")}`);
+  const row0 = rows[0] as Record<string, boolean> | undefined;
+  const missing = names.filter((n) => !row0?.[n]);
   if (missing.length) {
     throw new Error(`Staff office/salary RPCs still missing: ${missing.join(", ")}`);
   }

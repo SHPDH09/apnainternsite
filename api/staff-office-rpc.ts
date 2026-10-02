@@ -52,7 +52,10 @@ async function verifySession(token: string): Promise<{ sub: string; email?: stri
       process.env.LOCAL_JWT_SECRET ||
       process.env.JWT_SECRET ||
       "ezyintern-local-dev-secret-change-me";
-    const payload = jwt.default.verify(token, secret, { issuer: "ezyintern-local" }) as jwt.JwtPayload;
+    const payload = jwt.default.verify(token, secret, { issuer: "ezyintern-local" }) as {
+      sub?: string;
+      email?: string;
+    };
     if (payload?.sub) {
       return {
         sub: String(payload.sub),

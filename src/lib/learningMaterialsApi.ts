@@ -198,7 +198,7 @@ async function uploadWithRetry(
   path: string,
   file: File,
   contentType?: string
-): Promise<{ error: { message: string } | null }> {
+): Promise<{ error: { message: string } | null; relayPublicUrl?: string }> {
   let lastErr: { message: string } | null = null;
   for (let attempt = 0; attempt < 4; attempt++) {
     const { error } = await client.storage.from(BUCKET).upload(path, file, {
@@ -212,7 +212,9 @@ async function uploadWithRetry(
   }
   if (lastErr && /503|502|504|timeout|unavailable/i.test(lastErr.message)) {
     const relay = await uploadLearningMaterialViaSendMail(client, path, file);
-    if (relay.ok) return { error: null };
+    if (relay.ok && relay.publicUrl) {
+      return { error: null, relayPublicUrl: relay.publicUrl };
+    }
   }
   return { error: lastErr };
 }
@@ -227,7 +229,7 @@ export async function uploadLearningMaterialFile(
   }
   const safeName = file.name.replace(/[^\w.\-]+/g, "_");
   const path = `${createdBy}/${Date.now()}-${safeName}`;
-  const { error } = await uploadWithRetry(client, path, file);
+  const { error, relayPublicUrl } = await uploadWithRetry(client, path, file);
   if (error) {
     if (/bucket not found/i.test(error.message)) {
       throw new Error(
@@ -238,6 +240,7 @@ export async function uploadLearningMaterialFile(
   }
   const { data } = client.storage.from(BUCKET).getPublicUrl(path);
   const publicUrl =
+    relayPublicUrl ||
     publicStorageObjectUrl(BUCKET, path) ||
     resolveStorageUrl(data.publicUrl) ||
     data.publicUrl;
@@ -280,7 +283,13 @@ export async function insertLearningMaterial(
     })
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) {
+    if (isMissingLearningMaterialsTable(error)) {
+      const ready = await ensureLearningMaterialsTable(client);
+      if (ready) return insertLearningMaterial(client, input);
+    }
+    throw error;
+  }
   return mapMaterialRow(data as LearningMaterialRow);
 }
 

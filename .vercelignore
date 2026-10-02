@@ -10,6 +10,7 @@ api/**
 !api/send-mail.ts
 !api/otp-deliver.ts
 !api/request-otp.ts
+!api/auth
 !api/auth/forgot-password.ts
 !api/admin-partner-register.ts
 !api/partner-application-submit.ts
@@ -21,20 +22,22 @@ api/**
 !api/staffOfficeSqlChunks.ts
 !api/staffOfficeApply.ts
 !api/rds-apply-all.ts
+!api/lib
 !api/lib/**
 # Never whitelist api/blog-interaction.ts or api/blogEngagementVercel.ts — breaks Vercel deploy.
 
 aws/**
+!aws/server
 !aws/server/db.ts
 !aws/server/local-jwt.ts
 !aws/server/partner-applications-bootstrap.ts
 !aws/server/project-report-bootstrap.ts
 !aws/server/project-report-template-save.ts
-!aws/server/learning-materials-bootstrap.ts
-!aws/scripts/97-rds-learning-materials.sql
+!aws/server/project-report-docx-to-pdf.ts
 !aws/server/staff-attendance-offices-bootstrap.ts
 !aws/server/staff-salary-bootstrap.ts
 !aws/server/rds-apply-all.ts
+!aws/scripts
 !aws/scripts/81-rds-staff-salary-account.sql
 !aws/scripts/86-rds-staff-salary-advanced.sql
 !aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql

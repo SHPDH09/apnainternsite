@@ -1243,7 +1243,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       try {
         const { ensureLearningMaterialsSchema } = await import(
-          '../aws/server/learning-materials-bootstrap.js'
+          './lib/learningMaterialsVercelBootstrap.js'
         );
         const result = await ensureLearningMaterialsSchema();
         return res.status(200).json({
