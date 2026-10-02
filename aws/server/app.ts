@@ -32,6 +32,7 @@ import ensureStudentUniqueness from "../../api/ensure-student-uniqueness";
 import partnerApplicationSubmit from "../../api/partner-application-submit";
 import adminPartnerRegister from "../../api/admin-partner-register";
 import rdsApplyAll from "./rds-apply-all-route.js";
+import { mountWaCrmRoutes } from "./wa-crm/router.js";
 import { loadRootEnv } from "./load-env";
 import { ensureAllCmsTables } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
@@ -302,6 +303,8 @@ async function buildApp(): Promise<Express> {
 
   // Whitelisted table reads against RDS (local testing / Phase 2)
   app.post("/api/data/select", asVercelHandler(dataSelect));
+
+  mountWaCrmRoutes(app);
 
   // Keep CORS on late errors / unhandled failures (browsers otherwise report a false CORS block).
   app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {

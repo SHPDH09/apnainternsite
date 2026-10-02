@@ -27,6 +27,7 @@ import {
   Users,
   Wrench,
   Award,
+  MessageCircle,
 } from "lucide-react";
 import { TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -50,7 +51,15 @@ type NavActionItem = {
   enabled?: boolean;
 };
 
-type NavItem = NavTabItem | NavActionItem;
+type NavHrefItem = {
+  kind: "href";
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  enabled?: boolean;
+};
+
+type NavItem = NavTabItem | NavActionItem | NavHrefItem;
 
 type NavGroup = {
   id: string;
@@ -87,6 +96,15 @@ function NavTabTrigger({ value, label, icon: Icon, nested }: NavTabItem & { nest
       <Icon className="size-4 shrink-0 opacity-70 group-data-[state=active]:opacity-100 group-data-[state=active]:text-[#5AA3E6]" />
       <span className="truncate">{label}</span>
     </TabsTrigger>
+  );
+}
+
+function NavHrefLink({ href, label, icon: Icon, nested }: NavHrefItem & { nested?: boolean }) {
+  return (
+    <a href={href} className={cn(adminNavButtonClass, nested && "ml-2 py-2 pl-9")}>
+      <Icon className="size-4 shrink-0 opacity-70" />
+      <span className="truncate">{label}</span>
+    </a>
   );
 }
 
@@ -338,6 +356,7 @@ export function buildAdminNavGroups(
     icon: Settings,
     accent: "#64748B",
     items: [
+      { kind: "href", href: "/admin/wa-crm", label: "WA CRM (WhatsApp)", icon: MessageCircle },
       { kind: "tab", value: "keys", label: "Keys", icon: KeyRound },
       { kind: "tab", value: "settings", label: "Settings", icon: Settings },
     ],
@@ -407,6 +426,8 @@ export function AdminSidebarNav({
             {visibleItems.map((item) =>
               item.kind === "tab" ? (
                 <NavTabTrigger key={`${group.id}-${item.value}`} {...item} nested />
+              ) : item.kind === "href" ? (
+                <NavHrefLink key={`${group.id}-${item.href}`} {...item} nested />
               ) : (
                 <NavActionButton key={`${group.id}-${item.label}`} {...item} nested />
               )
@@ -432,7 +453,9 @@ export function buildAdminNavSearchGroups(
         .map((i) =>
           i.kind === "tab"
             ? { value: i.value, label: i.label }
-            : { value: `action:${i.label}`, label: i.label, action: i.onClick }
+            : i.kind === "href"
+              ? { value: `href:${i.href}`, label: i.label, href: i.href }
+              : { value: `action:${i.label}`, label: i.label, action: i.onClick }
         ),
     })
   );

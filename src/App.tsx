@@ -43,6 +43,7 @@ import Blog from "./pages/Blog.tsx";
 import BlogPost from "./pages/BlogPost.tsx";
 import Terms from "./pages/Terms.tsx";
 import Privacy from "./pages/Privacy.tsx";
+import WaCrmApp from "./wa-crm/WaCrmApp.tsx";
 import { VisitorTracker } from "./components/VisitorTracker";
 import { SitePopupsHost } from "./components/NoticePopup";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -116,6 +117,14 @@ const App = () => (
             element={
               <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
                 <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/wa-crm/*"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
+                <WaCrmApp />
               </ProtectedRoute>
             }
           />
