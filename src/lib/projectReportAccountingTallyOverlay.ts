@@ -1,13 +1,12 @@
 import { rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { ProjectReportStudentSnapshot } from "@/lib/projectReportStudentSnapshot";
 
-/** pdf-lib coords (origin bottom-left), matched to template via pdf.js text extraction. */
 const COVER = {
-  /** Baselines sit on the two header rules (663.6 / 635.2), not on grey hint labels below. */
   universityLine: { x: 108, y: 667, width: 380, size: 11 },
   collegeLine: { x: 108, y: 639, width: 380, size: 11 },
-  branchLine: { x: 280, y: 436, width: 280, size: 10 },
-  degreeLine: { x: 148, y: 453, width: 240, size: 10 },
+  programmeCourseLine: { x: 148, y: 453, width: 200, size: 10 },
+  domainLine: { x: 280, y: 436, width: 260, size: 10 },
+  sessionLine: { x: 240, y: 114.7, width: 200, size: 10 },
   valueX: 282,
   nameY: 395.7,
   registrationY: 375.6,
@@ -53,7 +52,6 @@ function paintWhite(page: PDFPage, x: number, y: number, width: number, height: 
   });
 }
 
-/** Hide template hints / logo captions so filled text does not overlap grey placeholders. */
 function maskCoverHeaderPlaceholders(page: PDFPage, options: { hideLogoCaption: boolean }) {
   paintWhite(page, 108, 646, 385, 24);
   paintWhite(page, 142, 618, 352, 24);
@@ -82,7 +80,11 @@ function drawCentered(
   });
 }
 
-/** Cover + certificate/declaration/acknowledgement — aligned to colon labels & underline rules. */
+function maskAndFillLine(page: PDFPage, y: number, x: number, width: number, height: number) {
+  paintWhite(page, x, y - 2, width, height);
+}
+
+/** Cover + certificate/declaration/acknowledgement — aligned to template rules. */
 export function overlayAccountingTallyStudentFields(
   pages: PDFPage[],
   font: PDFFont,
@@ -92,9 +94,10 @@ export function overlayAccountingTallyStudentFields(
 ) {
   const collegeLine = extras.collegeName || student.collegeName;
   const uniLine = extras.universityName || student.universityName;
-  const degreeLine = student.degree || student.course;
-  const courseLine = student.course || student.degree;
-  const branchLine = student.department || student.course;
+  const programmeCourse = student.programmeCourse || student.course;
+  const domain = student.internshipDomain || "—";
+  const uniReg = student.universityRegistrationNumber;
+  const uniRoll = student.universityRollNumber;
 
   const page0 = pages[0];
   if (page0) {
@@ -103,29 +106,39 @@ export function overlayAccountingTallyStudentFields(
     });
     drawCentered(page0, fontBold, uniLine, COVER.universityLine);
     drawCentered(page0, fontBold, collegeLine, COVER.collegeLine);
-    drawValue(page0, font, degreeLine, {
+    drawValue(page0, font, programmeCourse, {
       page: 0,
-      x: COVER.degreeLine.x,
-      y: COVER.degreeLine.y,
-      size: COVER.degreeLine.size,
+      x: COVER.programmeCourseLine.x,
+      y: COVER.programmeCourseLine.y,
+      size: COVER.programmeCourseLine.size,
     });
-    drawValue(page0, font, branchLine, {
+    drawValue(page0, font, domain, {
       page: 0,
-      x: COVER.branchLine.x,
-      y: COVER.branchLine.y,
-      size: COVER.branchLine.size,
+      x: COVER.domainLine.x,
+      y: COVER.domainLine.y,
+      size: COVER.domainLine.size,
     });
+
+    if (student.sessionDisplay) {
+      paintWhite(page0, 238, 110, 200, 14);
+      drawValue(page0, font, `Session: ${student.sessionDisplay}`, {
+        page: 0,
+        x: COVER.sessionLine.x,
+        y: COVER.sessionLine.y,
+        size: COVER.sessionLine.size,
+      });
+    }
 
     const coverFields: Array<{ y: number; text: string }> = [
       { y: COVER.nameY, text: student.studentName },
-      { y: COVER.registrationY, text: student.registrationNumber },
-      { y: COVER.rollY, text: student.rollNumber },
+      { y: COVER.registrationY, text: uniReg },
+      { y: COVER.rollY, text: uniRoll },
       { y: COVER.universityY, text: uniLine },
       { y: COVER.collegeY, text: collegeLine },
-      { y: COVER.courseY, text: courseLine },
-      { y: COVER.branchY, text: branchLine },
+      { y: COVER.courseY, text: programmeCourse },
+      { y: COVER.branchY, text: domain },
       { y: COVER.semesterY, text: student.semester },
-      { y: COVER.sessionY, text: student.academicSession },
+      { y: COVER.sessionY, text: student.sessionDisplay || student.academicSession },
       { y: COVER.submissionY, text: student.submissionDate },
     ];
     for (const row of coverFields) {
@@ -138,37 +151,63 @@ export function overlayAccountingTallyStudentFields(
     }
   }
 
-  const certificate: Array<{ slot: TextSlot; text: string }> = [
-    { slot: { page: 1, x: 118, y: 650.9, size: 10 }, text: student.studentName },
-    { slot: { page: 1, x: 72, y: 632.7, size: 10 }, text: student.registrationNumber },
-    { slot: { page: 1, x: 292, y: 632.7, size: 10 }, text: student.rollNumber },
-    { slot: { page: 1, x: 74, y: 614.5, size: 10 }, text: courseLine },
-    { slot: { page: 1, x: 74, y: 596.2, size: 10 }, text: `${branchLine}, ${student.semester}, ${student.academicSession}` },
-    { slot: { page: 1, x: 238, y: 534.5, size: 10 }, text: student.degree || courseLine },
-    { slot: { page: 1, x: 74, y: 516.2, size: 10 }, text: uniLine },
+  const certificate: Array<{ slot: TextSlot; text: string; mask?: { x: number; w: number; h: number } }> = [
+    { slot: { page: 1, x: 118, y: 650.9, size: 10 }, text: student.studentName, mask: { x: 115, w: 200, h: 14 } },
+    { slot: { page: 1, x: 72, y: 632.7, size: 10 }, text: uniReg, mask: { x: 70, w: 140, h: 14 } },
+    { slot: { page: 1, x: 292, y: 632.7, size: 10 }, text: uniRoll, mask: { x: 288, w: 120, h: 14 } },
+    { slot: { page: 1, x: 74, y: 614.5, size: 10 }, text: programmeCourse, mask: { x: 70, w: 300, h: 14 } },
+    {
+      slot: { page: 1, x: 74, y: 596.2, size: 10 },
+      text: `${domain}, ${student.semester}, ${student.sessionDisplay || student.academicSession}`,
+      mask: { x: 70, w: 480, h: 14 },
+    },
+    { slot: { page: 1, x: 238, y: 534.5, size: 10 }, text: programmeCourse, mask: { x: 234, w: 200, h: 14 } },
+    { slot: { page: 1, x: 74, y: 516.2, size: 10 }, text: uniLine, mask: { x: 70, w: 400, h: 14 } },
   ];
 
-  const declaration: Array<{ slot: TextSlot; text: string }> = [
-    { slot: { page: 2, x: 88, y: 712.7, size: 10 }, text: student.studentName },
-    { slot: { page: 2, x: 330, y: 712.7, size: 10 }, text: student.registrationNumber },
-    { slot: { page: 2, x: 118, y: 694.4, size: 10 }, text: student.rollNumber },
-    { slot: { page: 2, x: 190, y: 676.2, size: 10 }, text: courseLine },
-    { slot: { page: 2, x: 74, y: 657.9, size: 10 }, text: collegeLine },
-    { slot: { page: 2, x: 74, y: 639.7, size: 10 }, text: uniLine },
-    { slot: { page: 2, x: 74, y: 279.6, size: 10 }, text: student.submissionDate },
-    { slot: { page: 2, x: 350, y: 279.6, size: 10 }, text: student.studentName },
-    { slot: { page: 2, x: 410, y: 266.8, size: 10 }, text: student.rollNumber },
+  const declarationPage = pages[2];
+  if (declarationPage) {
+    maskAndFillLine(declarationPage, 712.7, 70, 460, 16);
+    drawValue(declarationPage, font, student.studentName, { page: 2, x: 82, y: 712.7, size: 10 });
+    drawValue(declarationPage, font, uniReg, { page: 2, x: 368, y: 712.7, size: 10 });
+
+    maskAndFillLine(declarationPage, 694.4, 70, 460, 16);
+    drawValue(declarationPage, font, uniRoll, { page: 2, x: 118, y: 694.4, size: 10 });
+    drawValue(declarationPage, font, programmeCourse, { page: 2, x: 300, y: 694.4, size: 10 });
+
+    maskAndFillLine(declarationPage, 676.2, 70, 460, 16);
+    drawValue(declarationPage, font, domain, { page: 2, x: 192, y: 676.2, size: 10 });
+
+    maskAndFillLine(declarationPage, 657.9, 70, 460, 16);
+    drawValue(declarationPage, font, collegeLine, { page: 2, x: 74, y: 657.9, size: 10 });
+
+    maskAndFillLine(declarationPage, 639.7, 70, 460, 16);
+    drawValue(declarationPage, font, uniLine, { page: 2, x: 74, y: 639.7, size: 10 });
+
+    maskAndFillLine(declarationPage, 279.6, 340, 220, 14);
+    drawValue(declarationPage, font, student.studentName, { page: 2, x: 398, y: 279.6, size: 10 });
+    maskAndFillLine(declarationPage, 266.8, 350, 200, 14);
+    drawValue(declarationPage, font, uniRoll, { page: 2, x: 418, y: 266.8, size: 10 });
+    drawValue(declarationPage, font, student.submissionDate, { page: 2, x: 118, y: 279.6, size: 10 });
+  }
+
+  const acknowledgement: Array<{ slot: TextSlot; text: string; maskW: number }> = [
+    { slot: { page: 3, x: 398, y: 318.6, size: 10 }, text: student.studentName, maskW: 170 },
+    { slot: { page: 3, x: 418, y: 305.5, size: 10 }, text: uniRoll, maskW: 150 },
+    { slot: { page: 3, x: 468, y: 292.7, size: 10 }, text: uniReg, maskW: 110 },
   ];
 
-  const acknowledgement: Array<{ slot: TextSlot; text: string }> = [
-    { slot: { page: 3, x: 332, y: 318.6, size: 10 }, text: student.studentName },
-    { slot: { page: 3, x: 408, y: 305.5, size: 10 }, text: student.rollNumber },
-    { slot: { page: 3, x: 455, y: 292.7, size: 10 }, text: student.registrationNumber },
-  ];
-
-  for (const row of [...certificate, ...declaration, ...acknowledgement]) {
+  for (const row of certificate) {
     const page = pages[row.slot.page];
     if (!page) continue;
+    if (row.mask) maskAndFillLine(page, row.slot.y, row.mask.x, row.mask.w, row.mask.h);
+    drawValue(page, font, row.text, row.slot);
+  }
+
+  for (const row of acknowledgement) {
+    const page = pages[row.slot.page];
+    if (!page) continue;
+    maskAndFillLine(page, row.slot.y, row.slot.x - 4, row.maskW, 14);
     drawValue(page, font, row.text, row.slot);
   }
 }

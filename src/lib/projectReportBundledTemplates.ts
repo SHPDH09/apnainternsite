@@ -19,7 +19,7 @@ export const ACCOUNTING_TALLY_GST_TEMPLATE_FILE =
 
 /** A4 cover + certificate overlay coordinates (pdf-lib, origin bottom-left). */
 export const ACCOUNTING_TALLY_GST_FIELD_LAYOUT: ProjectReportFieldLayout = {
-  logo: { page: 0, x: 268, y: 718, width: 58, height: 58 },
+  logo: { page: 0, x: 271, y: 702, width: 54, height: 54 },
 };
 
 const BUNDLED_DOMAIN_NAMES = [

@@ -131,7 +131,7 @@ export function useStudentDocumentActions({
       universityLogoUrl: universityLogoUrl ?? null,
       domain,
       mode,
-      student: resolveProjectReportStudentSnapshot(profile),
+      student: resolveProjectReportStudentSnapshot(profile, { internshipDomain: domain }),
     };
   }, [profile, fields.domain, fields.university, universityLogoUrl]);
 
