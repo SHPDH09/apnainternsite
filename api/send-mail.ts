@@ -1189,6 +1189,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    if (normalizedAction === 'ensure_learning_materials') {
+      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
+      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) {
+        return res.status(401).json({ success: false, message: 'Authorization Bearer token required' });
+      }
+      const session = await verifyBearerSessionInline(tokenMatch[1]);
+      if (!session?.sub) {
+        return res.status(401).json({ success: false, message: 'Invalid or expired session' });
+      }
+      if (!process.env.DATABASE_URL?.trim()) {
+        return res.status(503).json({
+          success: false,
+          message: 'DATABASE_URL is not configured on this deployment',
+        });
+      }
+      try {
+        const { ensureLearningMaterialsSchema } = await import(
+          '../aws/server/learning-materials-bootstrap.js'
+        );
+        const result = await ensureLearningMaterialsSchema();
+        return res.status(200).json({
+          success: true,
+          ok: true,
+          table: 'learning_materials',
+          applied: result.applied,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail ensure_learning_materials]', message);
+        return res.status(503).json({ success: false, message });
+      }
+    }
+
     if (normalizedAction === 'convert_project_report_docx') {
       const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
       const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);

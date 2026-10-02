@@ -55,11 +55,10 @@ async function fetchAllPaginated<T extends Row>(
   let useOffsetFallback = false;
 
   for (let page = 0; page < Math.ceil(maxRows / pageSize); page++) {
-    let query = buildBase()
-      .select(select)
-      .order(orderBy, { ascending, nullsFirst: false })
-      .order(tieBreaker, { ascending })
-      .limit(pageSize);
+    let query = buildBase().select(select).order(orderBy, { ascending }).limit(pageSize);
+    if (tieBreaker && tieBreaker !== orderBy) {
+      query = query.order(tieBreaker, { ascending });
+    }
 
     if (modify) query = modify(query);
 

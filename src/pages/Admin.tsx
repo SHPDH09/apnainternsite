@@ -102,6 +102,7 @@ import {
 } from "@/lib/bulkCustomMailSend";
 import { toastBulkMailResult } from "@/lib/bulkMailResultFeedback";
 import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
+import { fetchInternshipDomainsResilient } from "@/lib/internshipDomainsResilience";
 import {
   fetchAdminSiteVisitStats,
   fetchAdminStudentDirectoryPage,
@@ -1335,17 +1336,8 @@ export default function Admin() {
           "certificates"
         ),
         (async () => {
-          try {
-            const rows = await fetchAllSupabaseRows(supabase, "internship_domains", {
-              orderBy: "name",
-              ascending: true,
-            });
-            return { data: rows, error: null };
-          } catch (err: any) {
-            console.error("Error loading internship domains:", err);
-            toast.error(`Database error loading domains: ${err?.message || String(err)}`);
-            return { data: [], error: err };
-          }
+          const rows = await fetchInternshipDomainsResilient(supabase);
+          return { data: rows, error: null };
         })(),
         safeQuery(
           supabase

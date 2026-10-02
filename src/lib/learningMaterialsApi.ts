@@ -10,6 +10,7 @@ import {
   describeClassTargets,
   studentMatchesClassTargets,
 } from "@/lib/classLinkTargeting";
+import { ensureAdminAuthSession } from "@/lib/adminAuthSession";
 
 export type LearningMaterialType = "learning_material" | "project_report";
 
@@ -35,27 +36,52 @@ export type LearningMaterialRow = {
 const BUCKET = "learning-materials";
 const MAX_BYTES = 25 * 1024 * 1024;
 
-async function ensureLearningMaterialsTable(client: SupabaseClient): Promise<boolean> {
-  if (typeof window === "undefined") return false;
+async function adminAuthHeaders(client: SupabaseClient): Promise<Record<string, string> | null> {
+  await ensureAdminAuthSession(client, { extendWindow: true, attempts: 2 });
   const { data: sessionData } = await client.auth.getSession();
-  const token = sessionData.session?.access_token;
-  if (!token) return false;
+  const token = sessionData.session?.access_token?.trim();
+  if (!token) return null;
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+}
 
+async function ensureLearningMaterialsViaSendMail(client: SupabaseClient): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const headers = await adminAuthHeaders(client);
+  if (!headers) return false;
   const origin = window.location.origin.replace(/\/$/, "");
-  const res = await fetch(`${origin}/api/ensure-learning-materials`, {
+  const res = await fetch(`${origin}/api/send-mail`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers,
+    body: JSON.stringify({ action: "ensure_learning_materials" }),
   }).catch(() => null);
   return Boolean(res?.ok);
+}
+
+async function ensureLearningMaterialsTable(client: SupabaseClient): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const headers = await adminAuthHeaders(client);
+  if (!headers) return false;
+
+  const origin = window.location.origin.replace(/\/$/, "");
+  const direct = await fetch(`${origin}/api/ensure-learning-materials`, {
+    method: "POST",
+    headers,
+  }).catch(() => null);
+  if (direct?.ok) return true;
+
+  return ensureLearningMaterialsViaSendMail(client);
 }
 
 function isMissingLearningMaterialsTable(error: { message?: string; code?: string } | null): boolean {
   const msg = String(error?.message || "");
   const code = String(error?.code || "");
-  return code === "42P01" || /learning_materials.*does not exist|relation.*learning_materials/i.test(msg);
+  return (
+    code === "42P01" ||
+    /learning_materials.*does not exist|relation.*learning_materials/i.test(msg)
+  );
 }
 
 function mapMaterialRow(row: LearningMaterialRow): LearningMaterialRow {
@@ -122,9 +148,30 @@ export async function fetchLearningMaterials(
       const ready = await ensureLearningMaterialsTable(client);
       if (ready) return fetchLearningMaterials(client, true);
     }
-    throw error;
+    console.warn("[learning_materials] fetch failed:", error.message);
+    return [];
   }
   return ((data || []) as LearningMaterialRow[]).map(mapMaterialRow);
+}
+
+async function uploadWithRetry(
+  client: SupabaseClient,
+  path: string,
+  file: File,
+  contentType?: string
+): Promise<{ error: { message: string } | null }> {
+  let lastErr: { message: string } | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { error } = await client.storage.from(BUCKET).upload(path, file, {
+      upsert: attempt > 0,
+      contentType: contentType || file.type || undefined,
+    });
+    if (!error) return { error: null };
+    lastErr = error;
+    if (!/503|502|504|timeout|unavailable/i.test(error.message)) break;
+    await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  return { error: lastErr };
 }
 
 export async function uploadLearningMaterialFile(
@@ -137,17 +184,14 @@ export async function uploadLearningMaterialFile(
   }
   const safeName = file.name.replace(/[^\w.\-]+/g, "_");
   const path = `${createdBy}/${Date.now()}-${safeName}`;
-  const { error } = await client.storage.from(BUCKET).upload(path, file, {
-    upsert: false,
-    contentType: file.type || undefined,
-  });
+  const { error } = await uploadWithRetry(client, path, file);
   if (error) {
     if (/bucket not found/i.test(error.message)) {
       throw new Error(
         'Storage bucket "learning-materials" is missing. Run npm run aws:s3:provision and npm run aws:s3:sync.'
       );
     }
-    throw error;
+    throw new Error(error.message || "Storage upload failed. Please retry in a moment.");
   }
   const { data } = client.storage.from(BUCKET).getPublicUrl(path);
   const publicUrl =
@@ -293,6 +337,6 @@ export async function fetchStudentLearningMaterials(
     .sort((a, b) => {
       const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
       const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return tb - ta; // newest first
+      return tb - ta;
     });
 }

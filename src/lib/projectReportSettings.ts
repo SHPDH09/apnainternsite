@@ -354,15 +354,27 @@ export async function saveProjectReportDomainTemplate(
   const safeName = pdfFile.name.replace(/[^\w.-]+/g, "_").slice(0, 120);
   const path = `project-report-templates/${domainKey.replace(/\s+/g, "-")}/${Date.now()}-${safeName}`;
 
-  const { error: uploadErr } = await client.storage.from(BUCKET).upload(path, pdfFile, {
-    upsert: true,
-    contentType: "application/pdf",
-  });
+  let uploadErr: { message: string } | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { error } = await client.storage.from(BUCKET).upload(path, pdfFile, {
+      upsert: true,
+      contentType: "application/pdf",
+    });
+    if (!error) {
+      uploadErr = null;
+      break;
+    }
+    uploadErr = error;
+    if (!/503|502|504|timeout|unavailable/i.test(error.message)) break;
+    await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+  }
   if (uploadErr) {
     if (/bucket not found/i.test(uploadErr.message)) {
       throw new Error('Storage bucket "consent-forms" is missing. Contact support to provision storage.');
     }
-    throw new Error(uploadErr.message || "Failed to upload template PDF.");
+    throw new Error(
+      uploadErr.message || "Storage upload failed (503). Wait a moment and try again, or upload a PDF export from Word."
+    );
   }
 
   const { data: pub } = client.storage.from(BUCKET).getPublicUrl(path);

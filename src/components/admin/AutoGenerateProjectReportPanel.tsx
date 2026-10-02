@@ -58,6 +58,7 @@ import {
   type ProjectReportGenerateInput,
 } from "@/lib/projectReportPdf";
 import { ProjectReportPreviewDocument } from "@/components/student/ProjectReportPreviewDocument";
+import { fetchInternshipDomainsResilient } from "@/lib/internshipDomainsResilience";
 
 type UniversityRow = {
   id: string;
@@ -100,14 +101,23 @@ export function AutoGenerateProjectReportPanel({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  const [fallbackDomains, setFallbackDomains] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    if (domains.length > 0) return;
+    void fetchInternshipDomainsResilient(supabase).then(setFallbackDomains).catch(() => undefined);
+  }, [domains.length]);
+
+  const effectiveDomains = domains.length > 0 ? domains : fallbackDomains;
+
   const domainOptions = useMemo(() => {
     const names = new Set<string>();
-    for (const d of domains) {
+    for (const d of effectiveDomains) {
       const n = String(d.name || "").trim();
       if (n) names.add(n);
     }
     return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [domains]);
+  }, [effectiveDomains]);
 
   const templateByDomain = useMemo(() => {
     const map = new Map<string, ProjectReportDomainTemplate>();

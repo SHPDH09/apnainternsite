@@ -19,6 +19,7 @@ import {
   ensureProjectReportSchema,
   isProjectReportTable,
 } from "./project-report-bootstrap";
+import { ensureLearningMaterialsSchema } from "./learning-materials-bootstrap";
 import {
   ensureStaffAttendanceOfficesSchema,
   isStaffAttendanceOfficesRpc,
@@ -92,6 +93,10 @@ async function withCmsRetry<T>(table: string, run: () => Promise<T>): Promise<T>
       }
       if (isStaffAttendanceOfficesTable(table)) {
         await ensureStaffAttendanceOfficesSchema();
+        return await run();
+      }
+      if (table === "learning_materials") {
+        await ensureLearningMaterialsSchema();
         return await run();
       }
     }
@@ -369,9 +374,14 @@ function parseOrder(raw: unknown): string {
   // col.asc,col2.desc.nullslast
   const bits: string[] = [];
   for (const part of s.split(",")) {
-    const [col, dir] = part.trim().split(".");
-    if (!IDENT.test(col)) continue;
-    bits.push(`"${col}" ${dir?.toLowerCase() === "desc" ? "DESC" : "ASC"}`);
+    const tokens = part.trim().split(".").filter(Boolean);
+    const col = tokens[0];
+    if (!col || !IDENT.test(col)) continue;
+    const dir = tokens[1]?.toLowerCase() === "desc" ? "DESC" : "ASC";
+    let nulls = "";
+    if (tokens.some((t) => t.toLowerCase() === "nullslast")) nulls = " NULLS LAST";
+    else if (tokens.some((t) => t.toLowerCase() === "nullsfirst")) nulls = " NULLS FIRST";
+    bits.push(`"${col}" ${dir}${nulls}`);
   }
   return bits.length ? ` ORDER BY ${bits.join(", ")}` : "";
 }
