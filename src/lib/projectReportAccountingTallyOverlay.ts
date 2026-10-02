@@ -70,14 +70,15 @@ export function overlayAccountingTallyStudentFields(
 ) {
   const collegeLine = extras.collegeName || student.collegeName;
   const uniLine = extras.universityName || student.universityName;
-  const courseLine = student.degree || student.course;
+  const degreeLine = student.degree || student.course;
+  const courseLine = student.course || student.degree;
   const branchLine = student.department || student.course;
 
   const page0 = pages[0];
   if (page0) {
     drawCentered(page0, fontBold, uniLine, COVER.universityLine);
     drawCentered(page0, font, collegeLine, COVER.collegeLine);
-    drawValue(page0, font, courseLine, {
+    drawValue(page0, font, degreeLine, {
       page: 0,
       x: COVER.degreeLine.x,
       y: COVER.degreeLine.y,
