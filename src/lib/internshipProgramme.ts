@@ -1,6 +1,10 @@
 import { isBnmuStudent, isBrabuStudent, isLnmuStudent } from "@/lib/feeRules";
 import { CERTIFICATE_INTERNSHIP_PERIOD } from "@/lib/certificateFormat";
 import { INTERNSHIP_ATTENDANCE_TOTAL_DAYS, attendanceLocalDateKey } from "@/lib/attendanceStats";
+import {
+  REGISTRATION_INTERNSHIP_PROGRAMME_DAYS,
+  resolveRegistrationInternshipDates,
+} from "@/lib/studentInternshipDates";
 
 /** LNMU internship window (certificates, attendance, offer letter, logbook). */
 export const LNMU_INTERNSHIP_START = "1 June 2026";
@@ -113,9 +117,43 @@ export function resolveInternshipModeForUniversity(
 
 export function resolveInternshipProgrammeConfig(
   uniName?: string | null,
-  storedMode?: string | null
+  storedMode?: string | null,
+  profile?: Record<string, unknown> | null
 ): InternshipProgrammeConfig {
   const internshipMode = resolveInternshipModeForUniversity(uniName, storedMode);
+
+  if (profile) {
+    const reg = resolveRegistrationInternshipDates(profile);
+    if (reg) {
+      const meta =
+        profile.metadata && typeof profile.metadata === "object" && !Array.isArray(profile.metadata)
+          ? (profile.metadata as Record<string, unknown>)
+          : {};
+      const storedDuration = String(
+        profile.internship_duration || meta.internship_duration || meta.section_duration || ""
+      ).trim();
+      const duration =
+        storedDuration ||
+        (isBnmuStudent(uniName)
+          ? BNMU_INTERNSHIP_DURATION
+          : isBrabuStudent(uniName)
+            ? BRABU_INTERNSHIP_DURATION
+            : LNMU_INTERNSHIP_DURATION);
+      return {
+        isBnmu: isBnmuStudent(uniName),
+        period: reg.period,
+        startDisplay: reg.startDisplay,
+        endDisplay: reg.endDisplay,
+        duration,
+        internshipMode,
+        programmeStartDate: reg.programmeStartDate,
+        programmeDayCount: REGISTRATION_INTERNSHIP_PROGRAMME_DAYS,
+        creditsLabel: isBnmuStudent(uniName)
+          ? BNMU_CERTIFICATE_CREDITS_LABEL
+          : DEFAULT_CERTIFICATE_CREDITS_LABEL,
+      };
+    }
+  }
 
   if (isBnmuStudent(uniName)) {
     return {
@@ -158,8 +196,23 @@ export function resolveInternshipProgrammeConfig(
   };
 }
 
-export function internshipProgrammeDayKeys(uniName?: string | null): string[] {
-  const cfg = resolveInternshipProgrammeConfig(uniName);
+export type InternshipProgrammeScope =
+  | string
+  | null
+  | undefined
+  | Record<string, unknown>;
+
+function programmeConfigFromScope(scope: InternshipProgrammeScope): InternshipProgrammeConfig {
+  if (scope && typeof scope === "object") {
+    const uni = String(scope.university_name || scope.university || "").trim() || null;
+    const mode = String(scope.internship_mode || "").trim() || null;
+    return resolveInternshipProgrammeConfig(uni, mode, scope);
+  }
+  return resolveInternshipProgrammeConfig(scope);
+}
+
+export function internshipProgrammeDayKeys(scope: InternshipProgrammeScope = null): string[] {
+  const cfg = programmeConfigFromScope(scope);
   const keys: string[] = [];
   for (let i = 0; i < cfg.programmeDayCount; i++) {
     const d = new Date(cfg.programmeStartDate);

@@ -379,6 +379,7 @@ export function useStudentDocumentActions({
       fields,
       attendanceRecords,
       issueDate: documentIssueDate,
+      programmeProfile: profile,
     }),
     projectGenerateInput
       ? createElement(ProjectReportPreviewDocument, {

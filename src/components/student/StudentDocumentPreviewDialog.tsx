@@ -22,6 +22,7 @@ type Props = {
   fields: StudentDocumentFields;
   attendanceRecords: AttendanceRecord[];
   issueDate?: string;
+  programmeProfile?: Record<string, unknown> | null;
   projectPreview?: {
     universityName: string;
     universityLogoUrl?: string | null;
@@ -37,6 +38,7 @@ export function StudentDocumentPreviewDialog({
   fields,
   attendanceRecords,
   issueDate,
+  programmeProfile,
   projectPreview,
 }: Props) {
   const title = documentId ? TITLES[documentId] || "Document preview" : "Document preview";
@@ -61,6 +63,7 @@ export function StudentDocumentPreviewDialog({
               fields={fields}
               attendanceRecords={attendanceRecords}
               issueDate={issueDate}
+              programmeProfile={programmeProfile}
             />
           ) : documentId === "project" && projectPreview ? (
             <ProjectReportPreviewDocument

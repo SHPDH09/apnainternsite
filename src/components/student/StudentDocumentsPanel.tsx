@@ -236,6 +236,7 @@ export function StudentDocumentsPanel({
           ref={attendanceRef}
           fields={fields}
           attendanceRecords={attendanceRecords}
+          programmeProfile={profile}
         />
       </div>
     </>

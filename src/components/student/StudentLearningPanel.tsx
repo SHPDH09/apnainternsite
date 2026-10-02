@@ -96,6 +96,7 @@ type Props = {
   notes: LearningMaterialRow[];
   attendanceRecords: AttendanceRecord[];
   universityName?: string;
+  programmeProfile?: Record<string, unknown> | null;
   liveClassesEnabled?: boolean;
   defaultTab?: LearningPanelTab;
   /** When true, only the selected module is shown — no tab bar. */
@@ -130,6 +131,7 @@ export function StudentLearningPanel({
   notes,
   attendanceRecords,
   universityName = "",
+  programmeProfile = null,
   liveClassesEnabled = true,
   defaultTab = "classes",
   singleModule = false,
@@ -150,21 +152,29 @@ export function StudentLearningPanel({
     [assignments]
   );
 
+  const programmeScope = programmeProfile || universityName;
   const attendanceSummary = useMemo(
-    () => attendanceReportSummary(attendanceRecords, universityName),
-    [attendanceRecords, universityName]
+    () => attendanceReportSummary(attendanceRecords, programmeScope),
+    [attendanceRecords, programmeScope]
   );
   const presentDays = useMemo(
     () => attendancePresentDaySet(attendanceRecords),
     [attendanceRecords]
   );
   const programmeDays = useMemo(
-    () => internshipProgrammeDayKeys(universityName),
-    [universityName]
+    () => internshipProgrammeDayKeys(programmeScope),
+    [programmeScope]
   );
   const programmeConfig = useMemo(
-    () => resolveInternshipProgrammeConfig(universityName),
-    [universityName]
+    () =>
+      programmeProfile
+        ? resolveInternshipProgrammeConfig(
+            universityName,
+            String(programmeProfile.internship_mode || ""),
+            programmeProfile
+          )
+        : resolveInternshipProgrammeConfig(universityName),
+    [universityName, programmeProfile]
   );
   const moduleMeta = MODULE_META[tab];
   const ModuleIcon = moduleMeta.icon;

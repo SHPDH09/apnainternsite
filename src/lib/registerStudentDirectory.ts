@@ -6,6 +6,7 @@ import { signInStudentWithPassword } from "@/lib/studentAuthLogin";
 import { ensurePaymentSuccessLog } from "@/lib/recordPaymentSuccess";
 import { syncStudentProfileMetadata } from "@/lib/studentProfileDisplay";
 import { syncStudentAcademicInfo } from "@/lib/syncStudentAcademicInfo";
+import { registrationInternshipDatesForToday } from "@/lib/studentInternshipDates";
 
 function isRegistrationIdConflict(err: { code?: string; message?: string }): boolean {
   const blob = `${err.code || ""} ${err.message || ""}`.toLowerCase();
@@ -141,6 +142,10 @@ export function buildRegistrationStudentPayload(
     meta.section_duration = String(meta.section_duration).trim();
   }
 
+  const internshipDates = registrationInternshipDatesForToday();
+  meta.joining_date = internshipDates.joiningIso;
+  meta.completion_date = internshipDates.completionIso;
+
   const base: Record<string, unknown> = {
     id: input.userId,
     email: input.normalizedEmail,
@@ -166,6 +171,8 @@ export function buildRegistrationStudentPayload(
     cybercafe_email: input.cyberEmail ?? null,
     referral_code: input.referralCode ?? null,
     internship_duration: selectedDuration,
+    joining_date: internshipDates.joiningIso,
+    completion_date: internshipDates.completionIso,
     metadata: meta,
   };
 

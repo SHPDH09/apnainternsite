@@ -1,9 +1,6 @@
 import { forwardRef } from "react";
 import { StudentDocumentFields, studentDocumentIdentityRows } from "@/lib/studentPortalDocuments";
-import {
-  programmeDayChunks,
-  resolveInternshipProgrammeConfig,
-} from "@/lib/internshipProgramme";
+import { programmeDayChunks } from "@/lib/internshipProgramme";
 import {
   DocumentPage,
   DocumentPages,
@@ -51,8 +48,7 @@ function LogTable({ days, startDate }: { days: number[]; startDate: Date }) {
 
 export const StudentLogbookDocument = forwardRef<HTMLDivElement, Props>(
   function StudentLogbookDocument({ fields, issueDate }, ref) {
-    const programme = resolveInternshipProgrammeConfig(fields.university);
-    const dayChunks = programmeDayChunks(programme.programmeDayCount);
+    const dayChunks = programmeDayChunks(fields.programmeDayCount);
     const totalPages = dayChunks.length;
 
     const infoRows: [string, string][] = [
@@ -110,7 +106,7 @@ export const StudentLogbookDocument = forwardRef<HTMLDivElement, Props>(
                   </h2>
                 </>
               ) : null}
-              <LogTable days={days} startDate={programme.programmeStartDate} />
+              <LogTable days={days} startDate={fields.programmeStartDate} />
             </DocumentPage>
           );
         })}

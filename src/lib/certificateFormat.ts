@@ -687,7 +687,11 @@ export function certificateDataFromStudent(
   const meta = (student?.metadata as Record<string, unknown> | undefined) || {};
   const universityName = String(student?.university_name || meta.university_name || "").trim() || undefined;
   const storedMode = String(student?.internship_mode || meta.internship_mode || "Online").trim() || "Online";
-  const programme = resolveInternshipProgrammeConfig(universityName, storedMode);
+  const programme = resolveInternshipProgrammeConfig(
+    universityName,
+    storedMode,
+    student || undefined
+  );
   const mode = programme.internshipMode;
 
   const seed = certificatePerformanceSeed(student, cert);

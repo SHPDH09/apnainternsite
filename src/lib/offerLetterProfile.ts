@@ -25,6 +25,7 @@ import {
   applyStudentOfferLetterOverrides,
   getCachedDocumentTemplates,
 } from "@/lib/documentTemplates";
+import { resolveRegistrationInternshipDates } from "@/lib/studentInternshipDates";
 
 export {
   LNMU_INTERNSHIP_START,
@@ -180,6 +181,25 @@ function internshipDomain(profile: Record<string, unknown>, m: Record<string, un
   );
 }
 
+function offerLetterProgrammeDates(
+  profile: Record<string, unknown>
+): { startDate: string; endDate: string } {
+  const reg = resolveRegistrationInternshipDates(profile);
+  if (reg) {
+    return { startDate: reg.startDisplay, endDate: reg.endDisplay };
+  }
+  return {
+    startDate: fmtOfferLetterDate(
+      String(profile.joining_date || ""),
+      "Programme dates will be confirmed by your coordinator."
+    ),
+    endDate: fmtOfferLetterDate(
+      String(profile.completion_date || ""),
+      "As per academic internship completion norms."
+    ),
+  };
+}
+
 function applicationDateIso(
   profile: Record<string, unknown>,
   payment?: Record<string, unknown> | null
@@ -228,6 +248,7 @@ function resolveOfferLetterFieldsInternal(
 
   const appIso = applicationDateIso(p, payment);
   const issueDate = resolveOfferLetterIssueDate(p);
+  const programmeDates = offerLetterProgrammeDates(p);
 
   if (isBnmu) {
     return {
@@ -244,8 +265,8 @@ function resolveOfferLetterFieldsInternal(
       internshipDomain: internshipDomain(p, m),
       internshipDuration: BNMU_INTERNSHIP_DURATION,
       internshipMode: BNMU_INTERNSHIP_MODE,
-      startDate: BNMU_INTERNSHIP_START,
-      endDate: BNMU_INTERNSHIP_END,
+      startDate: programmeDates.startDate,
+      endDate: programmeDates.endDate,
       stipend: LNMU_STIPEND,
     };
   }
@@ -265,8 +286,8 @@ function resolveOfferLetterFieldsInternal(
       internshipDomain: internshipDomain(p, m),
       internshipDuration: LNMU_INTERNSHIP_DURATION,
       internshipMode: mode,
-      startDate: LNMU_INTERNSHIP_START,
-      endDate: LNMU_INTERNSHIP_END,
+      startDate: programmeDates.startDate,
+      endDate: programmeDates.endDate,
       stipend: LNMU_STIPEND,
     };
   }
@@ -286,8 +307,8 @@ function resolveOfferLetterFieldsInternal(
       internshipDomain: internshipDomain(p, m),
       internshipDuration: BRABU_INTERNSHIP_DURATION,
       internshipMode: mode,
-      startDate: BRABU_INTERNSHIP_START,
-      endDate: BRABU_INTERNSHIP_END,
+      startDate: programmeDates.startDate,
+      endDate: programmeDates.endDate,
       stipend: LNMU_STIPEND,
     };
   }
@@ -317,14 +338,8 @@ function resolveOfferLetterFieldsInternal(
       "General Training",
     internshipDuration: resolveSelectedInternshipDuration(p),
     internshipMode: mode,
-    startDate: fmtOfferLetterDate(
-      String(p.joining_date || ""),
-      "Programme dates will be confirmed by your coordinator."
-    ),
-    endDate: fmtOfferLetterDate(
-      String(p.completion_date || ""),
-      "As per academic internship completion norms."
-    ),
+    startDate: programmeDates.startDate,
+    endDate: programmeDates.endDate,
     stipend: getCachedDocumentTemplates().offer_letter.defaultStipend?.trim() || "Not Applicable — Academic Programme",
   };
 }
@@ -366,24 +381,8 @@ export function normalizeOfferLetterProfile(
       enriched.created_at ||
       resolved.applicationDateIso ||
       payCreated,
-    joining_date:
-      enriched.joining_date ||
-      (resolved.isBnmu
-        ? BNMU_INTERNSHIP_START
-        : resolved.isLnmu
-          ? LNMU_INTERNSHIP_START
-          : isBrabuStudent(String(enriched.university_name || enriched.university || ""))
-            ? BRABU_INTERNSHIP_START
-            : undefined),
-    completion_date:
-      enriched.completion_date ||
-      (resolved.isBnmu
-        ? BNMU_INTERNSHIP_END
-        : resolved.isLnmu
-          ? LNMU_INTERNSHIP_END
-          : isBrabuStudent(String(enriched.university_name || enriched.university || ""))
-            ? BRABU_INTERNSHIP_END
-            : undefined),
+    joining_date: enriched.joining_date || undefined,
+    completion_date: enriched.completion_date || undefined,
     metadata: {
       ...m,
       ...(mode ? { internship_mode: mode } : {}),

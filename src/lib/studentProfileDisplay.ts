@@ -1,4 +1,5 @@
 import { resolveInternshipModeForUniversity } from "@/lib/internshipProgramme";
+import { applyRegistrationInternshipDatesToProfile } from "@/lib/studentInternshipDates";
 
 const hasText = (v: unknown) => v != null && String(v).trim() !== "";
 
@@ -172,7 +173,7 @@ export function enrichStudentProfileForDisplay<T extends Record<string, unknown>
   const emergency_relation =
     str(profile.emergency_relation) || str(m.emRel) || str(m.emergency_relation);
 
-  return {
+  const merged = {
     ...profile,
     full_name,
     university_name,
@@ -217,6 +218,8 @@ export function enrichStudentProfileForDisplay<T extends Record<string, unknown>
       ...(sectionDuration ? { section_duration: sectionDuration } : {}),
     },
   } as T;
+
+  return applyRegistrationInternshipDatesToProfile(merged);
 }
 
 /** Duration chosen at registration (engineering section_duration, else internship_duration). */

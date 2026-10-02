@@ -40,6 +40,8 @@ export type StudentDocumentFields = {
   phone: string;
   session: string;
   programmePeriod: string;
+  programmeDayCount: number;
+  programmeStartDate: Date;
 };
 
 function metaOf(profile: Record<string, unknown> | null | undefined): Record<string, unknown> {
@@ -54,7 +56,7 @@ export function resolveStudentDocumentFields(
   const offer = resolveOfferLetterFields(profile);
   const university = String(profile?.university_name || m.university_name || "—").trim() || "—";
   const storedMode = String(profile?.internship_mode || m.internship_mode || "Online").trim() || "Online";
-  const programme = resolveInternshipProgrammeConfig(university, storedMode);
+  const programme = resolveInternshipProgrammeConfig(university, storedMode, profile || undefined);
   const gender = String(profile?.gender || m.gender || "—").trim() || "—";
   const fatherName = String(
     profile?.father_name || profile?.parent_name || m.fatherName || m.parentName || "—"
@@ -106,6 +108,8 @@ export function resolveStudentDocumentFields(
     phone,
     session: String(profile?.academic_session || m.session || "—").trim() || "—",
     programmePeriod: programme.period,
+    programmeDayCount: programme.programmeDayCount,
+    programmeStartDate: programme.programmeStartDate,
   };
 }
 
@@ -137,20 +141,20 @@ export function attendancePresentDaySet(
 /** Present days that fall within the student's internship programme window. */
 export function countProgrammePresentDays(
   records: Array<{ marked_at?: string | null }>,
-  uniName?: string | null
+  scope?: import("@/lib/internshipProgramme").InternshipProgrammeScope
 ): number {
   const present = attendancePresentDaySet(records);
-  return internshipProgrammeDayKeys(uniName).filter((key) => present.has(key)).length;
+  return internshipProgrammeDayKeys(scope).filter((key) => present.has(key)).length;
 }
 
 /** Next absent programme days — used when admin adds attendance manually. */
 export function nextAbsentProgrammeDayKeys(
   records: Array<{ marked_at?: string | null }>,
   count: number,
-  uniName?: string | null
+  scope?: import("@/lib/internshipProgramme").InternshipProgrammeScope
 ): string[] {
   const present = attendancePresentDaySet(records);
-  const absent = internshipProgrammeDayKeys(uniName).filter((key) => !present.has(key));
+  const absent = internshipProgrammeDayKeys(scope).filter((key) => !present.has(key));
   return absent.slice(0, Math.max(0, count));
 }
 
@@ -162,12 +166,19 @@ export function programmeDayMarkedAtIso(dateKey: string): string {
 
 export function attendanceReportRows(
   records: Array<{ marked_at?: string | null }>,
-  uniName?: string | null
+  scope?: import("@/lib/internshipProgramme").InternshipProgrammeScope
 ): { day: number; date: string; dateKey: string; status: "Present" | "Absent" }[] {
   const present = attendancePresentDaySet(records);
-  const programme = resolveInternshipProgrammeConfig(uniName);
+  const programme =
+    scope && typeof scope === "object"
+      ? resolveInternshipProgrammeConfig(
+          String(scope.university_name || scope.university || ""),
+          String(scope.internship_mode || ""),
+          scope
+        )
+      : resolveInternshipProgrammeConfig(typeof scope === "string" ? scope : null);
   const start = programme.programmeStartDate;
-  return internshipProgrammeDayKeys(uniName).map((dateKey, i) => {
+  return internshipProgrammeDayKeys(scope).map((dateKey, i) => {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
     return {
@@ -189,10 +200,17 @@ export function formatDocumentIssueDate(date = new Date()): string {
 
 export function attendanceReportSummary(
   records: Array<{ marked_at?: string | null }>,
-  uniName?: string | null
+  scope?: import("@/lib/internshipProgramme").InternshipProgrammeScope
 ) {
-  const programme = resolveInternshipProgrammeConfig(uniName);
-  const totalMarked = countProgrammePresentDays(records, uniName);
+  const programme =
+    scope && typeof scope === "object"
+      ? resolveInternshipProgrammeConfig(
+          String(scope.university_name || scope.university || ""),
+          String(scope.internship_mode || ""),
+          scope
+        )
+      : resolveInternshipProgrammeConfig(typeof scope === "string" ? scope : null);
+  const totalMarked = countProgrammePresentDays(records, scope);
   return {
     totalMarked,
     programmeDays: programme.programmeDayCount,

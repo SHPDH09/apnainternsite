@@ -157,12 +157,11 @@ const Dashboard = () => {
   );
   const attendanceStats = useMemo(() => {
     const programme = resolveInternshipProgrammeConfig(
-      String(profile?.university_name || "")
+      String(profile?.university_name || ""),
+      String(profile?.internship_mode || ""),
+      profile || undefined
     );
-    const total = countProgrammePresentDays(
-      attendanceList,
-      String(profile?.university_name || "")
-    );
+    const total = countProgrammePresentDays(attendanceList, profile || undefined);
     const percentage = calcAttendancePercentage(total, programme.programmeDayCount);
     const isEligible = isAttendanceEligible(
       total,
@@ -1171,6 +1170,7 @@ const Dashboard = () => {
                 fields={documentActions.fields}
                 attendanceRecords={documentActions.attendanceRecords}
                 issueDate={documentActions.documentIssueDate}
+                programmeProfile={profile}
                 projectPreview={documentActions.projectGenerateInput}
               />
             </>
@@ -1379,6 +1379,7 @@ const Dashboard = () => {
         notes={studyNotes}
         attendanceRecords={attendanceList}
         universityName={String(profile?.university_name || "")}
+        programmeProfile={profile}
         liveClassesEnabled={isServiceEnabled("live_classes")}
         defaultTab={learningDefaultTab}
         singleModule

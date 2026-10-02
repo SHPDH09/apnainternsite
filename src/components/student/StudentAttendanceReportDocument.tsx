@@ -17,6 +17,8 @@ type Props = {
   fields: StudentDocumentFields;
   attendanceRecords: Array<{ marked_at?: string | null }>;
   issueDate?: string;
+  /** Student profile — registration-based 20-day programme window for attendance rows. */
+  programmeProfile?: Record<string, unknown> | null;
 };
 
 function AttendanceTable({
@@ -55,9 +57,13 @@ function AttendanceTable({
 }
 
 export const StudentAttendanceReportDocument = forwardRef<HTMLDivElement, Props>(
-  function StudentAttendanceReportDocument({ fields, attendanceRecords, issueDate }, ref) {
-    const summary = attendanceReportSummary(attendanceRecords, fields.university);
-    const dayRows = attendanceReportRows(attendanceRecords, fields.university);
+  function StudentAttendanceReportDocument(
+    { fields, attendanceRecords, issueDate, programmeProfile },
+    ref
+  ) {
+    const programmeScope = programmeProfile || fields.university;
+    const summary = attendanceReportSummary(attendanceRecords, programmeScope);
+    const dayRows = attendanceReportRows(attendanceRecords, programmeScope);
     const rowChunks = programmeDayChunks(summary.programmeDays).map((days) =>
       dayRows.filter((row) => days.includes(row.day))
     );
