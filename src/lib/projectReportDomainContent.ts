@@ -165,6 +165,16 @@ export const PROJECT_REPORT_DOMAIN_CONTENT: Record<string, ProjectReportDomainSe
       "Responsible AI and technology policy research covering ethics, governance, and regulatory impact assessment.",
     toolsTechnologies: ["Policy research", "Risk governance frameworks", "Official policy sources"],
   }),
+  "ai ethics & responsible technology policy research": section({
+    projectTitle: "AI Ethics & Responsible Tech Policy Research",
+    introduction:
+      "This project report examines human rights, fairness, transparency, accountability, privacy, safety, human oversight, AI risk governance, regulation, and policy impact assessment for responsible technology.",
+    toolsTechnologies: [
+      "Policy research methods",
+      "Risk assessment frameworks (NIST AI RMF)",
+      "Reference materials (UNESCO, OECD, IndiaAI, MeitY)",
+    ],
+  }),
   "python development": section({
     projectTitle: "Python Development Internship Project",
     introduction:

@@ -98,7 +98,10 @@ export function getBundledProjectReportTemplate(
 
   if (
     key.includes("ai ethics") &&
-    (key.includes("responsible tech") || key.includes("policy research") || key.includes("policy"))
+    (key.includes("responsible tech") ||
+      key.includes("responsible technology") ||
+      key.includes("policy research") ||
+      key.includes("policy"))
   ) {
     return aiEthicsBundledRow("AI Ethics & Responsible Tech Policy Research");
   }
@@ -150,7 +153,10 @@ export function resolveProjectReportBundledOverlayKind(
     key === "ai ethics & responsible tech policy research" ||
     key === "ai ethics & responsible tech" ||
     (key.includes("ai ethics") &&
-      (key.includes("responsible tech") || key.includes("policy research") || key.includes("policy")))
+      (key.includes("responsible tech") ||
+        key.includes("responsible technology") ||
+        key.includes("policy research") ||
+        key.includes("policy")))
   ) {
     return "ai-ethics-responsible-tech";
   }
