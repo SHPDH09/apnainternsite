@@ -1171,7 +1171,8 @@ const Dashboard = () => {
                 attendanceRecords={documentActions.attendanceRecords}
                 issueDate={documentActions.documentIssueDate}
                 programmeProfile={profile}
-                projectPreview={documentActions.projectGenerateInput}
+                projectGenerateInput={documentActions.projectGenerateInput}
+                projectUploadedUrlCandidates={documentActions.projectUrlCandidates}
               />
             </>
           )}

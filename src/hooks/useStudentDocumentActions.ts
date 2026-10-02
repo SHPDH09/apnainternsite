@@ -92,12 +92,15 @@ export function useStudentDocumentActions({
     [profile]
   );
   const projectReport = projectReports[0] ?? null;
-  const projectUrlCandidates =
-    projectReport?.file_url_candidates?.length
-      ? projectReport.file_url_candidates
-      : projectReport?.file_url
-        ? [projectReport.file_url]
-        : [];
+  const projectUrlCandidates = useMemo(
+    () =>
+      projectReport?.file_url_candidates?.length
+        ? projectReport.file_url_candidates
+        : projectReport?.file_url
+          ? [projectReport.file_url]
+          : [],
+    [projectReport]
+  );
 
   const projectGenerateInput = useMemo(() => {
     const pick = (...values: unknown[]) => {
@@ -284,13 +287,7 @@ export function useStudentDocumentActions({
         setPreviewId("attendance");
         break;
       case "project":
-        if (projectUrlCandidates.length > 0) {
-          void (async () => {
-            const url = await pickWorkingStorageUrl(projectUrlCandidates);
-            if (url) window.open(url, "_blank", "noopener,noreferrer");
-            else toast.error("Could not open project report.");
-          })();
-        } else if (projectAutoReady) {
+        if (projectReady) {
           refreshIssueDate();
           setPreviewId("project");
         } else {
@@ -417,5 +414,6 @@ export function useStudentDocumentActions({
     documentIssueDate,
     hiddenPdfNodes,
     projectGenerateInput,
+    projectUrlCandidates,
   };
 }

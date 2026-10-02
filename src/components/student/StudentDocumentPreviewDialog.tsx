@@ -2,10 +2,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ScrollableDialogBody, scrollableDialogShellClass } from "@/components/ui/scrollable-dialog";
 import { StudentLogbookDocument } from "@/components/student/StudentLogbookDocument";
 import { StudentAttendanceReportDocument } from "@/components/student/StudentAttendanceReportDocument";
-import { ProjectReportPreviewDocument } from "@/components/student/ProjectReportPreviewDocument";
 import type { StudentDocumentId } from "@/hooks/useStudentDocumentActions";
-import type { ProjectReportMode } from "@/lib/projectReportDomainContent";
+import type { ProjectReportGenerateInput } from "@/lib/projectReportPdf";
 import type { StudentDocumentFields } from "@/lib/studentPortalDocuments";
+import { StudentProjectReportPdfPreview } from "@/components/student/StudentProjectReportPdfPreview";
 
 type AttendanceRecord = { marked_at?: string | null };
 
@@ -23,12 +23,8 @@ type Props = {
   attendanceRecords: AttendanceRecord[];
   issueDate?: string;
   programmeProfile?: Record<string, unknown> | null;
-  projectPreview?: {
-    universityName: string;
-    universityLogoUrl?: string | null;
-    domain: string;
-    mode: ProjectReportMode;
-  } | null;
+  projectGenerateInput?: ProjectReportGenerateInput | null;
+  projectUploadedUrlCandidates?: string[];
 };
 
 export function StudentDocumentPreviewDialog({
@@ -39,14 +35,15 @@ export function StudentDocumentPreviewDialog({
   attendanceRecords,
   issueDate,
   programmeProfile,
-  projectPreview,
+  projectGenerateInput,
+  projectUploadedUrlCandidates = [],
 }: Props) {
   const title = documentId ? TITLES[documentId] || "Document preview" : "Document preview";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className={`max-w-4xl border-none shadow-2xl ${scrollableDialogShellClass}`}
+        className={`${documentId === "project" ? "max-w-5xl" : "max-w-4xl"} border-none shadow-2xl ${scrollableDialogShellClass}`}
         closeClassName="text-white hover:text-white opacity-90 hover:opacity-100"
       >
         <DialogHeader className="p-5 pr-14 bg-slate-900 text-white border-b border-white/10 shrink-0">
@@ -65,12 +62,11 @@ export function StudentDocumentPreviewDialog({
               issueDate={issueDate}
               programmeProfile={programmeProfile}
             />
-          ) : documentId === "project" && projectPreview ? (
-            <ProjectReportPreviewDocument
-              universityName={projectPreview.universityName}
-              universityLogoUrl={projectPreview.universityLogoUrl}
-              domain={projectPreview.domain}
-              mode={projectPreview.mode}
+          ) : documentId === "project" ? (
+            <StudentProjectReportPdfPreview
+              active={open && documentId === "project"}
+              generateInput={projectGenerateInput ?? null}
+              uploadedUrlCandidates={projectUploadedUrlCandidates}
               issueDate={issueDate}
             />
           ) : null}
