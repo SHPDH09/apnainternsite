@@ -96,8 +96,11 @@ async function tryHandleVercelSendMailActions(
     .toLowerCase();
   const vercelSendMailActions = new Set([
     "ensure_blog_cms",
+    "ensure_learning_materials",
     "ensure_project_report_templates",
     "save_project_report_template",
+    "convert_project_report_docx",
+    "upload_learning_material_storage",
     "blog_increment_view",
     "blog_get_view",
     "blog_submit_lead",

@@ -49,7 +49,10 @@ CREATE INDEX IF NOT EXISTS idx_site_blog_media_post
 
 const BLOG_S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'ap-south-1';
 const BLOG_LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || 'ezyintern-staging-logos';
+const LEARNING_MATERIALS_BUCKET =
+  process.env.S3_BUCKET_LEARNING_MATERIALS || 'ezyintern-staging-learning-materials';
 const BLOG_IMAGE_VERCEL_MAX_BYTES = 3_300_000;
+const LEARNING_MATERIAL_VERCEL_MAX_BYTES = 3_300_000;
 const BLOG_MEDIA_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -158,6 +161,39 @@ function publicBlogLogoUrl(objectKey: string): string {
     .split('/')
     .map((p) => encodeURIComponent(p))
     .join('/')}`;
+}
+
+function publicLearningMaterialUrl(objectKey: string): string {
+  const key = objectKey.replace(/^\/+/, '');
+  return `https://${LEARNING_MATERIALS_BUCKET}.s3.${BLOG_S3_REGION}.amazonaws.com/${key
+    .split('/')
+    .map((p) => encodeURIComponent(p))
+    .join('/')}`;
+}
+
+async function putLearningMaterialObject(
+  objectKey: string,
+  fileBuffer: Buffer,
+  contentType: string
+): Promise<void> {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error('File upload is not configured on the server. Contact support.');
+  }
+  const { PutObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+  const s3 = new S3Client({
+    region: BLOG_S3_REGION,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: LEARNING_MATERIALS_BUCKET,
+      Key: objectKey,
+      Body: fileBuffer,
+      ContentType: contentType || 'application/octet-stream',
+    })
+  );
 }
 
 function blogImageObjectKeys(input: {
@@ -1220,6 +1256,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const message = err instanceof Error ? err.message : String(err);
         console.error('[send-mail ensure_learning_materials]', message);
         return res.status(503).json({ success: false, message });
+      }
+    }
+
+    if (normalizedAction === 'upload_learning_material_storage') {
+      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
+      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) {
+        return res.status(401).json({ ok: false, message: 'Authorization Bearer token required' });
+      }
+      const session = await verifyBearerSessionInline(tokenMatch[1]);
+      if (!session?.sub) {
+        return res.status(401).json({ ok: false, message: 'Invalid or expired session' });
+      }
+      try {
+        const objectPath = String(body.object_path || body.path || '').trim().replace(/^\/+/, '');
+        const fileName = String(body.file_name || 'file').trim();
+        const contentType = String(body.content_type || 'application/octet-stream').trim();
+        const fileBase64 = String(body.file_base64 || body.image_base64 || '').trim();
+        if (!objectPath) {
+          return res.status(400).json({ ok: false, message: 'object_path required' });
+        }
+        if (!fileBase64) {
+          return res.status(400).json({ ok: false, message: 'file_base64 required' });
+        }
+        const fileBuffer = decodeBlogImageBase64(fileBase64);
+        if (fileBuffer.length > LEARNING_MATERIAL_VERCEL_MAX_BYTES) {
+          return res.status(413).json({
+            ok: false,
+            message:
+              'File is too large for upload through the site relay (max ~3 MB). Retry when storage is available or use a smaller file.',
+          });
+        }
+        await putLearningMaterialObject(objectPath, fileBuffer, contentType);
+        const publicUrl = publicLearningMaterialUrl(objectPath);
+        return res.status(200).json({
+          ok: true,
+          path: objectPath,
+          publicUrl,
+          url: publicUrl,
+          file_name: fileName,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail upload_learning_material_storage]', message);
+        return res.status(500).json({ ok: false, message: message || 'Learning material upload failed' });
       }
     }
 

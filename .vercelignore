@@ -15,6 +15,7 @@ api/**
 !api/partner-application-submit.ts
 !api/ensure-partner-applications.ts
 !api/ensure-project-report-templates.ts
+!api/ensure-learning-materials.ts
 !api/ensure-staff-attendance-offices.ts
 !api/staff-office-rpc.ts
 !api/staffOfficeSqlChunks.ts
@@ -29,6 +30,8 @@ aws/**
 !aws/server/partner-applications-bootstrap.ts
 !aws/server/project-report-bootstrap.ts
 !aws/server/project-report-template-save.ts
+!aws/server/learning-materials-bootstrap.ts
+!aws/scripts/97-rds-learning-materials.sql
 !aws/server/staff-attendance-offices-bootstrap.ts
 !aws/server/staff-salary-bootstrap.ts
 !aws/server/rds-apply-all.ts

@@ -62,17 +62,56 @@ async function ensureLearningMaterialsViaSendMail(client: SupabaseClient): Promi
 
 async function ensureLearningMaterialsTable(client: SupabaseClient): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  if (await ensureLearningMaterialsViaSendMail(client)) return true;
+
   const headers = await adminAuthHeaders(client);
   if (!headers) return false;
-
   const origin = window.location.origin.replace(/\/$/, "");
   const direct = await fetch(`${origin}/api/ensure-learning-materials`, {
     method: "POST",
     headers,
   }).catch(() => null);
-  if (direct?.ok) return true;
+  return Boolean(direct?.ok);
+}
 
-  return ensureLearningMaterialsViaSendMail(client);
+const VERCEL_STORAGE_RELAY_MAX_BYTES = 3_300_000;
+
+async function fileToBase64(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary);
+}
+
+async function uploadLearningMaterialViaSendMail(
+  client: SupabaseClient,
+  path: string,
+  file: File
+): Promise<{ ok: boolean; publicUrl?: string }> {
+  if (file.size > VERCEL_STORAGE_RELAY_MAX_BYTES) return { ok: false };
+  const headers = await adminAuthHeaders(client);
+  if (!headers) return { ok: false };
+  const origin = window.location.origin.replace(/\/$/, "");
+  const fileBase64 = await fileToBase64(file);
+  const res = await fetch(`${origin}/api/send-mail`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "upload_learning_material_storage",
+      object_path: path,
+      file_name: file.name,
+      content_type: file.type || "application/octet-stream",
+      file_base64: fileBase64,
+    }),
+  }).catch(() => null);
+  if (!res?.ok) return { ok: false };
+  const json = (await res.json().catch(() => null)) as {
+    publicUrl?: string;
+    url?: string;
+  } | null;
+  const publicUrl = json?.publicUrl || json?.url;
+  return publicUrl ? { ok: true, publicUrl } : { ok: false };
 }
 
 function isMissingLearningMaterialsTable(error: { message?: string; code?: string } | null): boolean {
@@ -171,6 +210,10 @@ async function uploadWithRetry(
     if (!/503|502|504|timeout|unavailable/i.test(error.message)) break;
     await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
   }
+  if (lastErr && /503|502|504|timeout|unavailable/i.test(lastErr.message)) {
+    const relay = await uploadLearningMaterialViaSendMail(client, path, file);
+    if (relay.ok) return { error: null };
+  }
   return { error: lastErr };
 }
 
@@ -212,6 +255,7 @@ export async function insertLearningMaterial(
     createdBy: string;
   }
 ): Promise<LearningMaterialRow> {
+  await ensureLearningMaterialsTable(client);
   const { path, publicUrl } = await uploadLearningMaterialFile(
     client,
     input.file,
