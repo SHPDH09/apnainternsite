@@ -139,6 +139,32 @@ export const PROJECT_REPORT_DOMAIN_CONTENT: Record<string, ProjectReportDomainSe
       "This report documents GST compliance concepts integrated with computerised accounting using TallyPrime.",
     toolsTechnologies: ["TallyPrime", "GST Portal", "Microsoft Excel"],
   }),
+  "ai ethics & responsible tech policy research": section({
+    projectTitle: "AI Ethics & Responsible Tech Policy Research",
+    introduction:
+      "This project report examines human rights, fairness, transparency, accountability, privacy, safety, human oversight, AI risk governance, regulation, and policy impact assessment for responsible technology.",
+    objectives: [
+      "Map ethical principles to practical AI governance controls",
+      "Compare voluntary standards with binding legal requirements",
+      "Analyse policy frameworks using documented official sources",
+    ],
+    toolsTechnologies: [
+      "Policy research methods",
+      "Risk assessment frameworks (NIST AI RMF)",
+      "Reference materials (UNESCO, OECD, IndiaAI, MeitY)",
+    ],
+    expectedOutcomes: [
+      "Structured policy research report with citations",
+      "Case-style risk and governance analysis",
+      "Clear distinction between ethics, standards, and law",
+    ],
+  }),
+  "ai ethics & responsible tech": section({
+    projectTitle: "AI Ethics & Responsible Tech Policy Research",
+    introduction:
+      "Responsible AI and technology policy research covering ethics, governance, and regulatory impact assessment.",
+    toolsTechnologies: ["Policy research", "Risk governance frameworks", "Official policy sources"],
+  }),
   "python development": section({
     projectTitle: "Python Development Internship Project",
     introduction:

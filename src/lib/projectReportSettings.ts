@@ -13,7 +13,10 @@ import {
   type ProjectReportFieldLayout,
   type ProjectReportSettings,
 } from "@/lib/projectReportTypes";
-import { getBundledProjectReportTemplate } from "@/lib/projectReportBundledTemplates";
+import {
+  BUNDLED_PROJECT_REPORT_DOMAIN_NAMES,
+  getBundledProjectReportTemplate,
+} from "@/lib/projectReportBundledTemplates";
 
 export type { ProjectReportDomainTemplate, ProjectReportFieldLayout, ProjectReportSettings };
 export { DEFAULT_PROJECT_REPORT_FIELD_LAYOUT };
@@ -226,7 +229,7 @@ export async function fetchProjectReportDomainTemplates(
       fallbackRows
     );
     const seen = new Set(merged.map((r) => r.domain_key));
-    for (const name of ["Accounting & Tally with GST", "Accounting", "GST"] as const) {
+    for (const name of BUNDLED_PROJECT_REPORT_DOMAIN_NAMES) {
       const bundled = getBundledProjectReportTemplate(name);
       if (bundled && !seen.has(bundled.domain_key)) {
         merged.push(bundled);

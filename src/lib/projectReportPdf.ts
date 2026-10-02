@@ -15,7 +15,11 @@ import {
   drawAccountingTallyCoverLogo,
   overlayAccountingTallyStudentFields,
 } from "@/lib/projectReportAccountingTallyOverlay";
-import { isAccountingTallyGstBundledTemplate } from "@/lib/projectReportBundledTemplates";
+import {
+  drawAiEthicsCoverLogo,
+  overlayAiEthicsStudentFields,
+} from "@/lib/projectReportAiEthicsOverlay";
+import { resolveProjectReportBundledOverlayKind } from "@/lib/projectReportBundledTemplates";
 import type { ProjectReportStudentSnapshot } from "@/lib/projectReportStudentSnapshot";
 
 export type ProjectReportGenerateInput = {
@@ -109,17 +113,21 @@ async function overlayDynamicFields(
   const pages = pdfDoc.getPages();
   const section = resolveProjectReportDomainContent(input.domain);
 
-  const accountingTemplate =
+  const bundledOverlayKind =
     options.fromDomainTemplate &&
-    isAccountingTallyGstBundledTemplate(options.domainTemplate || null, input.domain);
+    resolveProjectReportBundledOverlayKind(options.domainTemplate || null, input.domain);
 
   const logoLayout = layout.logo || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.logo!;
   const logoPage = pages[logoLayout.page] || pages[0];
   const logoImage = await embedLogo(pdfDoc, logoBytes);
   const drawLogoOnCover = () => {
     if (!logoImage || !logoPage) return;
-    if (accountingTemplate) {
+    if (bundledOverlayKind === "accounting-tally-gst") {
       drawAccountingTallyCoverLogo(logoPage, logoImage);
+      return;
+    }
+    if (bundledOverlayKind === "ai-ethics-responsible-tech") {
+      drawAiEthicsCoverLogo(logoPage, logoImage);
       return;
     }
     logoPage.drawImage(logoImage, {
@@ -130,11 +138,11 @@ async function overlayDynamicFields(
     });
   };
 
-  if (!accountingTemplate) {
+  if (!bundledOverlayKind) {
     drawLogoOnCover();
   }
 
-  if (!accountingTemplate) {
+  if (!bundledOverlayKind) {
     const nameLayout = layout.universityName || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.universityName!;
     const namePage = pages[nameLayout.page] || pages[0];
     if (namePage) {
@@ -161,8 +169,14 @@ async function overlayDynamicFields(
   }
 
   if (options.fromDomainTemplate) {
-    if (input.student && accountingTemplate) {
+    if (input.student && bundledOverlayKind === "accounting-tally-gst") {
       overlayAccountingTallyStudentFields(pages, font, fontBold, input.student, {
+        collegeName: input.student.collegeName,
+        universityName: input.universityName,
+      });
+      drawLogoOnCover();
+    } else if (input.student && bundledOverlayKind === "ai-ethics-responsible-tech") {
+      overlayAiEthicsStudentFields(pages, font, fontBold, input.student, {
         collegeName: input.student.collegeName,
         universityName: input.universityName,
       });

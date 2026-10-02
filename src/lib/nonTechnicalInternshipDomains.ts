@@ -87,6 +87,7 @@ export const NON_TECHNICAL_INTERNSHIP_DOMAINS: readonly string[] = [
   "Cultural Studies",
   "Rural Development",
   "Human Rights",
+  "AI Ethics & Responsible Tech Policy Research",
   "Journalism",
   "Mass Communication",
   "Media Studies",
