@@ -166,11 +166,20 @@ export function overlayAccountingTallyStudentFields(
     });
 
     paintWhite(page0, COVER.branchBand.x, COVER.branchBand.y, COVER.branchBand.width, COVER.branchBand.height);
-    drawCentered(page0, font, `Branch / Specialization: ${domain}`, {
+    drawCentered(page0, font, `Internship Domain: ${domain}`, {
       x: COVER.branchBand.x,
       y: 435.6,
       width: COVER.branchBand.width,
       size: 10,
+    });
+
+    paintWhite(page0, 96, 270, 178, 14);
+    page0.drawText("Internship Domain", {
+      x: 100.5,
+      y: COVER.branchY,
+      size: COVER.fieldSize,
+      font,
+      color: rgb(0.12, 0.25, 0.55),
     });
 
     if (session) {
@@ -210,7 +219,7 @@ export function overlayAccountingTallyStudentFields(
     paintWhite(cert, 68, 574, 460, 98);
     const certLines = [
       `Mr./Ms. ${student.studentName}, Registration No. ${uniReg}, Roll No. ${uniRoll},`,
-      `a student of ${programmeCourse} (Course) in ${domain} (Branch),`,
+      `a student of ${programmeCourse} (Course) in ${domain} (Internship Domain),`,
       `Semester ${student.semester}, Session ${session}.`,
     ];
     drawLinesAt(cert, font, certLines, bodyX, 650.9, bodySize, lineHeight);
@@ -230,7 +239,7 @@ export function overlayAccountingTallyStudentFields(
     paintWhite(decl, 68, 632, 460, 92);
     const declIntro = [
       `I, ${student.studentName}, Registration No. ${uniReg},`,
-      `Roll No. ${uniRoll}, a student of ${programmeCourse} (Course) in ${domain} (Branch) at`,
+      `Roll No. ${uniRoll}, a student of ${programmeCourse} (Course) in ${domain} (Internship Domain) at`,
       `${collegeLine} (College), affiliated to ${uniLine} (University),`,
       `hereby declare that the project`,
     ];
