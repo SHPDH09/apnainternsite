@@ -106,6 +106,10 @@ async function overlayDynamicFields(
   const pages = pdfDoc.getPages();
   const section = resolveProjectReportDomainContent(input.domain);
 
+  const accountingTemplate =
+    options.fromDomainTemplate &&
+    isAccountingTallyGstBundledTemplate(options.domainTemplate || null, input.domain);
+
   const logoLayout = layout.logo || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.logo!;
   const logoPage = pages[logoLayout.page] || pages[0];
   const logoImage = await embedLogo(pdfDoc, logoBytes);
@@ -118,39 +122,37 @@ async function overlayDynamicFields(
     });
   }
 
-  const nameLayout = layout.universityName || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.universityName!;
-  const namePage = pages[nameLayout.page] || pages[0];
-  if (namePage) {
-    const nameLines = wrapText(
-      input.universityName,
-      fontBold,
-      nameLayout.size,
-      nameLayout.maxWidth || 360
-    );
-    drawLines(namePage, fontBold, nameLines, nameLayout.x, nameLayout.y, nameLayout.size, nameLayout.size + 4);
-  }
+  if (!accountingTemplate) {
+    const nameLayout = layout.universityName || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.universityName!;
+    const namePage = pages[nameLayout.page] || pages[0];
+    if (namePage) {
+      const nameLines = wrapText(
+        input.universityName,
+        fontBold,
+        nameLayout.size,
+        nameLayout.maxWidth || 360
+      );
+      drawLines(namePage, fontBold, nameLines, nameLayout.x, nameLayout.y, nameLayout.size, nameLayout.size + 4);
+    }
 
-  const modeLayout = layout.mode || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.mode!;
-  const modePage = pages[modeLayout.page] || pages[0];
-  if (modePage) {
-    modePage.drawText(`Mode: ${input.mode}`, {
-      x: modeLayout.x,
-      y: modeLayout.y,
-      size: modeLayout.size,
-      font: fontBold,
-      color: rgb(0.12, 0.25, 0.55),
-    });
+    const modeLayout = layout.mode || DEFAULT_PROJECT_REPORT_FIELD_LAYOUT.mode!;
+    const modePage = pages[modeLayout.page] || pages[0];
+    if (modePage) {
+      modePage.drawText(`Mode: ${input.mode}`, {
+        x: modeLayout.x,
+        y: modeLayout.y,
+        size: modeLayout.size,
+        font: fontBold,
+        color: rgb(0.12, 0.25, 0.55),
+      });
+    }
   }
 
   if (options.fromDomainTemplate) {
-    if (
-      input.student &&
-      isAccountingTallyGstBundledTemplate(options.domainTemplate || null, input.domain)
-    ) {
-      overlayAccountingTallyStudentFields(pages, font, input.student, {
+    if (input.student && accountingTemplate) {
+      overlayAccountingTallyStudentFields(pages, font, fontBold, input.student, {
         collegeName: input.student.collegeName,
         universityName: input.universityName,
-        mode: input.mode,
       });
     }
     return;
