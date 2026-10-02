@@ -25,6 +25,11 @@ function parseExisting(filePath) {
 
 const preserved = parseExisting(out);
 
+function isPlaceholderDatabaseUrl(url) {
+  if (!url) return true;
+  return /:(PASSWORD|YOUR_PASSWORD)@/i.test(String(url));
+}
+
 /** @type {string[]} */
 const lines = ["# Auto-generated from Cursor Environment secrets — do not commit"];
 
@@ -41,21 +46,33 @@ let databaseUrl =
   process.env.AWS_RDS_DATABASE_URL?.trim() ||
   process.env.AWS_RDS_URL?.trim();
 
-if (!databaseUrl) {
+if (!databaseUrl || isPlaceholderDatabaseUrl(databaseUrl)) {
   const host =
     process.env.AWS_RDS_HOST?.trim() ||
+    preserved.AWS_RDS_HOST?.trim() ||
     "ezyintern-staging-db.c5makww6eq8y.ap-south-1.rds.amazonaws.com";
-  const user = process.env.AWS_RDS_USER?.trim() || "ezyintern";
-  const pass = process.env.AWS_RDS_PASSWORD?.trim();
-  const db = process.env.AWS_RDS_DATABASE?.trim() || "ezyintern";
-  const port = process.env.AWS_RDS_PORT?.trim() || "5432";
-  if (host && user && pass) {
+  const user =
+    process.env.AWS_RDS_USER?.trim() || preserved.AWS_RDS_USER?.trim() || "ezyintern";
+  const pass =
+    process.env.AWS_RDS_PASSWORD?.trim() || preserved.AWS_RDS_PASSWORD?.trim();
+  const db =
+    process.env.AWS_RDS_DATABASE?.trim() || preserved.AWS_RDS_DATABASE?.trim() || "ezyintern";
+  const port =
+    process.env.AWS_RDS_PORT?.trim() || preserved.AWS_RDS_PORT?.trim() || "5432";
+  if (host && user && pass && !/^(PASSWORD|YOUR_PASSWORD)$/i.test(pass)) {
     databaseUrl = `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${host}:${port}/${db}?sslmode=require`;
   }
 }
 
-if (databaseUrl) {
+if (databaseUrl && !isPlaceholderDatabaseUrl(databaseUrl)) {
   lines.push(`DATABASE_URL=${databaseUrl.replace(/^["']|["']$/g, "")}`);
+}
+
+for (const key of ["AWS_RDS_HOST", "AWS_RDS_USER", "AWS_RDS_PASSWORD", "AWS_RDS_DATABASE", "AWS_RDS_PORT"]) {
+  const val = process.env[key]?.trim() || preserved[key]?.trim();
+  if (val && !lines.some((l) => l.startsWith(`${key}=`))) {
+    lines.push(`${key}=${val}`);
+  }
 }
 
 const smtpHost = process.env.SMTP_HOST?.trim();
@@ -77,7 +94,12 @@ for (const key of ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "MAIL_FRO
   }
 }
 
-if (lines.length === 1) {
+const hasDb =
+  lines.some((l) => l.startsWith("DATABASE_URL=")) ||
+  lines.some((l) => l.startsWith("AWS_RDS_PASSWORD="));
+const hasAws = awsKey && awsSecret;
+
+if (lines.length === 1 || (!hasDb && !hasAws)) {
   console.log("[cloud-agent-env] No AWS/RDS secrets in environment — skip .env.awsrds.local");
   process.exit(0);
 }

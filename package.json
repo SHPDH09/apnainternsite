@@ -37,6 +37,7 @@
     "aws:rds:site-cms": "node aws/scripts/apply-site-cms-rds.mjs",
     "aws:rds:admin-registration": "node aws/scripts/apply-admin-registration-rds.mjs",
     "aws:rds:student-data-upload": "node aws/scripts/apply-student-data-upload-rds.mjs",
+    "aws:rds:learning-materials": "node aws/scripts/apply-learning-materials-rds.mjs",
     "aws:rds:apply-all": "node aws/scripts/apply-all-rds-sql.mjs",
     "aws:rds:provision": "bash aws/scripts/provision-rds.sh",
     "aws:rds:export": "node aws/scripts/run-rds-export.mjs",

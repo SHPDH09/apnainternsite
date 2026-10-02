@@ -46,8 +46,12 @@ const env = {
   RDS_RPC_OPEN: fileEnv.RDS_RPC_OPEN || "true",
 };
 
-if (!env.DATABASE_URL) {
-  console.error("\n❌ DATABASE_URL missing in .env.awsrds.local\n");
+try {
+  const { loadAwsRdsDatabaseUrl } = await import("../aws/scripts/aws-rds-url.mjs");
+  env.DATABASE_URL = loadAwsRdsDatabaseUrl();
+} catch (err) {
+  console.error("\n❌ AWS RDS not configured:", err instanceof Error ? err.message : err);
+  console.error("   Add AWS_RDS_PASSWORD to Cursor Environment secrets, or fix .env.awsrds.local\n");
   process.exit(1);
 }
 
