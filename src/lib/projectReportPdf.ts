@@ -153,6 +153,7 @@ async function overlayDynamicFields(
       overlayAccountingTallyStudentFields(pages, font, fontBold, input.student, {
         collegeName: input.student.collegeName,
         universityName: input.universityName,
+        hideLogoCaption: !!logoBytes?.length,
       });
     }
     return;

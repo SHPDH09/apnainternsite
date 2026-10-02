@@ -3,9 +3,11 @@ import type { ProjectReportStudentSnapshot } from "@/lib/projectReportStudentSna
 
 /** pdf-lib coords (origin bottom-left), matched to template via pdf.js text extraction. */
 const COVER = {
-  universityLine: { x: 115, y: 651, width: 375, size: 12 },
-  collegeLine: { x: 115, y: 624, width: 375, size: 11 },
-  degreeLine: { x: 148, y: 453, width: 340, size: 10 },
+  /** Baselines sit on the two header rules (663.6 / 635.2), not on grey hint labels below. */
+  universityLine: { x: 108, y: 667, width: 380, size: 11 },
+  collegeLine: { x: 108, y: 639, width: 380, size: 11 },
+  branchLine: { x: 280, y: 436, width: 280, size: 10 },
+  degreeLine: { x: 148, y: 453, width: 240, size: 10 },
   valueX: 282,
   nameY: 395.7,
   registrationY: 375.6,
@@ -40,6 +42,26 @@ function drawValue(page: PDFPage, font: PDFFont, text: string, slot: TextSlot) {
   });
 }
 
+function paintWhite(page: PDFPage, x: number, y: number, width: number, height: number) {
+  page.drawRectangle({
+    x,
+    y,
+    width,
+    height,
+    color: rgb(1, 1, 1),
+    borderWidth: 0,
+  });
+}
+
+/** Hide template hints / logo captions so filled text does not overlap grey placeholders. */
+function maskCoverHeaderPlaceholders(page: PDFPage, options: { hideLogoCaption: boolean }) {
+  paintWhite(page, 108, 646, 385, 24);
+  paintWhite(page, 142, 618, 352, 24);
+  if (options.hideLogoCaption) {
+    paintWhite(page, 218, 696, 168, 52);
+  }
+}
+
 function drawCentered(
   page: PDFPage,
   font: PDFFont,
@@ -66,7 +88,7 @@ export function overlayAccountingTallyStudentFields(
   font: PDFFont,
   fontBold: PDFFont,
   student: ProjectReportStudentSnapshot,
-  extras: { collegeName: string; universityName: string }
+  extras: { collegeName: string; universityName: string; hideLogoCaption?: boolean }
 ) {
   const collegeLine = extras.collegeName || student.collegeName;
   const uniLine = extras.universityName || student.universityName;
@@ -76,13 +98,22 @@ export function overlayAccountingTallyStudentFields(
 
   const page0 = pages[0];
   if (page0) {
+    maskCoverHeaderPlaceholders(page0, {
+      hideLogoCaption: extras.hideLogoCaption !== false,
+    });
     drawCentered(page0, fontBold, uniLine, COVER.universityLine);
-    drawCentered(page0, font, collegeLine, COVER.collegeLine);
+    drawCentered(page0, fontBold, collegeLine, COVER.collegeLine);
     drawValue(page0, font, degreeLine, {
       page: 0,
       x: COVER.degreeLine.x,
       y: COVER.degreeLine.y,
       size: COVER.degreeLine.size,
+    });
+    drawValue(page0, font, branchLine, {
+      page: 0,
+      x: COVER.branchLine.x,
+      y: COVER.branchLine.y,
+      size: COVER.branchLine.size,
     });
 
     const coverFields: Array<{ y: number; text: string }> = [
