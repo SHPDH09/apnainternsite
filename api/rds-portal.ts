@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import jwt from "jsonwebtoken";
-import { Pool, type PoolClient } from "pg";
+import type { PoolClient } from "pg";
 import { getRpcDef } from "../aws/server/rpc-registry.js";
 import { handleVercelAuthLite } from "../aws/server/vercel-auth-lite.js";
+import { getVercelLitePool } from "../aws/server/vercel-lite-pool.js";
 
 function portalPathFromRequest(req: VercelRequest): string {
   const segment = String(req.query.segment || "").trim();
@@ -47,7 +48,6 @@ const LOCAL_ANON_KEY = String(
 
 type JwtClaims = { sub: string; email?: string; role?: string };
 
-let litePool: Pool | null = null;
 
 function jwtSecret(): string {
   return (
@@ -175,7 +175,7 @@ async function callRpcLite(
   args: Record<string, unknown>,
   jwtClaims: JwtClaims | null
 ): Promise<unknown> {
-  const client = await getLitePool().connect();
+  const client = await getVercelLitePool().connect();
   try {
     await client.query("BEGIN");
     await applyJwtClaims(client, jwtClaims);
@@ -286,27 +286,6 @@ async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: str
   }
 }
 
-function liteConnectionString(): string {
-  const raw = String(process.env.DATABASE_URL || "").trim();
-  if (!raw) throw new Error("DATABASE_URL missing");
-  return raw
-    .replace(/([?&])sslmode=[^&]*/gi, "$1")
-    .replace(/[?&]$/, "")
-    .replace(/\?&/, "?");
-}
-
-function getLitePool(): Pool {
-  if (!litePool) {
-    litePool = new Pool({
-      connectionString: liteConnectionString(),
-      max: 2,
-      connectionTimeoutMillis: 12_000,
-      ssl: { rejectUnauthorized: false },
-    });
-  }
-  return litePool;
-}
-
 function parseSelect(raw: unknown): string {
   const s = String(raw || "*").trim();
   if (!s || s === "*") return "*";
@@ -343,10 +322,32 @@ function buildWhere(query: VercelRequest["query"]): { sql: string; params: unkno
     if (!IDENT.test(key)) continue;
     const val = Array.isArray(rawVal) ? rawVal[0] : rawVal;
     const s = String(val ?? "");
-    const m = s.match(/^(eq|neq|gt|gte|lt|lte|like|ilike)\.(.*)$/i);
+    const inMatch = s.match(/^in\.\((.*)\)$/is);
+    if (inMatch) {
+      const inner = inMatch[1].trim();
+      const items = inner
+        ? inner
+            .split(",")
+            .map((x) => x.trim())
+            .filter(Boolean)
+        : [];
+      if (!items.length) {
+        parts.push("FALSE");
+        continue;
+      }
+      params.push(items);
+      parts.push(`"${key}" = ANY($${params.length}::text[])`);
+      continue;
+    }
+
+    const m = s.match(/^(eq|neq|gt|gte|lt|lte|like|ilike|is)\.(.*)$/i);
     if (!m) continue;
     const op = m[1].toLowerCase();
     const rhs = m[2];
+    if (op === "is" && rhs === "null") {
+      parts.push(`"${key}" IS NULL`);
+      continue;
+    }
     if (rhs === "null") {
       parts.push(`"${key}" IS NULL`);
       continue;
@@ -391,7 +392,7 @@ async function tryRestLite(req: VercelRequest, res: VercelResponse, pathOnly: st
   sql += ` LIMIT ${limit} OFFSET ${offset}`;
 
   try {
-    const { rows } = await getLitePool().query(sql, params);
+    const { rows } = await getVercelLitePool().query(sql, params);
     if (req.method === "HEAD") {
       res.status(200).end();
       return true;

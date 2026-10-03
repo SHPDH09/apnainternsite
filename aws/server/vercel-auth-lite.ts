@@ -3,13 +3,13 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import bcrypt from "bcryptjs";
-import { Pool } from "pg";
 import {
   signAccessToken,
   signRefreshToken,
   userFromPayload,
   verifyToken,
 } from "./local-jwt.js";
+import { getVercelLitePool } from "./vercel-lite-pool.js";
 
 const LOCAL_ANON_KEY = String(
   process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
@@ -30,29 +30,6 @@ type AuthUserRow = {
   updated_at: string | null;
   last_sign_in_at: string | null;
 };
-
-let litePool: Pool | null = null;
-
-function liteConnectionString(): string {
-  const raw = String(process.env.DATABASE_URL || "").trim();
-  if (!raw) throw new Error("DATABASE_URL missing");
-  return raw
-    .replace(/([?&])sslmode=[^&]*/gi, "$1")
-    .replace(/[?&]$/, "")
-    .replace(/\?&/, "?");
-}
-
-function getLitePool(): Pool {
-  if (!litePool) {
-    litePool = new Pool({
-      connectionString: liteConnectionString(),
-      max: 2,
-      connectionTimeoutMillis: 12_000,
-      ssl: { rejectUnauthorized: false },
-    });
-  }
-  return litePool;
-}
 
 export function authPathFromVercelRequest(req: VercelRequest): string {
   const segment = String(req.query.segment || "auth").trim();
@@ -129,7 +106,7 @@ function tokenResponseForRow(row: AuthUserRow) {
 }
 
 async function findAuthUserByEmail(email: string): Promise<AuthUserRow | null> {
-  const { rows } = await getLitePool().query<AuthUserRow>(
+  const { rows } = await getVercelLitePool().query<AuthUserRow>(
     `SELECT id, email, encrypted_password, banned_until, email_confirmed_at,
             raw_app_meta_data, raw_user_meta_data, role, created_at, updated_at, last_sign_in_at
      FROM auth.users
@@ -141,7 +118,7 @@ async function findAuthUserByEmail(email: string): Promise<AuthUserRow | null> {
 }
 
 async function findAuthUserById(id: string): Promise<AuthUserRow | null> {
-  const { rows } = await getLitePool().query<AuthUserRow>(
+  const { rows } = await getVercelLitePool().query<AuthUserRow>(
     `SELECT id, email, encrypted_password, banned_until, email_confirmed_at,
             raw_app_meta_data, raw_user_meta_data, role, created_at, updated_at, last_sign_in_at
      FROM auth.users WHERE id = $1::uuid LIMIT 1`,
@@ -235,7 +212,7 @@ async function authTokenLite(req: VercelRequest, res: VercelResponse): Promise<v
     let ok = await bcrypt.compare(password, row.encrypted_password);
     if (!ok) {
       try {
-        const repaired = await getLitePool().query<{ result: boolean }>(
+        const repaired = await getVercelLitePool().query<{ result: boolean }>(
           `SELECT public.repair_student_auth_login($1, $2) AS result`,
           [email.toLowerCase(), password]
         );
@@ -258,7 +235,7 @@ async function authTokenLite(req: VercelRequest, res: VercelResponse): Promise<v
       return;
     }
 
-    await getLitePool().query(`UPDATE auth.users SET last_sign_in_at = now() WHERE id = $1::uuid`, [
+    await getVercelLitePool().query(`UPDATE auth.users SET last_sign_in_at = now() WHERE id = $1::uuid`, [
       row.id,
     ]);
     res.status(200).json(tokenResponseForRow(row));
