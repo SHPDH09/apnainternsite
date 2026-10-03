@@ -37,3 +37,4 @@ meta-mail.json
 .vercel
 .env*
 api/.bundled/
+supabase/.temp/

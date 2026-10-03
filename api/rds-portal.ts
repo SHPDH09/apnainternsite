@@ -168,7 +168,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   req.url = rewritten;
-  const fn = await loadStorageHandler();
+  const fn = pathOnly.startsWith("/rest/")
+    ? await loadRestHandler()
+    : await loadStorageHandler();
   await fn(req, res);
 }
 
