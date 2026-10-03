@@ -7,14 +7,19 @@ import { getRdsIamAuthToken, rdsIamAuthEnabled } from "./rds-iam-pg.js";
 
 let pool: Pool | null = null;
 
-/** Vercel project env often overrides vercel.json with stale Mumbai ezyintern URL — force Hyderabad IAM on Vercel. */
+const HYDERABAD_CANONICAL_URL =
+  "postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require";
+
+/** Vercel Production env often overrides vercel.json with stale Mumbai `ezyintern` URL. */
 export function resolveDatabaseUrl(): string {
-  const fromEnv = process.env.DATABASE_URL?.trim();
-  if (rdsIamAuthEnabled() && process.env.VERCEL) {
+  if (process.env.VERCEL) {
     const canonical = process.env.RDS_CANONICAL_DATABASE_URL?.trim();
     if (canonical) return canonical;
-    return "postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require";
+    const fromEnv = process.env.DATABASE_URL?.trim();
+    if (fromEnv?.includes("database-1.cluster-cpy4aaca6mfv")) return fromEnv;
+    return HYDERABAD_CANONICAL_URL;
   }
+  const fromEnv = process.env.DATABASE_URL?.trim();
   if (!fromEnv) {
     throw new Error("DATABASE_URL is not set — cannot query RDS");
   }
@@ -40,10 +45,7 @@ function normalizeDatabaseUrl(raw: string): { connectionString: string; useSsl: 
 export function getPool(): Pool {
   if (pool) return pool;
 
-  const raw = process.env.DATABASE_URL?.trim();
-  if (!raw) {
-    throw new Error("DATABASE_URL is not set — cannot query RDS");
-  }
+  const raw = resolveDatabaseUrl();
 
   const { connectionString, useSsl } = normalizeDatabaseUrl(raw);
 
@@ -61,8 +63,8 @@ export function getPool(): Pool {
 
 /** Refresh libpq PGPASSWORD when RDS IAM auth is enabled (token TTL ~15 min). */
 export async function refreshRdsIamPasswordIfNeeded(): Promise<void> {
-  const raw = process.env.DATABASE_URL?.trim();
-  if (!raw || !rdsIamAuthEnabled()) return;
+  const raw = resolveDatabaseUrl();
+  if (!rdsIamAuthEnabled()) return;
   process.env.PGPASSWORD = await getRdsIamAuthToken(raw);
   if (pool) {
     await pool.end();
