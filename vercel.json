@@ -17,6 +17,8 @@
     "AWS_RDS_REGION": "ap-south-2",
     "RDS_IAM_AUTH": "true",
     "LOCAL_SUPABASE": "true",
+    "VITE_SUPABASE_URL": "https://apnaintern.in/api",
+    "VITE_SUPABASE_PUBLISHABLE_KEY": "local-anon-key",
     "LOCAL_JWT_SECRET": "change-me-staging-jwt-secret",
     "RDS_RPC_OPEN": "true",
     "DATABASE_URL": "postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require",

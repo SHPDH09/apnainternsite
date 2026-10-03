@@ -41,6 +41,13 @@ export function resolveDeployedApiBase(): string {
   if (window.location.hostname.endsWith(".workers.dev")) {
     return `${origin}/staging`;
   }
+  /** Vercel serves PostgREST/auth at /api/rest and /api/auth (see vercel.json + Express). */
+  if (
+    window.location.hostname === "apnaintern.in" ||
+    window.location.hostname.endsWith(".vercel.app")
+  ) {
+    return `${origin}/api`;
+  }
   return origin;
 }
 
