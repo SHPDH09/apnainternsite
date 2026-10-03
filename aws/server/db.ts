@@ -4,45 +4,37 @@
  */
 import { Pool, type QueryResultRow } from "pg";
 import { getRdsIamAuthToken, rdsIamAuthEnabled } from "./rds-iam-pg.js";
+import {
+  hyderabadDatabaseUrl,
+  isHyderabadDatabaseUrl,
+  isStaleRdsDatabaseUrl,
+} from "./hyderabad-rds-url.js";
 
 let pool: Pool | null = null;
 
-const HYDERABAD_CANONICAL_URL =
-  "postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require";
-
-function isStaleRdsDatabaseUrl(url: string): boolean {
-  return (
-    /\/\/ezyintern@/i.test(url) ||
-    /ap-south-1\.rds\.amazonaws\.com/i.test(url) ||
-    /ezyintern-staging-db/i.test(url)
-  );
-}
-
-/** Vercel Production env often overrides vercel.json with stale Mumbai `ezyintern` URL. */
+/** Vercel/Lambda: ignore stale Mumbai URLs; use Hyderabad password auth. */
 export function resolveDatabaseUrl(): string {
   const preferHyderabadOnStaleUrl =
     process.env.VERCEL || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 
   if (preferHyderabadOnStaleUrl) {
     const canonical = process.env.RDS_CANONICAL_DATABASE_URL?.trim();
-    if (canonical && !isStaleRdsDatabaseUrl(canonical)) return canonical;
-    const fromEnv = process.env.DATABASE_URL?.trim();
-    if (fromEnv && !isStaleRdsDatabaseUrl(fromEnv)) {
-      if (
-        fromEnv.includes("database-1.cluster-cpy4aaca6mfv") ||
-        fromEnv.includes("database-1-instance-1.cpy4aaca6mfv")
-      ) {
-        return fromEnv;
-      }
-      if (/\/\/postgres@/i.test(fromEnv) && /ap-south-2/i.test(fromEnv)) return fromEnv;
+    if (canonical && isHyderabadDatabaseUrl(canonical) && !isStaleRdsDatabaseUrl(canonical)) {
+      return canonical;
     }
-    return HYDERABAD_CANONICAL_URL;
+    const fromEnv = process.env.DATABASE_URL?.trim();
+    if (fromEnv && isHyderabadDatabaseUrl(fromEnv) && !isStaleRdsDatabaseUrl(fromEnv)) {
+      return fromEnv;
+    }
+    if (fromEnv && !isStaleRdsDatabaseUrl(fromEnv) && /ap-south-2/i.test(fromEnv)) {
+      return fromEnv;
+    }
+    return hyderabadDatabaseUrl();
   }
   const fromEnv = process.env.DATABASE_URL?.trim();
-  if (!fromEnv) {
-    throw new Error("DATABASE_URL is not set — cannot query RDS");
-  }
-  return fromEnv;
+  if (fromEnv && !isStaleRdsDatabaseUrl(fromEnv)) return fromEnv;
+  if (fromEnv) return hyderabadDatabaseUrl();
+  throw new Error("DATABASE_URL is not set — cannot query RDS");
 }
 
 function normalizeDatabaseUrl(raw: string): { connectionString: string; useSsl: boolean } {

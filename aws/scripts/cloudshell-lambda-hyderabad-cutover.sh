@@ -6,7 +6,7 @@ cd "$ROOT"
 
 FN="${LAMBDA_FUNCTION_NAME:-ezyintern-api-staging}"
 LAMBDA_REGION="${LAMBDA_AWS_REGION:-ap-south-1}"
-HYDERABAD_URL="${DATABASE_URL:-postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require}"
+HYDERABAD_URL="${DATABASE_URL:-postgresql://postgres:Raunak12583@database-1.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require}"
 
 echo "→ Bundle Lambda…"
 node aws/scripts/bundle-lambda.mjs
@@ -21,7 +21,7 @@ aws lambda wait function-updated --function-name "$FN" --region "$LAMBDA_REGION"
 
 echo "→ Update DATABASE_URL (Hyderabad + IAM)…"
 export DATABASE_URL="$HYDERABAD_URL"
-export RDS_IAM_AUTH=true
+export RDS_IAM_AUTH=false
 export AWS_RDS_REGION=ap-south-2
 export LAMBDA_FUNCTION_NAME="$FN"
 export AWS_DEFAULT_REGION="$LAMBDA_REGION"
