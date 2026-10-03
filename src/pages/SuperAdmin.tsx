@@ -682,7 +682,13 @@ const SuperAdmin = () => {
         supabase.from("departments").select("*").order("name"),
         supabase.from("certificates").select("*").order("created_at", { ascending: false }).limit(100),
         supabase.from("internship_domains").select("*").order("name"),
-        supabase.from("classes").select("*").order("scheduled_at", { ascending: true }).limit(150),
+        fetchAllSupabaseRows(supabase, "classes", {
+          orderBy: "scheduled_at",
+          ascending: true,
+        }).catch((err) => {
+          console.warn("[super-admin] classes:", err);
+          return [] as Record<string, unknown>[];
+        }),
         supabase.from("system_settings").select("*"),
         supabase.from("admin_permissions").select("*"),
         (async () => {
