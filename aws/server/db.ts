@@ -8,7 +8,7 @@ import { getRdsIamAuthToken, rdsIamAuthEnabled } from "./rds-iam-pg.js";
 let pool: Pool | null = null;
 
 const HYDERABAD_CANONICAL_URL =
-  "postgresql://postgres@database-1-instance-1.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require";
+  "postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require";
 
 function isStaleRdsDatabaseUrl(url: string): boolean {
   return (
