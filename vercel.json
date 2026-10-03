@@ -4,8 +4,7 @@
   "framework": "vite",
   "functions": {
     "api/supabase-surface.ts": {
-      "maxDuration": 60,
-      "includeFiles": "aws/server/**"
+      "maxDuration": 60
     }
   },
   "env": {

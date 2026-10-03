@@ -1,7 +1,8 @@
-// Vercel typechecks this file in isolation; aws/server is bundled at runtime via .vercelignore whitelist.
-// @ts-nocheck
+// @ts-nocheck — Vercel typechecks API routes without aws/server in tsconfig paths.
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import serverless from "serverless-http";
+import { refreshRdsIamPasswordIfNeeded } from "../aws/server/db.js";
+import { createSupabaseSurfaceApp } from "../aws/server/supabase-surface-app.js";
 
 let handlerPromise: Promise<ReturnType<typeof serverless>> | null = null;
 
@@ -20,8 +21,7 @@ function targetPath(req: VercelRequest): string | null {
     const q = params.toString();
     return `/${surface}${tail}${q ? `?${q}` : ""}`;
   }
-  const m = pathOnly.match(/^\/api\/supabase-surface$/);
-  if (m && surface) {
+  if (pathOnly.match(/^\/api\/supabase-surface$/) && surface) {
     const tail = sub ? `/${sub}` : "";
     const q = params.toString();
     return `/${surface}${tail}${q ? `?${q}` : ""}`;
@@ -32,9 +32,7 @@ function targetPath(req: VercelRequest): string | null {
 async function getHandler() {
   if (!handlerPromise) {
     handlerPromise = (async () => {
-      const { refreshRdsIamPasswordIfNeeded } = await import("../aws/server/db.js");
       await refreshRdsIamPasswordIfNeeded();
-      const { createSupabaseSurfaceApp } = await import("../aws/server/supabase-surface-app.js");
       const app = await createSupabaseSurfaceApp();
       return serverless(app);
     })();
@@ -42,8 +40,8 @@ async function getHandler() {
   return handlerPromise;
 }
 
+/** PostgREST + GoTrue + storage on Vercel (Hyderabad RDS). */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { refreshRdsIamPasswordIfNeeded } = await import("../aws/server/db.js");
   await refreshRdsIamPasswordIfNeeded();
   const path = targetPath(req);
   if (!path) {
