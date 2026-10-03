@@ -68,18 +68,18 @@
     },
     {
       "source": "/auth/(.*)",
-      "destination": "/api/supabase-surface/auth/$1"
+      "destination": "/api/auth/$1"
     },
     {
       "source": "/rest/(.*)",
-      "destination": "/api/supabase-surface/rest/$1"
+      "destination": "/api/rest/$1"
     },
     {
       "source": "/storage/(.*)",
-      "destination": "/api/supabase-surface/storage/$1"
+      "destination": "/api/storage/$1"
     },
     {
-      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|supabase-surface/).*)",
+      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|rest/|auth/|storage/).*)",
       "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/$1"
     },
     {

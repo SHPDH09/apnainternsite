@@ -23,11 +23,10 @@ function rewriteFromVercelPath(req: IncomingMessage): void {
   const q = qIdx >= 0 ? raw.slice(qIdx) : "";
   let pathOnly = qIdx >= 0 ? raw.slice(0, qIdx) : raw;
 
-  const prefix = "/api/supabase-surface";
-  if (pathOnly === prefix) {
-    pathOnly = "/";
-  } else if (pathOnly.startsWith(`${prefix}/`)) {
-    pathOnly = pathOnly.slice(prefix.length) || "/";
+  if (pathOnly.startsWith("/api/rest") || pathOnly.startsWith("/api/auth") || pathOnly.startsWith("/api/storage")) {
+    pathOnly = pathOnly.slice("/api".length) || "/";
+  } else if (pathOnly.startsWith("/api/supabase-surface/")) {
+    pathOnly = pathOnly.slice("/api/supabase-surface".length) || "/";
   }
 
   req.url = `${pathOnly}${q}`;

@@ -11,7 +11,9 @@ api/**
 !api/otp-deliver.ts
 !api/request-otp.ts
 !api/auth/forgot-password.ts
-!api/supabase-surface/**
+!api/rest/**
+!api/auth/**
+!api/storage/**
 !api/.bundled/**
 # Do not whitelist api/lib/** — each api/*.ts becomes a serverless function (Hobby max 12).
 # Mail handlers bundle lib/* at build time via imports.
