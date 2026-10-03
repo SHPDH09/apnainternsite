@@ -4,12 +4,16 @@ import serverless from "serverless-http";
 let handlerPromise: Promise<ReturnType<typeof serverless>> | null = null;
 
 function rewriteUrl(req: VercelRequest, stripPrefix: string, mount: string): void {
-  const raw = req.url || "/";
+  let raw = req.url || "/";
+  raw = raw.replace(/^\/staging(?=\/)/, "");
   const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
   const pathOnly = raw.split("?")[0] || "/";
-  const rest = pathOnly.startsWith(stripPrefix)
-    ? pathOnly.slice(stripPrefix.length) || "/"
-    : pathOnly;
+  let rest = pathOnly;
+  if (pathOnly.startsWith(stripPrefix)) {
+    rest = pathOnly.slice(stripPrefix.length) || "/";
+  } else if (pathOnly.startsWith(mount)) {
+    rest = pathOnly.slice(mount.length) || "/";
+  }
   req.url = `${mount}${rest.startsWith("/") ? rest : `/${rest}`}${q}`;
 }
 
