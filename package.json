@@ -39,6 +39,7 @@
     "aws:rds:student-data-upload": "node aws/scripts/apply-student-data-upload-rds.mjs",
     "aws:rds:apply-all": "node aws/scripts/apply-all-rds-sql.mjs",
     "supabase:apply-all": "node scripts/apply-all-supabase-sql.mjs",
+    "vercel:env:production": "node scripts/vercel-set-all-production-env.mjs",
     "aws:rds:provision": "bash aws/scripts/provision-rds.sh",
     "aws:rds:export": "node aws/scripts/run-rds-export.mjs",
     "aws:rds:export:full": "node aws/scripts/run-rds-export.mjs --full",
