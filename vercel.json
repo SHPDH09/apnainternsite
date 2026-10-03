@@ -66,16 +66,16 @@
       "destination": "/api/send-mail"
     },
     {
-      "source": "/auth/:path*",
-      "destination": "/api/auth/:path*"
+      "source": "/auth/(.*)",
+      "destination": "/api/auth/$1"
     },
     {
-      "source": "/rest/:path*",
-      "destination": "/api/rest/:path*"
+      "source": "/rest/(.*)",
+      "destination": "/api/rest/$1"
     },
     {
-      "source": "/storage/:path*",
-      "destination": "/api/storage/:path*"
+      "source": "/storage/(.*)",
+      "destination": "/api/storage/$1"
     },
     {
       "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|admin-partner-register$|partner-application-submit$|ensure-partner-applications$|ensure-project-report-templates$|ensure-learning-materials$|ensure-staff-attendance-offices$|staff-office-rpc$|rds-apply-all$|rest/|auth/|storage/).*)",

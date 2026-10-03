@@ -105,6 +105,23 @@ async function buildApp(): Promise<Express> {
     });
   }
 
+  /** Vercel invokes `/api/rest/*` serverless routes; Express mounts `/rest/*`. */
+  if (process.env.VERCEL) {
+    app.use((req, _res, next) => {
+      const raw = req.url || "/";
+      const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+      const pathOnly = raw.split("?")[0] || "/";
+      const mapped = pathOnly.replace(
+        /^\/api\/(rest|auth|storage)(?=\/|$)/,
+        (_m, surface: string) => `/${surface}`
+      );
+      if (mapped !== pathOnly) {
+        req.url = `${mapped}${q}`;
+      }
+      next();
+    });
+  }
+
   // CORS — reflect Origin. Do not use "*" with credentials (browser rejects).
   // Prefer Express-only CORS (disable API Gateway CorsConfiguration) so Origin is preserved.
   app.use((req, res, next) => {
