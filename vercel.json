@@ -1,5 +1,5 @@
 {
-  "buildCommand": "vite build",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "dist",
   "framework": "vite",
   "env": {
@@ -68,15 +68,15 @@
     },
     {
       "source": "/auth/(.*)",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/$1"
+      "destination": "/api/supabase-surface/auth/$1"
     },
     {
       "source": "/rest/(.*)",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/$1"
+      "destination": "/api/supabase-surface/rest/$1"
     },
     {
       "source": "/storage/(.*)",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/storage/$1"
+      "destination": "/api/supabase-surface/storage/$1"
     },
     {
       "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$).*)",
