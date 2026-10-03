@@ -68,18 +68,18 @@
     },
     {
       "source": "/auth/(.*)",
-      "destination": "/api/auth/$1"
+      "destination": "/api/rds-portal?segment=auth&path=$1"
     },
     {
       "source": "/rest/(.*)",
-      "destination": "/api/rest/$1"
+      "destination": "/api/rds-portal?segment=rest&path=$1"
     },
     {
       "source": "/storage/(.*)",
-      "destination": "/api/storage/$1"
+      "destination": "/api/rds-portal?segment=storage&path=$1"
     },
     {
-      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|rest/|auth/|storage/).*)",
+      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|rds-portal$).*)",
       "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/$1"
     },
     {
