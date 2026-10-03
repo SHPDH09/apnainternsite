@@ -32,6 +32,10 @@ const current = awsJson([
 
 const vars = { ...(current.Environment?.Variables || {}) };
 vars.DATABASE_URL = databaseUrl;
+if (process.env.RDS_IAM_AUTH === "true") {
+  vars.RDS_IAM_AUTH = "true";
+  vars.AWS_RDS_REGION = process.env.AWS_RDS_REGION || "ap-south-2";
+}
 if (process.env.SET_LAMBDA_REGION === "true" && process.env.LAMBDA_AWS_REGION) {
   vars.AWS_DEFAULT_REGION = process.env.LAMBDA_AWS_REGION;
 }

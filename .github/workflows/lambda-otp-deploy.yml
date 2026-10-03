@@ -55,6 +55,20 @@ jobs:
             --function-name ezyintern-api-staging \
             --region "${AWS_DEFAULT_REGION}"
 
+      - name: Update Lambda DATABASE_URL (Hyderabad)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-1' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.TARGET_DATABASE_URL }}
+          RDS_IAM_AUTH: "true"
+        run: |
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${DATABASE_URL:-}" ]; then
+            echo "::warning::Skipping Lambda DATABASE_URL — set AWS + DATABASE_URL secrets"
+            exit 0
+          fi
+          node aws/scripts/update-lambda-database-url.mjs
+
       - name: Update Lambda Hostinger SMTP env
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
