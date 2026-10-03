@@ -10,13 +10,24 @@ let pool: Pool | null = null;
 const HYDERABAD_CANONICAL_URL =
   "postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require";
 
+function isStaleRdsDatabaseUrl(url: string): boolean {
+  return (
+    /\/\/ezyintern@/i.test(url) ||
+    /ap-south-1\.rds\.amazonaws\.com/i.test(url) ||
+    /ezyintern-staging-db/i.test(url)
+  );
+}
+
 /** Vercel Production env often overrides vercel.json with stale Mumbai `ezyintern` URL. */
 export function resolveDatabaseUrl(): string {
   if (process.env.VERCEL) {
     const canonical = process.env.RDS_CANONICAL_DATABASE_URL?.trim();
-    if (canonical) return canonical;
+    if (canonical && !isStaleRdsDatabaseUrl(canonical)) return canonical;
     const fromEnv = process.env.DATABASE_URL?.trim();
-    if (fromEnv?.includes("database-1.cluster-cpy4aaca6mfv")) return fromEnv;
+    if (fromEnv && !isStaleRdsDatabaseUrl(fromEnv)) {
+      if (fromEnv.includes("database-1.cluster-cpy4aaca6mfv")) return fromEnv;
+      if (/\/\/postgres@/i.test(fromEnv) && /ap-south-2/i.test(fromEnv)) return fromEnv;
+    }
     return HYDERABAD_CANONICAL_URL;
   }
   const fromEnv = process.env.DATABASE_URL?.trim();

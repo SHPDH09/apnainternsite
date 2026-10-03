@@ -87,7 +87,7 @@ async function buildApp(): Promise<Express> {
 
   const stagePrefix = process.env.AWS_STAGE ? `/${process.env.AWS_STAGE}` : "";
   const stagePrefixes = process.env.VERCEL
-    ? []
+    ? ["/staging", "/production"]
     : [stagePrefix, "/staging", "/production"].filter((p, i, arr) => p && arr.indexOf(p) === i);
   if (stagePrefixes.length > 0) {
     app.use((req, _res, next) => {

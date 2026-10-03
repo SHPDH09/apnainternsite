@@ -3,18 +3,29 @@ import serverless from "serverless-http";
 
 let handlerPromise: Promise<ReturnType<typeof serverless>> | null = null;
 
+function stripApiGatewayStagePrefix(pathOnly: string): string {
+  let p = pathOnly;
+  for (const stage of ["/staging", "/production"]) {
+    if (p === stage) return "/";
+    if (p.startsWith(`${stage}/`)) {
+      p = p.slice(stage.length) || "/";
+      break;
+    }
+  }
+  return p;
+}
+
 function rewriteUrl(req: VercelRequest, stripPrefix: string, mount: string): void {
   let raw = req.url || "/";
-  raw = raw.replace(/^\/staging(?=\/)/, "");
   const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-  const pathOnly = raw.split("?")[0] || "/";
-  let rest = pathOnly;
+  let pathOnly = raw.split("?")[0] || "/";
+  pathOnly = stripApiGatewayStagePrefix(pathOnly);
   if (pathOnly.startsWith(stripPrefix)) {
-    rest = pathOnly.slice(stripPrefix.length) || "/";
-  } else if (pathOnly.startsWith(mount)) {
-    rest = pathOnly.slice(mount.length) || "/";
+    pathOnly = `${mount}${pathOnly.slice(stripPrefix.length) || ""}` || mount;
+  } else if (!pathOnly.startsWith(mount)) {
+    pathOnly = `${mount}${pathOnly.startsWith("/") ? pathOnly : `/${pathOnly}`}`;
   }
-  req.url = `${mount}${rest.startsWith("/") ? rest : `/${rest}`}${q}`;
+  req.url = `${pathOnly}${q}`;
 }
 
 async function getHandler() {

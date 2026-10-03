@@ -66,10 +66,6 @@
       "destination": "/api/send-mail"
     },
     {
-      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|admin-partner-register$|partner-application-submit$|ensure-partner-applications$|ensure-project-report-templates$|ensure-learning-materials$|ensure-staff-attendance-offices$|staff-office-rpc$|rds-apply-all$).*)",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/$1"
-    },
-    {
       "source": "/auth/:path*",
       "destination": "/api/auth/:path*"
     },
@@ -80,6 +76,10 @@
     {
       "source": "/storage/:path*",
       "destination": "/api/storage/:path*"
+    },
+    {
+      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|admin-partner-register$|partner-application-submit$|ensure-partner-applications$|ensure-project-report-templates$|ensure-learning-materials$|ensure-staff-attendance-offices$|staff-office-rpc$|rds-apply-all$|rest/|auth/|storage/).*)",
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/$1"
     },
     {
       "source": "/functions/:path*",
