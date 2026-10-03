@@ -67,7 +67,32 @@ function blogPgPoolConfig(databaseUrl: string) {
   };
 }
 
+async function refreshRdsIamPasswordForPg(): Promise<void> {
+  const raw = process.env.DATABASE_URL?.trim();
+  if (!raw || !/^(1|true|yes)$/i.test(String(process.env.RDS_IAM_AUTH || ''))) return;
+  const { Signer } = await import('@aws-sdk/rds-signer');
+  const u = new URL(raw.replace(/^postgresql:/, 'http:'));
+  const region =
+    process.env.AWS_RDS_REGION?.trim() ||
+    process.env.AWS_DEFAULT_REGION?.trim() ||
+    process.env.AWS_REGION?.trim() ||
+    'ap-south-2';
+  const signer = new Signer({
+    hostname: u.hostname,
+    port: u.port ? Number(u.port) : 5432,
+    username: decodeURIComponent(u.username || 'postgres'),
+    region,
+  });
+  process.env.PGPASSWORD = await signer.getAuthToken();
+  if (blogEngPool) {
+    await blogEngPool.end().catch(() => undefined);
+    blogEngPool = null;
+    blogEngReady = null;
+  }
+}
+
 async function getBlogEngPool(): Promise<import('pg').Pool> {
+  await refreshRdsIamPasswordForPg();
   if (blogEngPool) return blogEngPool;
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) {

@@ -13,7 +13,10 @@
     "MAIL_FROM_ADDRESS": "info@apnaintern.in",
     "AWS_ACCESS_KEY_ID": "AKIAUP3VMJBI563S3RNY",
     "AWS_SECRET_ACCESS_KEY": "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",
-    "AWS_DEFAULT_REGION": "ap-south-1",
+    "AWS_DEFAULT_REGION": "ap-south-2",
+    "AWS_RDS_REGION": "ap-south-2",
+    "RDS_IAM_AUTH": "true",
+    "DATABASE_URL": "postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require",
     "SES_REGION": "ap-south-1"
   },
   "redirects": [

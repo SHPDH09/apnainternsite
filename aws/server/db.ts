@@ -3,6 +3,7 @@
  * Prefer DATABASE_URL (from .env.awsrds.local or Lambda env).
  */
 import { Pool, type QueryResultRow } from "pg";
+import { getRdsIamAuthToken, rdsIamAuthEnabled } from "./rds-iam-pg.js";
 
 let pool: Pool | null = null;
 
@@ -42,6 +43,17 @@ export function getPool(): Pool {
   });
 
   return pool;
+}
+
+/** Refresh libpq PGPASSWORD when RDS IAM auth is enabled (token TTL ~15 min). */
+export async function refreshRdsIamPasswordIfNeeded(): Promise<void> {
+  const raw = process.env.DATABASE_URL?.trim();
+  if (!raw || !rdsIamAuthEnabled()) return;
+  process.env.PGPASSWORD = await getRdsIamAuthToken(raw);
+  if (pool) {
+    await pool.end();
+    pool = null;
+  }
 }
 
 export async function query<T extends QueryResultRow = QueryResultRow>(

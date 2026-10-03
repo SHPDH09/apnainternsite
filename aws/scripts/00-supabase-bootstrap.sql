@@ -44,7 +44,17 @@ $$;
 GRANT anon, authenticated, service_role TO authenticator;
 -- Make the RDS master user a member of these so it can create/own objects
 -- and still satisfy ownership/grant statements.
-GRANT anon, authenticated, service_role, postgres, supabase_auth_admin, supabase_storage_admin TO CURRENT_USER;
+-- RDS master user is often `postgres`; self-grant postgres→postgres errors (0LP01).
+GRANT anon, authenticated, service_role, supabase_auth_admin, supabase_storage_admin TO CURRENT_USER;
+DO $$
+BEGIN
+  IF current_user <> 'postgres' THEN
+    EXECUTE 'GRANT postgres TO ' || quote_ident(current_user);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END
+$$;
 
 -- ── Schemas ─────────────────────────────────────────────────────────────────
 CREATE SCHEMA IF NOT EXISTS auth    AUTHORIZATION CURRENT_USER;

@@ -25,6 +25,12 @@ async function getHandler(): Promise<ServerlessHandler> {
 export const handler = async (event: APIGatewayProxyEvent, context: Context) => {
   // Allow SMTP / HTTP clients to finish without blocking Lambda freeze
   context.callbackWaitsForEmptyEventLoop = false;
+  try {
+    const { refreshRdsIamPasswordIfNeeded } = await import("../server/db.js");
+    await refreshRdsIamPasswordIfNeeded();
+  } catch {
+    /* DATABASE_URL / IAM optional at cold start */
+  }
   const fn = await getHandler();
   return fn(event, context);
 };

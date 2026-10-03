@@ -53,6 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const { refreshVercelRdsIamPassword } = await import("./lib/rdsIamPg.js");
+    await refreshVercelRdsIamPassword();
     const { applyStaffOfficeBootstrap } = await import("./staffOfficeApply.js");
     const pg = await import("pg");
     const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
