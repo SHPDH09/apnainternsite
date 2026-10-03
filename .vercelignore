@@ -15,10 +15,4 @@ api/**
 !api/lib/**
 # Never whitelist api/blog-interaction.ts or api/blogEngagementVercel.ts — breaks Vercel deploy.
 
-aws/**
-!aws/server/**
-!aws/scripts/81-rds-staff-salary-account.sql
-!aws/scripts/86-rds-staff-salary-advanced.sql
-!aws/scripts/83-rds-staff-attendance-offices-admin-rpc.sql
-!aws/scripts/85-rds-staff-attendance-offices-ensure-schema.sql
-!aws/scripts/87-rds-staff-attendance-offices-all-admin-rpc-fix.sql
+# aws/server required at runtime for api/supabase-surface (do not ignore aws/).
