@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { syncDirectoryPasswordAfterAuthChange } from "@/lib/studentCredentials";
+import { portalSignOut } from "@/lib/portalSignOut";
 import {
   REGISTRATION_PASSWORD_MIN_LENGTH,
   setLoginPasswordViaRpc,
@@ -34,7 +35,7 @@ import {
 import { OfferLetter } from "@/components/OfferLetter";
 import { IssuedCertificateDocument } from "@/components/IssuedCertificateDocument";
 import { downloadOfferLetterPdf } from "@/lib/offerLetterPdf";
-import { fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
+import { fetchAllCollegesCatalog, fetchUniversitiesCatalog } from "@/lib/institutionCatalog";
 import {
   certificateDisplayFromRecord,
   resolveUniversityRollNo,
@@ -331,12 +332,12 @@ const Dashboard = () => {
       const domainName =
         studentLoad.profile?.internship_domain || studentLoad.profile?.course;
 
-      const [uData, collegesRows, dData] = await Promise.all([
-        supabase.from("universities").select("*").order("name"),
-        fetchAllCollegesCatalog(supabase),
+      const [uniRows, collegesRows, dData] = await Promise.all([
+        fetchUniversitiesCatalog(supabase, { onFirstPage: (first) => setUnis(first) }),
+        fetchAllCollegesCatalog(supabase, { onFirstPage: (first) => setColleges(first) }),
         supabase.from("internship_domains").select("*").order("name"),
       ]);
-      setUnis(uData.data || []);
+      setUnis(uniRows);
       setColleges(collegesRows);
       setDomains(dData.data || []);
 
@@ -363,7 +364,7 @@ const Dashboard = () => {
                 course: studentLoad.profile?.course,
               },
               cls,
-              { colleges: collegesRows, unis: uData.data || [] }
+              { colleges: collegesRows, unis: uniRows }
             )
         );
       }
@@ -967,7 +968,7 @@ const Dashboard = () => {
             </Button>
             <div className="hidden md:block w-px h-4 bg-slate-200" />
             <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 gap-2 rounded-xl" onClick={async () => {
-              await supabase.auth.signOut();
+              await portalSignOut(supabase);
               navigate("/login");
             }}>
               <LogOut className="size-4" />
@@ -1013,7 +1014,7 @@ const Dashboard = () => {
               currentUserId={currentUserId}
               settingsActive={activeView === "settings"}
               onSignOut={async () => {
-                await supabase.auth.signOut();
+                await portalSignOut(supabase);
                 navigate("/login");
               }}
               onPasswordSubmit={async (e) => {

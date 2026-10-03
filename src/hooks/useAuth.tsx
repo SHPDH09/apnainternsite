@@ -10,6 +10,7 @@ import {
 } from '@/lib/adminAuthSession';
 import { isStudentPortalSessionActive } from '@/lib/studentAuthSession';
 import { fetchCybercafeExists, fetchRolesForUser } from '@/lib/portalAuth';
+import { isOwnerAdminEmail } from '@/lib/supabaseEnv';
 
 export type UserRole = 'super_admin' | 'admin' | 'staff' | 'student' | 'cybercafe' | 'college_admin' | 'referral_partner';
 
@@ -73,12 +74,21 @@ export const useAuth = () => {
           console.error('[useAuth] user_roles:', msg);
           const cached = readCachedRoles(session.user.id);
           if (cached.length > 0) {
+            rolesList = cached;
             rolesRef.current = cached;
             setRoles(cached);
           } else if (rolesRef.current.length > 0) {
+            rolesList = rolesRef.current;
             setRoles(rolesRef.current);
+          } else if (isOwnerAdminEmail(session.user.email)) {
+            rolesList = ['super_admin'];
+            rolesRef.current = rolesList;
+            setRoles(rolesList);
+          } else {
+            rolesList = ['student'];
+            rolesRef.current = rolesList;
+            setRoles(rolesList);
           }
-          return;
         }
 
         if (cancelled) return;

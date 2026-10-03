@@ -91,7 +91,7 @@ async function fallbackRegistrationUniversities(
     select: "id, name, pisa_fee",
     orderBy: "name",
     ascending: true,
-    pageSize: 1000,
+    pageSize: 250,
   });
 }
 
@@ -103,7 +103,7 @@ async function fallbackRegistrationColleges(
     select: COLLEGE_FEE_COLUMNS,
     orderBy: "name",
     ascending: true,
-    pageSize: 1000,
+    pageSize: 250,
     modify: (q) => q.eq("university_id", universityId),
   });
 }
@@ -113,7 +113,7 @@ async function fallbackPublicUniversities(client: SupabaseClient): Promise<Publi
     select: "id, name",
     orderBy: "name",
     ascending: true,
-    pageSize: 1000,
+    pageSize: 250,
   });
 }
 
@@ -125,7 +125,7 @@ async function fallbackPublicColleges(
     select: "id, name, university_id",
     orderBy: "name",
     ascending: true,
-    pageSize: 1000,
+    pageSize: 250,
     modify: universityId ? (q) => q.eq("university_id", universityId) : undefined,
   });
 }
@@ -138,14 +138,15 @@ export async function fetchRegistrationUniversities(
   if (!error) {
     fromRpc = rpcArray<RegistrationUniversity>(data);
   } else if (!isMissingRpc(error)) {
-    throw error;
+    console.warn("[registration] get_registration_universities:", error);
   }
 
   let fromTable: RegistrationUniversity[] = [];
   try {
     fromTable = await fallbackRegistrationUniversities(client);
   } catch (tableErr) {
-    if (!fromRpc.length) throw tableErr;
+    console.warn("[registration] universities table fallback:", tableErr);
+    if (!fromRpc.length) return [];
   }
 
   return mergeById(fromRpc, fromTable).sort((a, b) =>
@@ -164,7 +165,7 @@ export async function fetchRegistrationColleges(
   if (!error) {
     fromRpc = rpcArray<RegistrationCollege>(data);
   } else if (!isMissingRpc(error)) {
-    throw error;
+    console.warn("[registration] get_registration_colleges:", error);
   }
 
   let fromTable: RegistrationCollege[] = [];

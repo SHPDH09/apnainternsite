@@ -8,7 +8,7 @@ export const ADMIN_SESSION_KEEP_MS = ADMIN_SESSION_KEEP_HOURS * 60 * 60 * 1000;
 export const ADMIN_SESSION_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 const ADMIN_SESSION_UNTIL_KEY = "ezyintern_admin_session_until";
-const ADMIN_LOGOUT_INTENT_KEY = "ezyintern_admin_logout_intent";
+export const ADMIN_LOGOUT_INTENT_KEY = "ezyintern_admin_logout_intent";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -102,15 +102,6 @@ export function isAdminIntentionalLogout(): boolean {
 
 /** Intentional logout — clear the admin window then sign out of Supabase. */
 export async function adminIntentionalSignOut(client: SupabaseClient): Promise<void> {
-  if (typeof window !== "undefined") {
-    window.sessionStorage.setItem(ADMIN_LOGOUT_INTENT_KEY, "1");
-  }
-  clearAdminSessionExpiry();
-  try {
-    await client.auth.signOut();
-  } finally {
-    if (typeof window !== "undefined") {
-      window.sessionStorage.removeItem(ADMIN_LOGOUT_INTENT_KEY);
-    }
-  }
+  const { portalSignOut } = await import("@/lib/portalSignOut");
+  await portalSignOut(client, { adminPortal: true });
 }

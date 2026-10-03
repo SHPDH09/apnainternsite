@@ -87,7 +87,11 @@ import { filterCommsRecipients } from "@/lib/adminBulkComms";
 import { InternshipModeFilterSelect } from "@/components/admin/InternshipModeFilterSelect";
 import { MultiSelectCheckboxGroup } from "@/components/admin/MultiSelectCheckboxGroup";
 import { collegesForUniversityNames, pruneCollegesForUniversities } from "@/lib/classLinkTargeting";
-import { collegesForUniversity, fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
+import {
+  collegesForUniversity,
+  fetchAllCollegesCatalog,
+  fetchUniversitiesCatalog,
+} from "@/lib/institutionCatalog";
 import { displayCollegeName } from "@/lib/collegeDisplay";
 import {
   setLoginPasswordViaRpc,
@@ -670,14 +674,21 @@ const SuperAdmin = () => {
         }),
       ]);
 
-      const [p, u, cRows, de, ce, dm, cl, ss, ap, pc, notifications, visitStats, ss_res] = await Promise.all([
+      const [p, uniRows, cRows, de, ce, dm, cl, ss, ap, pc, notifications, visitStats, ss_res] =
+        await Promise.all([
         supabase.from("profiles").select("*").in("id", staffUserIds),
-        supabase.from("universities").select("*").order("name"),
-        fetchAllCollegesCatalog(supabase),
+        fetchUniversitiesCatalog(supabase, { onFirstPage: (first) => setUnis(first) }),
+        fetchAllCollegesCatalog(supabase, { onFirstPage: (first) => setColleges(first) }),
         supabase.from("departments").select("*").order("name"),
         supabase.from("certificates").select("*").order("created_at", { ascending: false }).limit(100),
         supabase.from("internship_domains").select("*").order("name"),
-        supabase.from("classes").select("*").order("scheduled_at", { ascending: true }),
+        fetchAllSupabaseRows(supabase, "classes", {
+          orderBy: "scheduled_at",
+          ascending: true,
+        }).catch((err) => {
+          console.warn("[super-admin] classes:", err);
+          return [] as Record<string, unknown>[];
+        }),
         supabase.from("system_settings").select("*"),
         supabase.from("admin_permissions").select("*"),
         (async () => {
@@ -717,7 +728,7 @@ const SuperAdmin = () => {
       }));
 
       setStaff(staffList);
-      setUnis(u.data || []);
+      setUnis(uniRows || []);
       setColleges(c.data || []);
       setDepartments(de.data || []);
       setCerts(ce.data || []);

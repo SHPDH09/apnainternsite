@@ -70,14 +70,14 @@ async function main() {
       if (identities.rows[0]?.t) {
         await client.query(
           `INSERT INTO auth.identities (
-            id, provider_id, user_id, identity_data, provider,
+            provider_id, user_id, identity_data, provider,
             last_sign_in_at, created_at, updated_at
           ) VALUES (
-            gen_random_uuid(), $1::text, $1::uuid,
-            jsonb_build_object('sub', $1::text, 'email', $2, 'email_verified', true),
+            $1::text, $2::uuid,
+            jsonb_build_object('sub', $1::text, 'email', $3::text, 'email_verified', true),
             'email', now(), now(), now()
           )`,
-          [userId, email],
+          [userId, userId, email],
         );
       }
 

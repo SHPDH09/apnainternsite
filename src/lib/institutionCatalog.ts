@@ -95,21 +95,72 @@ export function collegesForUniversity(
 /**
  * Load every college row (past PostgREST 1000-row caps) for admin filters / edit forms.
  */
-export async function fetchAllCollegesCatalog(
-  client: import("@supabase/supabase-js").SupabaseClient
-): Promise<CatalogCollege[]> {
-  const { fetchAllSupabaseRows } = await import("@/lib/fetchAllSupabaseRows");
-  const rows = await fetchAllSupabaseRows<CatalogCollege>(client, "colleges", {
-    select: "id, name, university_id",
-    orderBy: "name",
-    ascending: true,
-    pageSize: 1000,
-  });
+function mapCatalogColleges(rows: CatalogCollege[]): CatalogCollege[] {
   return rows.map((r) => ({
     id: String(r.id),
     name: String(r.name || ""),
     university_id: String(r.university_id || ""),
   }));
+}
+
+export async function fetchAllCollegesCatalog(
+  client: import("@supabase/supabase-js").SupabaseClient,
+  opts?: {
+    /** Called with the first page so UI can render before the full catalog finishes. */
+    onFirstPage?: (rows: CatalogCollege[]) => void;
+  }
+): Promise<CatalogCollege[]> {
+  const { fetchAllSupabaseRows, fetchSupabasePage } = await import("@/lib/fetchAllSupabaseRows");
+  try {
+    const first = await fetchSupabasePage<CatalogCollege>(client, "colleges", {
+      select: "id, name, university_id",
+      orderBy: "name",
+      ascending: true,
+    });
+    const mappedFirst = mapCatalogColleges(first);
+    opts?.onFirstPage?.(mappedFirst);
+  } catch (err) {
+    console.warn("[colleges] first page:", err);
+  }
+
+  const rows = await fetchAllSupabaseRows<CatalogCollege>(client, "colleges", {
+    select: "id, name, university_id",
+    orderBy: "name",
+    ascending: true,
+  }).catch((err) => {
+    console.warn("[colleges] full catalog:", err);
+    return [] as CatalogCollege[];
+  });
+  return mapCatalogColleges(rows);
+}
+
+export async function fetchUniversitiesCatalog(
+  client: import("@supabase/supabase-js").SupabaseClient,
+  opts?: { onFirstPage?: (rows: CatalogUniversity[]) => void }
+): Promise<CatalogUniversity[]> {
+  const { fetchAllSupabaseRows, fetchSupabasePage } = await import("@/lib/fetchAllSupabaseRows");
+  try {
+    const first = await fetchSupabasePage<CatalogUniversity>(client, "universities", {
+      select: "id, name",
+      orderBy: "name",
+      ascending: true,
+    });
+    opts?.onFirstPage?.(
+      first.map((r) => ({ id: String(r.id), name: String(r.name || "") }))
+    );
+  } catch (err) {
+    console.warn("[universities] first page:", err);
+  }
+
+  const rows = await fetchAllSupabaseRows<CatalogUniversity>(client, "universities", {
+    select: "id, name",
+    orderBy: "name",
+    ascending: true,
+  }).catch((err) => {
+    console.warn("[universities] full catalog:", err);
+    return [] as CatalogUniversity[];
+  });
+  return rows.map((r) => ({ id: String(r.id), name: String(r.name || "") }));
 }
 
 /** All colleges for one university (paginated — Eng. Management / registration safe). */

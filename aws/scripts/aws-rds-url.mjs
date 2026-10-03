@@ -92,7 +92,7 @@ export function loadAwsRdsTargetDatabaseUrl() {
   const host =
     process.env.AWS_RDS_TARGET_HOST ||
     fileEnv.AWS_RDS_TARGET_HOST ||
-    "database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com";
+    "ezyintern.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com";
   const user = process.env.AWS_RDS_TARGET_USER || fileEnv.AWS_RDS_TARGET_USER || "postgres";
   const pass = process.env.AWS_RDS_TARGET_PASSWORD || fileEnv.AWS_RDS_TARGET_PASSWORD;
   const db =
@@ -106,13 +106,17 @@ export function loadAwsRdsTargetDatabaseUrl() {
   throw new Error(
     "Hyderabad TARGET RDS credentials missing.\n" +
       "Set TARGET_DATABASE_URL or AWS_RDS_TARGET_HOST, AWS_RDS_TARGET_USER, AWS_RDS_TARGET_PASSWORD, AWS_RDS_TARGET_DATABASE\n" +
-      "Host: database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com\n" +
+      "Host: ezyintern.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com\n" +
       "Create database `ezyintern` on the cluster if needed (same name as Mumbai)."
   );
 }
 
 export function pgClientConfig(url) {
-  const useSsl = /sslmode=require/i.test(url) || /rds\.amazonaws\.com/i.test(url);
+  const useSsl =
+    /sslmode=require/i.test(url) ||
+    /rds\.amazonaws\.com/i.test(url) ||
+    /\.supabase\.co/i.test(url) ||
+    /pooler\.supabase\.com/i.test(url);
   return {
     connectionString: url
       .replace(/([?&])sslmode=[^&]*/gi, "$1")

@@ -75,7 +75,8 @@ export default function PartnerApplicationDashboard() {
   }, [load]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    const { portalSignOut } = await import("@/lib/portalSignOut");
+    await portalSignOut(supabase);
     navigate("/");
   };
 

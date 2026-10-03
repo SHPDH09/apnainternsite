@@ -487,14 +487,15 @@ export const RegistrationForm = ({
     course,
     internshipMode,
     password,
-    colleges,
-    unis,
   ]);
 
   useEffect(() => {
     fetchRegistrationUniversities(supabase)
       .then(setUnis)
-      .catch((e) => toast.error(e instanceof Error ? e.message : "Failed to load universities"));
+      .catch((e) => {
+        console.warn("[registration] universities:", e);
+        setUnis([]);
+      });
     supabase.from("internship_domains").select("*").order("name").then(({ data }) => setDomains(data || []));
     fetchEngineeringConfigMap(supabase)
       .then(setEngineeringConfigByUniId)
@@ -533,8 +534,8 @@ export const RegistrationForm = ({
     fetchRegistrationColleges(supabase, universityId)
       .then(setColleges)
       .catch((e) => {
+        console.warn("[registration] colleges:", e);
         setColleges([]);
-        toast.error(e instanceof Error ? e.message : "Failed to load colleges");
       });
     setCollegeId("");
   }, [universityId]);
