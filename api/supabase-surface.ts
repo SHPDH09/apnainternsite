@@ -1,3 +1,5 @@
+// Vercel typechecks this file in isolation; aws/server is bundled at runtime via .vercelignore whitelist.
+// @ts-nocheck
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import serverless from "serverless-http";
 
