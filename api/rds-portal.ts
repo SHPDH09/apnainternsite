@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { tryVercelRestLite } from "./lib/vercelRestLite.js";
 
 function portalPathFromRequest(req: VercelRequest): string {
   const segment = String(req.query.segment || "").trim();
@@ -58,6 +59,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   if (pathOnly === "/auth/v1/settings") {
     authSettingsFast(req, res);
     return;
+  }
+
+  if (pathOnly.startsWith("/rest/")) {
+    const handled = await tryVercelRestLite(req, res, pathOnly);
+    if (handled) return;
   }
 
   req.url = rewritten;
