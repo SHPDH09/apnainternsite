@@ -4,7 +4,11 @@
   "framework": "vite",
   "env": {
     "VITE_SUPABASE_URL": "https://apnaintern.in",
-    "VITE_SUPABASE_PROJECT_ID": "hflapipozwwwinbbfpuh"
+    "VITE_SUPABASE_PROJECT_ID": "hflapipozwwwinbbfpuh",
+    "VITE_SUPABASE_PUBLISHABLE_KEY": "local-anon-key",
+    "LOCAL_SUPABASE": "true",
+    "RDS_IAM_AUTH": "false",
+    "RDS_RPC_OPEN": "true"
   },
   "redirects": [
     {
@@ -50,19 +54,15 @@
     },
     {
       "source": "/auth/(.*)",
-      "destination": "https://hflapipozwwwinbbfpuh.supabase.co/auth/$1"
+      "destination": "/api/rds-portal?segment=auth&path=$1"
     },
     {
       "source": "/rest/(.*)",
-      "destination": "https://hflapipozwwwinbbfpuh.supabase.co/rest/$1"
+      "destination": "/api/rds-portal?segment=rest&path=$1"
     },
     {
       "source": "/storage/(.*)",
-      "destination": "https://hflapipozwwwinbbfpuh.supabase.co/storage/$1"
-    },
-    {
-      "source": "/realtime/(.*)",
-      "destination": "https://hflapipozwwwinbbfpuh.supabase.co/realtime/$1"
+      "destination": "/api/rds-portal?segment=storage&path=$1"
     },
     {
       "source": "/((?!api/|assets/|rest/|auth/|storage/|realtime/|functions/).*)",

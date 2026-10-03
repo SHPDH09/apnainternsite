@@ -12,8 +12,17 @@ import {
 
 let pool: Pool | null = null;
 
+export function isSupabaseDatabaseUrl(url: string): boolean {
+  return /(\.supabase\.co|pooler\.supabase\.com)/i.test(url);
+}
+
 /** Vercel/Lambda: ignore stale Mumbai URLs; use Hyderabad password auth. */
 export function resolveDatabaseUrl(): string {
+  const fromEnv = process.env.DATABASE_URL?.trim();
+  if (fromEnv && isSupabaseDatabaseUrl(fromEnv) && !isStaleRdsDatabaseUrl(fromEnv)) {
+    return fromEnv;
+  }
+
   const preferHyderabadOnStaleUrl =
     process.env.VERCEL || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 
@@ -22,18 +31,18 @@ export function resolveDatabaseUrl(): string {
     if (canonical && isHyderabadDatabaseUrl(canonical) && !isStaleRdsDatabaseUrl(canonical)) {
       return canonical;
     }
-    const fromEnv = process.env.DATABASE_URL?.trim();
-    if (fromEnv && isHyderabadDatabaseUrl(fromEnv) && !isStaleRdsDatabaseUrl(fromEnv)) {
-      return fromEnv;
+    const vercelDb = process.env.DATABASE_URL?.trim();
+    if (vercelDb && isHyderabadDatabaseUrl(vercelDb) && !isStaleRdsDatabaseUrl(vercelDb)) {
+      return vercelDb;
     }
-    if (fromEnv && !isStaleRdsDatabaseUrl(fromEnv) && /ap-south-2/i.test(fromEnv)) {
-      return fromEnv;
+    if (vercelDb && !isStaleRdsDatabaseUrl(vercelDb) && /ap-south-2/i.test(vercelDb)) {
+      return vercelDb;
     }
     return hyderabadDatabaseUrl();
   }
-  const fromEnv = process.env.DATABASE_URL?.trim();
-  if (fromEnv && !isStaleRdsDatabaseUrl(fromEnv)) return fromEnv;
-  if (fromEnv) return hyderabadDatabaseUrl();
+  const fallbackDb = process.env.DATABASE_URL?.trim();
+  if (fallbackDb && !isStaleRdsDatabaseUrl(fallbackDb)) return fallbackDb;
+  if (fallbackDb) return hyderabadDatabaseUrl();
   throw new Error("DATABASE_URL is not set — cannot query RDS");
 }
 
@@ -41,6 +50,7 @@ function normalizeDatabaseUrl(raw: string): { connectionString: string; useSsl: 
   const useSsl =
     /sslmode=require/i.test(raw) ||
     /rds\.amazonaws\.com/i.test(raw) ||
+    isSupabaseDatabaseUrl(raw) ||
     process.env.PGSSLMODE === "require";
 
   // node-pg treats sslmode=require in the URL as verify-full and fails on RDS
