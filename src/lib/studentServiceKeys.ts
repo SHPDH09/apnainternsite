@@ -525,16 +525,29 @@ export async function applyStudentServiceAccessBatch(
   studentIds: string[],
   keys: StudentServiceKey[],
   unlocked: boolean
-): Promise<void> {
-  if (!studentIds.length || !keys.length) return;
+): Promise<{ updated: number }> {
+  if (!studentIds.length || !keys.length) {
+    throw new Error("Select at least one student and one service.");
+  }
+
+  const uniqueIds = [...new Set(studentIds.map((id) => String(id).trim()).filter(Boolean))];
 
   const { data: rows, error } = await client
     .from("students")
     .select("id, metadata")
-    .in("id", studentIds);
+    .in("id", uniqueIds);
   if (error) throw error;
 
+  const foundIds = new Set((rows || []).map((row) => String((row as { id: string }).id)));
+  const missingIds = uniqueIds.filter((id) => !foundIds.has(id));
+  if (missingIds.length > 0) {
+    throw new Error(
+      `Could not find ${missingIds.length} selected student(s) in the database. No changes were saved.`
+    );
+  }
+
   const patch = buildServiceAccessPatch(keys, unlocked);
+  let updated = 0;
   for (const row of rows || []) {
     const id = String((row as { id: string }).id);
     const meta = parseStudentMetadata((row as { metadata?: unknown }).metadata);
@@ -545,7 +558,14 @@ export async function applyStudentServiceAccessBatch(
     };
     const { error: upErr } = await client.from("students").update({ metadata: nextMeta }).eq("id", id);
     if (upErr) throw upErr;
+    updated += 1;
   }
+
+  if (updated !== uniqueIds.length) {
+    throw new Error("Bulk update did not complete for all selected students.");
+  }
+
+  return { updated };
 }
 
 export function formatPaiseAsRupees(paise: number): string {

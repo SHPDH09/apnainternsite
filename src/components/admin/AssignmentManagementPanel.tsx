@@ -294,7 +294,7 @@ export function AssignmentManagementPanel({
       universities: row.target_universities || [],
       colleges: row.target_colleges || [],
       domain: row.target_domains?.[0] || "all",
-      mode: "all",
+      mode: row.target_modes?.[0] || "all",
     });
     if (type === "file_upload") {
       setQuestions([]);
