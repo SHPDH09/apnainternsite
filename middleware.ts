@@ -5,7 +5,14 @@ import { rewrite } from "@vercel/functions";
  * Ensure those hit Vercel serverless Express (/api/rest/*) before SPA fallback.
  */
 export const config = {
-  matcher: ["/rest/:path*", "/auth/:path*", "/storage/:path*"],
+  matcher: [
+    "/rest/:path*",
+    "/auth/:path*",
+    "/storage/:path*",
+    "/api/rest/:path*",
+    "/api/auth/:path*",
+    "/api/storage/:path*",
+  ],
 };
 
 export default function middleware(request: Request) {
@@ -22,6 +29,9 @@ export default function middleware(request: Request) {
   }
   if (pathname.startsWith("/storage/")) {
     url.pathname = `/api/storage/${pathname.slice("/storage/".length)}`;
+    return rewrite(url);
+  }
+  if (pathname.startsWith("/api/rest/") || pathname.startsWith("/api/auth/") || pathname.startsWith("/api/storage/")) {
     return rewrite(url);
   }
 
