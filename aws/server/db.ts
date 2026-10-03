@@ -8,7 +8,7 @@ import { getRdsIamAuthToken, rdsIamAuthEnabled } from "./rds-iam-pg.js";
 let pool: Pool | null = null;
 
 const HYDERABAD_CANONICAL_URL =
-  "postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require";
+  "postgresql://postgres@database-1-instance-1.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require";
 
 function isStaleRdsDatabaseUrl(url: string): boolean {
   return (
@@ -28,7 +28,12 @@ export function resolveDatabaseUrl(): string {
     if (canonical && !isStaleRdsDatabaseUrl(canonical)) return canonical;
     const fromEnv = process.env.DATABASE_URL?.trim();
     if (fromEnv && !isStaleRdsDatabaseUrl(fromEnv)) {
-      if (fromEnv.includes("database-1.cluster-cpy4aaca6mfv")) return fromEnv;
+      if (
+        fromEnv.includes("database-1.cluster-cpy4aaca6mfv") ||
+        fromEnv.includes("database-1-instance-1.cpy4aaca6mfv")
+      ) {
+        return fromEnv;
+      }
       if (/\/\/postgres@/i.test(fromEnv) && /ap-south-2/i.test(fromEnv)) return fromEnv;
     }
     return HYDERABAD_CANONICAL_URL;
