@@ -20,7 +20,10 @@ function isStaleRdsDatabaseUrl(url: string): boolean {
 
 /** Vercel Production env often overrides vercel.json with stale Mumbai `ezyintern` URL. */
 export function resolveDatabaseUrl(): string {
-  if (process.env.VERCEL) {
+  const preferHyderabadOnStaleUrl =
+    process.env.VERCEL || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+  if (preferHyderabadOnStaleUrl) {
     const canonical = process.env.RDS_CANONICAL_DATABASE_URL?.trim();
     if (canonical && !isStaleRdsDatabaseUrl(canonical)) return canonical;
     const fromEnv = process.env.DATABASE_URL?.trim();
