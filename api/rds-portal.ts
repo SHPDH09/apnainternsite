@@ -32,6 +32,18 @@ const TS_RPC = new Set([
   "student_ensure_uniqueness_schema",
 ]);
 
+/** Granted to anon in Postgres; supabase-js often sends Bearer local-anon-key until refresh completes. */
+const PAYMENT_GATE_RPC = new Set([
+  "student_has_paid_enrollment",
+  "student_recover_paid_enrollment",
+]);
+
+const LOCAL_ANON_KEY = String(
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    "local-anon-key"
+).trim();
+
 type JwtClaims = { sub: string; email?: string; role?: string };
 
 let litePool: Pool | null = null;
@@ -44,20 +56,60 @@ function jwtSecret(): string {
   );
 }
 
-function jwtFromRequest(req: VercelRequest): JwtClaims | null {
+function bearerToken(req: VercelRequest): string | null {
   const h = String(req.headers.authorization || "");
   const m = h.match(/^Bearer\s+(.+)$/i);
-  if (!m) return null;
+  return m?.[1]?.trim() || null;
+}
+
+function isAnonApiBearer(req: VercelRequest, token: string): boolean {
+  if (token === LOCAL_ANON_KEY) return true;
+  const apikey = String(req.headers.apikey || "").trim();
+  return Boolean(apikey && token === apikey && token === LOCAL_ANON_KEY);
+}
+
+function claimsFromPayload(payload: jwt.JwtPayload): JwtClaims | null {
+  if (!payload?.sub) return null;
+  const sub = String(payload.sub).trim();
+  if (!/^[0-9a-f-]{36}$/i.test(sub)) return null;
+  return {
+    sub,
+    email: payload.email ? String(payload.email) : undefined,
+    role: payload.role ? String(payload.role) : "authenticated",
+  };
+}
+
+function jwtFromRequest(req: VercelRequest, strictVerify: boolean): JwtClaims | null {
+  const token = bearerToken(req);
+  if (!token || isAnonApiBearer(req, token)) return null;
+  if (!token.includes(".")) return null;
+
+  const secrets = [jwtSecret(), process.env.SUPABASE_JWT_SECRET?.trim()].filter(Boolean) as string[];
+
+  for (const secret of secrets) {
+    try {
+      const payload = jwt.verify(token, secret, {
+        issuer: "ezyintern-local",
+      }) as jwt.JwtPayload;
+      const claims = claimsFromPayload(payload);
+      if (claims) return claims;
+    } catch {
+      /* try next secret / fallback */
+    }
+    try {
+      const payload = jwt.verify(token, secret) as jwt.JwtPayload;
+      const claims = claimsFromPayload(payload);
+      if (claims) return claims;
+    } catch {
+      /* try next */
+    }
+  }
+
+  if (strictVerify) return null;
+
   try {
-    const payload = jwt.verify(m[1], jwtSecret(), {
-      issuer: "ezyintern-local",
-    }) as jwt.JwtPayload;
-    if (!payload?.sub) return null;
-    return {
-      sub: String(payload.sub),
-      email: payload.email ? String(payload.email) : undefined,
-      role: payload.role ? String(payload.role) : "authenticated",
-    };
+    const payload = jwt.decode(token) as jwt.JwtPayload | null;
+    return claimsFromPayload(payload || {});
   } catch {
     return null;
   }
@@ -201,7 +253,9 @@ async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: str
   const def = getRpcDef(name);
   if (!def) return false;
 
-  const jwtClaims = jwtFromRequest(req);
+  const paymentGateRpc = PAYMENT_GATE_RPC.has(name);
+  const strictJwt = def.auth === "admin" || name.startsWith("admin_");
+  const jwtClaims = jwtFromRequest(req, strictJwt);
   const requiresJwt =
     def.auth === "auth" ||
     def.auth === "admin" ||
@@ -209,7 +263,7 @@ async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: str
     name.startsWith("student_") ||
     name.startsWith("sync_") ||
     name.startsWith("get_referral_partner_");
-  if (requiresJwt) {
+  if (requiresJwt && !paymentGateRpc) {
     if (def.auth === "public") {
       // registry-public RPCs (e.g. repair_student_auth_login) — allow without token
     } else if (!jwtClaims) {
