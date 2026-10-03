@@ -13,7 +13,8 @@ api/**
 !api/auth/forgot-password.ts
 !api/supabase-surface/**
 !api/.bundled/**
-!api/lib/**
+# Do not whitelist api/lib/** — each api/*.ts becomes a serverless function (Hobby max 12).
+# Mail handlers bundle lib/* at build time via imports.
 # Never whitelist api/blog-interaction.ts or api/blogEngagementVercel.ts — breaks Vercel deploy.
 
 aws/*
