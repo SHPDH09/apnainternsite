@@ -1,6 +1,8 @@
 import { Signer } from "@aws-sdk/rds-signer";
 
 export function rdsIamAuthEnabled(): boolean {
+  const raw = process.env.DATABASE_URL?.trim() || "";
+  if (/:\/\/[^/@]+:[^/@]+@/.test(raw)) return false;
   return /^(1|true|yes)$/i.test(String(process.env.RDS_IAM_AUTH || "").trim());
 }
 

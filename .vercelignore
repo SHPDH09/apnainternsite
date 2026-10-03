@@ -11,7 +11,12 @@ api/**
 !api/otp-deliver.ts
 !api/request-otp.ts
 !api/auth/forgot-password.ts
-!api/lib/**
+!api/rds-portal.ts
+!api/.bundled/**
+# Do not whitelist api/lib/** — each api/*.ts becomes a serverless function (Hobby max 12).
+# Mail handlers bundle lib/* at build time via imports.
 # Never whitelist api/blog-interaction.ts or api/blogEngagementVercel.ts — breaks Vercel deploy.
 
-# aws/server required at runtime for api/supabase-surface (do not ignore aws/).
+aws/*
+!aws/server
+!aws/server/**
