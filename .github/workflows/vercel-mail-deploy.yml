@@ -33,18 +33,35 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: local-anon-key
           VITE_SUPABASE_PROJECT_ID: apnaintern-local
 
-      - name: Sync Vercel mail env (when token + SMTP_PASS configured)
+      - name: Sync Vercel production env (when token configured)
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.TARGET_DATABASE_URL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST || 'smtp.hostinger.com' }}
           SMTP_USER: ${{ secrets.SMTP_USER || 'info@apnaintern.in' }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_FROM_ADDRESS: ${{ secrets.MAIL_FROM_ADDRESS || 'info@apnaintern.in' }}
         run: |
-          if [ -z "${VERCEL_TOKEN:-}" ] || [ -z "${VERCEL_PROJECT_ID:-}" ] || [ -z "${SMTP_PASS:-}" ]; then
-            echo "::warning::Set VERCEL_TOKEN, VERCEL_PROJECT_ID, and SMTP_PASS in GitHub secrets to sync Vercel mail env"
+          if [ -z "${VERCEL_TOKEN:-}" ] || [ -z "${VERCEL_PROJECT_ID:-}" ]; then
+            echo "::warning::Set VERCEL_TOKEN and VERCEL_PROJECT_ID to sync Vercel production env"
+            exit 0
+          fi
+          if [ -n "${DATABASE_URL:-}" ]; then
+            printf '%s' "$DATABASE_URL" | npx vercel env add DATABASE_URL production --token "$VERCEL_TOKEN" --yes 2>/dev/null || \
+              (npx vercel env rm DATABASE_URL production --token "$VERCEL_TOKEN" --yes 2>/dev/null; \
+               printf '%s' "$DATABASE_URL" | npx vercel env add DATABASE_URL production --token "$VERCEL_TOKEN" --yes)
+            for key in RDS_IAM_AUTH AWS_RDS_REGION AWS_DEFAULT_REGION; do
+              val=""
+              case "$key" in RDS_IAM_AUTH) val="true" ;; AWS_RDS_REGION|AWS_DEFAULT_REGION) val="ap-south-2" ;; esac
+              printf '%s' "$val" | npx vercel env add "$key" production --token "$VERCEL_TOKEN" --yes 2>/dev/null || \
+                (npx vercel env rm "$key" production --token "$VERCEL_TOKEN" --yes 2>/dev/null; \
+                 printf '%s' "$val" | npx vercel env add "$key" production --token "$VERCEL_TOKEN" --yes)
+            done
+          fi
+          if [ -z "${SMTP_PASS:-}" ]; then
+            echo "::warning::SMTP_PASS not set — skipped mail env sync"
             exit 0
           fi
           for pair in \

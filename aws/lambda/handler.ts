@@ -1,6 +1,7 @@
 /**
  * AWS Lambda entry — pay-per-request via API Gateway HTTP API.
  * Uses serverless-http to run the same Express app as local dev.
+ * Production deploy: main branch → Lambda OTP Deploy workflow.
  */
 import type { APIGatewayProxyEvent, Context } from "aws-lambda";
 import serverless from "serverless-http";
