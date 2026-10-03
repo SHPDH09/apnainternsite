@@ -11,15 +11,6 @@ api/**
 !api/otp-deliver.ts
 !api/request-otp.ts
 !api/auth/forgot-password.ts
-!api/admin-partner-register.ts
-!api/partner-application-submit.ts
-!api/ensure-partner-applications.ts
-!api/ensure-project-report-templates.ts
-!api/ensure-staff-attendance-offices.ts
-!api/staff-office-rpc.ts
-!api/staffOfficeSqlChunks.ts
-!api/staffOfficeApply.ts
-!api/rds-apply-all.ts
 !api/supabase-surface.ts
 !api/lib/**
 # Never whitelist api/blog-interaction.ts or api/blogEngagementVercel.ts — breaks Vercel deploy.
