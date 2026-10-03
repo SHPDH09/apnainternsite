@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { clearPersistedAuthOnLoginSurface, isLoginSurfacePath } from '@/lib/authBootstrap';
 import { AUTH_STORAGE_KEY, createPersistingAuthStorage } from '@/lib/studentAuthSession';
 import { usePollingInsteadOfRealtime } from '@/lib/siteApi';
 import {
@@ -41,14 +42,17 @@ if (typeof window !== "undefined") {
 
 const disableRealtime = usePollingInsteadOfRealtime();
 
+clearPersistedAuthOnLoginSurface();
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     detectSessionInUrl: true,
     flowType: "pkce",
     persistSession: true,
-    autoRefreshToken: true,
+    autoRefreshToken: !isLoginSurfacePath(),
     storage: createPersistingAuthStorage(),
     storageKey: AUTH_STORAGE_KEY,
+    lock: async (_name, _acquireTimeout, fn) => fn(),
   },
 });
 
