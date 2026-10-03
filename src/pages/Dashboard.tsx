@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { syncDirectoryPasswordAfterAuthChange } from "@/lib/studentCredentials";
+import { portalSignOut } from "@/lib/portalSignOut";
 import {
   REGISTRATION_PASSWORD_MIN_LENGTH,
   setLoginPasswordViaRpc,
@@ -967,7 +968,7 @@ const Dashboard = () => {
             </Button>
             <div className="hidden md:block w-px h-4 bg-slate-200" />
             <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 gap-2 rounded-xl" onClick={async () => {
-              await supabase.auth.signOut();
+              await portalSignOut(supabase);
               navigate("/login");
             }}>
               <LogOut className="size-4" />
@@ -1013,7 +1014,7 @@ const Dashboard = () => {
               currentUserId={currentUserId}
               settingsActive={activeView === "settings"}
               onSignOut={async () => {
-                await supabase.auth.signOut();
+                await portalSignOut(supabase);
                 navigate("/login");
               }}
               onPasswordSubmit={async (e) => {

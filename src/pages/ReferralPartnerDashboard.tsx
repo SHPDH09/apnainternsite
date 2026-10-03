@@ -272,7 +272,8 @@ export default function ReferralPartnerDashboard() {
   }, [partner?.referral_code, page, debouncedSearch, loadStudents]);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    const { portalSignOut } = await import("@/lib/portalSignOut");
+    await portalSignOut(supabase);
     navigate(REFERRAL_LOGIN_PATH, { replace: true });
   };
 

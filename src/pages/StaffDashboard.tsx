@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ADMIN_LOGIN_PATH, buildStudentCredentialLoginLink } from "@/lib/authRoutes";
 import { persistAdminAuthSession, adminIntentionalSignOut, ensureAdminAuthSession, isAdminPortalSessionActive } from "@/lib/adminAuthSession";
+import { portalSignOut } from "@/lib/portalSignOut";
 import { mergeRegistrationMetadataFromStudentRow } from "@/lib/studentSync";
 import {
   hydrateStudentEditWithEngineeringDetails,
@@ -429,7 +430,7 @@ const StaffDashboard = () => {
     
     if (staffRow?.is_blocked) {
       toast.error("Your staff account is blocked. Contact an administrator.");
-      await supabase.auth.signOut();
+      await portalSignOut(supabase, { adminPortal: true });
       navigate(ADMIN_LOGIN_PATH);
       return;
     }
@@ -568,7 +569,7 @@ const StaffDashboard = () => {
       const msg = rolesError instanceof Error ? rolesError.message : String(rolesError);
       console.error("[StaffDashboard] user_roles:", msg);
       toast.error("Could not verify your staff access. Ask an admin to run supabase/hotfix_staff_user_roles_rls.sql.");
-      await supabase.auth.signOut();
+      await portalSignOut(supabase, { adminPortal: true });
       navigate(ADMIN_LOGIN_PATH);
       return;
     }
@@ -577,7 +578,7 @@ const StaffDashboard = () => {
     );
     if (!hasAuthorizedRole) {
       toast.error("You don't have staff access on this account. Sign in at the admin portal with a staff email.");
-      await supabase.auth.signOut();
+      await portalSignOut(supabase, { adminPortal: true });
       navigate(ADMIN_LOGIN_PATH);
       return;
     }

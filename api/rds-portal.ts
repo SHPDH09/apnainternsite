@@ -437,11 +437,19 @@ function authSettingsFast(_req: VercelRequest, res: VercelResponse): void {
   });
 }
 
+function authLogoutFast(_req: VercelRequest, res: VercelResponse): void {
+  res.status(204).end();
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const rewritten = portalPathFromRequest(req);
   const pathOnly = rewritten.split("?")[0] || "/";
   if (pathOnly === "/auth/v1/settings") {
     authSettingsFast(req, res);
+    return;
+  }
+  if (pathOnly === "/auth/v1/logout" && (req.method === "POST" || req.method === "GET")) {
+    authLogoutFast(req, res);
     return;
   }
 
