@@ -9,7 +9,8 @@ if [[ -z "${DATABASE_URL:-}" ]] && [[ -n "${SUPABASE_DB_PW_B64:-}" ]]; then
   DB_PASS="$(printf '%s' "$SUPABASE_DB_PW_B64" | base64 -d)"
   export DB_PASS
   ENC_PASS="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["DB_PASS"], safe=""))')"
-  DATABASE_URL="postgresql://postgres:${ENC_PASS}@db.${PROJECT_ID}.supabase.co:5432/postgres?sslmode=require"
+  # Vercel is IPv4-only; direct db.*.supabase.co is IPv6-only — use Supavisor transaction pooler.
+  DATABASE_URL="postgresql://postgres.${PROJECT_ID}:${ENC_PASS}@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres?sslmode=require"
 fi
 
 DB_URL="${DATABASE_URL:?Set DATABASE_URL or SUPABASE_DB_PW_B64}"
