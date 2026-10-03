@@ -42,6 +42,7 @@
     "aws:rds:export": "node aws/scripts/run-rds-export.mjs",
     "aws:rds:export:full": "node aws/scripts/run-rds-export.mjs --full",
     "aws:rds:import": "node aws/scripts/run-rds-import.mjs",
+    "aws:rds:migrate-region": "node aws/scripts/migrate-rds-region.mjs --yes",
     "aws:rds:import:csv": "bash -c 'set -a && [ -f .env.awsrds.local ] && . ./.env.awsrds.local; set +a; bash aws/scripts/import-csv-tables.sh'",
     "aws:rds:verify": "node aws/scripts/run-rds-verify.mjs",
     "aws:ses:verify-email": "node aws/scripts/ses-verify-email.mjs",
