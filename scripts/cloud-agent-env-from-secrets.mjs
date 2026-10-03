@@ -56,6 +56,41 @@ if (databaseUrl) {
   lines.push(`DATABASE_URL=${databaseUrl.replace(/^["']|["']$/g, "")}`);
 }
 
+let targetUrl =
+  process.env.TARGET_DATABASE_URL?.trim() ||
+  process.env.AWS_RDS_TARGET_DATABASE_URL?.trim();
+if (!targetUrl) {
+  const host = process.env.AWS_RDS_TARGET_HOST?.trim();
+  const user = process.env.AWS_RDS_TARGET_USER?.trim();
+  const pass = process.env.AWS_RDS_TARGET_PASSWORD?.trim();
+  const db = process.env.AWS_RDS_TARGET_DATABASE?.trim() || "ezyintern";
+  const port = process.env.AWS_RDS_TARGET_PORT?.trim() || "5432";
+  if (host && user && pass) {
+    targetUrl = `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${host}:${port}/${db}?sslmode=require`;
+  }
+}
+if (targetUrl) {
+  lines.push(`TARGET_DATABASE_URL=${targetUrl.replace(/^["']|["']$/g, "")}`);
+}
+
+for (const key of [
+  "AWS_RDS_HOST",
+  "AWS_RDS_USER",
+  "AWS_RDS_PASSWORD",
+  "AWS_RDS_DATABASE",
+  "AWS_RDS_PORT",
+  "AWS_RDS_TARGET_HOST",
+  "AWS_RDS_TARGET_USER",
+  "AWS_RDS_TARGET_PASSWORD",
+  "AWS_RDS_TARGET_DATABASE",
+  "AWS_RDS_TARGET_PORT",
+]) {
+  const val = process.env[key]?.trim();
+  if (val && !lines.some((l) => l.startsWith(`${key}=`))) {
+    lines.push(`${key}=${val}`);
+  }
+}
+
 const smtpHost = process.env.SMTP_HOST?.trim();
 const smtpUser = process.env.SMTP_USER?.trim();
 const smtpPass = process.env.SMTP_PASS?.trim();
@@ -75,7 +110,12 @@ for (const key of ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "MAIL_FRO
   }
 }
 
-if (lines.length === 1) {
+const hasDbOrTarget =
+  databaseUrl ||
+  targetUrl ||
+  process.env.AWS_RDS_PASSWORD?.trim() ||
+  process.env.AWS_RDS_TARGET_PASSWORD?.trim();
+if (lines.length === 1 && !hasDbOrTarget && !(awsKey && awsSecret)) {
   console.log("[cloud-agent-env] No AWS/RDS secrets in environment — skip .env.awsrds.local");
   process.exit(0);
 }
