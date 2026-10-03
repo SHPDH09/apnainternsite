@@ -79,7 +79,7 @@
       "destination": "/api/supabase-surface/storage/$1"
     },
     {
-      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$).*)",
+      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|supabase-surface/).*)",
       "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/$1"
     },
     {
