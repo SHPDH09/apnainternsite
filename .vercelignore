@@ -20,6 +20,7 @@ api/**
 !api/staffOfficeSqlChunks.ts
 !api/staffOfficeApply.ts
 !api/rds-apply-all.ts
+!api/rds-supabase-shim.ts
 !api/rest/**
 !api/auth/**
 !api/storage/**
