@@ -1,5 +1,5 @@
 /** Single Hyderabad Aurora writer (password auth). Override via DATABASE_URL in env. */
-export const HYDERABAD_RDS_HOST = "database-1.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com";
+export const HYDERABAD_RDS_HOST = "ezyintern.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com";
 
 export function hyderabadDatabaseUrl(): string {
   const fromEnv = process.env.DATABASE_URL?.trim() || process.env.RDS_CANONICAL_DATABASE_URL?.trim();
@@ -19,7 +19,10 @@ export function hyderabadDatabaseUrl(): string {
 }
 
 export function isHyderabadDatabaseUrl(url: string): boolean {
-  return /database-1(\.cluster|-ro)?\.cpy4aaca6mfv\.ap-south-2\.rds\.amazonaws\.com/i.test(url);
+  return (
+    /ezyintern\.cpy4aaca6mfv\.ap-south-2\.rds\.amazonaws\.com/i.test(url) ||
+    /database-1(\.cluster|-ro|\.instance-1)?\.cpy4aaca6mfv\.ap-south-2\.rds\.amazonaws\.com/i.test(url)
+  );
 }
 
 export function isStaleRdsDatabaseUrl(url: string): boolean {

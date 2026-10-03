@@ -6,7 +6,7 @@ cd "$ROOT"
 
 FN="${LAMBDA_FUNCTION_NAME:-ezyintern-api-staging}"
 LAMBDA_REGION="${LAMBDA_AWS_REGION:-ap-south-1}"
-HYDERABAD_URL="${DATABASE_URL:-postgresql://postgres:Raunak12583@database-1.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require}"
+HYDERABAD_URL="${DATABASE_URL:-postgresql://postgres:Raunak12583@ezyintern.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require}"
 
 echo "→ Bundle Lambda…"
 node aws/scripts/bundle-lambda.mjs

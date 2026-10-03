@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 
 const host =
   process.env.AWS_RDS_TARGET_HOST?.trim() ||
-  "database-1.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com";
+  "ezyintern.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com";
 const user = process.env.AWS_RDS_TARGET_USER?.trim() || "postgres";
 const db = process.env.AWS_RDS_TARGET_DATABASE?.trim() || "ezyintern";
 const port = process.env.AWS_RDS_TARGET_PORT?.trim() || "5432";
