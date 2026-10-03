@@ -21,9 +21,7 @@ api/**
 !api/staffOfficeApply.ts
 !api/rds-apply-all.ts
 !api/rds-supabase-shim.ts
-!api/rest/**
-!api/auth/**
-!api/storage/**
+!api/auth/forgot-password.ts
 !api/lib/**
 # Never whitelist api/blog-interaction.ts or api/blogEngagementVercel.ts — breaks Vercel deploy.
 
