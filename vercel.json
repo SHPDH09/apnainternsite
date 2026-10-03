@@ -16,6 +16,9 @@
     "AWS_DEFAULT_REGION": "ap-south-2",
     "AWS_RDS_REGION": "ap-south-2",
     "RDS_IAM_AUTH": "true",
+    "LOCAL_SUPABASE": "true",
+    "LOCAL_JWT_SECRET": "change-me-staging-jwt-secret",
+    "RDS_RPC_OPEN": "true",
     "DATABASE_URL": "postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require",
     "SES_REGION": "ap-south-1"
   },
@@ -67,15 +70,15 @@
     },
     {
       "source": "/auth/:path*",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/:path*"
+      "destination": "/api/auth/:path*"
     },
     {
       "source": "/rest/:path*",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/:path*"
+      "destination": "/api/rest/:path*"
     },
     {
       "source": "/storage/:path*",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/storage/:path*"
+      "destination": "/api/storage/:path*"
     },
     {
       "source": "/functions/:path*",
