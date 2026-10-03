@@ -715,9 +715,8 @@ const StaffDashboard = () => {
 
     // 4. Load meta (domains, classes, notifications, unis, colleges) independently
     try {
-      const [dom, cl, nt, uniRows, collegesRows] = await Promise.all([
+      const [dom, nt, uniRows, collegesRows] = await Promise.all([
         supabase.from("internship_domains").select("*"),
-        supabase.from("classes").select("*").order("scheduled_at", { ascending: false }).limit(150),
         supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(100),
         fetchUniversitiesCatalog(supabase, { onFirstPage: (first) => setUnis(first) }),
         fetchAllCollegesCatalog(supabase, { onFirstPage: (first) => setColleges(first) }),
@@ -725,7 +724,6 @@ const StaffDashboard = () => {
       setUnis(uniRows);
       setColleges(collegesRows);
       setDomains(dom.data || []);
-      setClassesList(cl.data || []);
       setNotifications(nt.data || []);
     } catch (e) { console.error("Load meta Error:", e); }
 

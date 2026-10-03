@@ -891,11 +891,13 @@ export default function Admin() {
     leads: false,
     attendance: false,
     commsStudents: false,
+    classesAssignments: false,
   });
   const paymentsLoadInFlightRef = useRef<Promise<void> | null>(null);
   const leadsLoadInFlightRef = useRef<Promise<void> | null>(null);
   const attendanceLoadInFlightRef = useRef<Promise<void> | null>(null);
   const commsStudentsLoadInFlightRef = useRef<Promise<void> | null>(null);
+  const classesAssignmentsLoadInFlightRef = useRef<Promise<void> | null>(null);
   const enrolledEmailsRef = useRef<Set<string>>(new Set());
   const cancelledPaymentsRef = useRef<any[]>([]);
   const adminInitDoneRef = useRef(false);
@@ -1338,78 +1340,59 @@ export default function Admin() {
       }
     };
 
-    const [u, c, ce, dm, cl, ss, ap, notifs, asgnResult, cyber, customStaff] =
-      await runInBatches(
-        [
-          loadUniversities,
-          loadColleges,
-          () =>
-            safeQuery(
-              supabase
-                .from("certificates")
-                .select("*")
-                .order("created_at", { ascending: false })
-                .limit(100),
-              "certificates"
-            ),
-          async () => {
-            const rows = await fetchInternshipDomainsResilient(supabase);
+    const [u, c, ce, dm, ss, ap, notifs, cyber, customStaff] = await runInBatches(
+      [
+        loadUniversities,
+        loadColleges,
+        () =>
+          safeQuery(
+            supabase
+              .from("certificates")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .limit(100),
+            "certificates"
+          ),
+        async () => {
+          const rows = await fetchInternshipDomainsResilient(supabase);
+          return { data: rows, error: null };
+        },
+        () => safeQuery(supabase.from("system_settings").select("*"), "system_settings"),
+        () =>
+          safeQuery(
+            supabase
+              .from("admin_permissions")
+              .select("*")
+              .eq("user_id", session.user.id)
+              .maybeSingle(),
+            "admin_permissions"
+          ),
+        async () => {
+          try {
+            const rows = await fetchAdminNotifications(supabase, 100);
             return { data: rows, error: null };
-          },
-          () =>
-            safeQuery(
-              supabase
-                .from("classes")
-                .select("*")
-                .order("scheduled_at", { ascending: true })
-                .limit(150),
-              "classes"
-            ),
-          () => safeQuery(supabase.from("system_settings").select("*"), "system_settings"),
-          () =>
-            safeQuery(
-              supabase
-                .from("admin_permissions")
-                .select("*")
-                .eq("user_id", session.user.id)
-                .maybeSingle(),
-              "admin_permissions"
-            ),
-          async () => {
-            try {
-              const rows = await fetchAdminNotifications(supabase, 100);
-              return { data: rows, error: null };
-            } catch (err: any) {
-              console.warn("Error loading notifications:", err);
-              return { data: [], error: err };
-            }
-          },
-          () =>
-            safeQuery(
-              supabase
-                .from("assignments")
-                .select("*")
-                .order("created_at", { ascending: false })
-                .limit(150),
-              "assignments"
-            ),
-          () =>
-            safeQuery(
-              supabase
-                .from("cybercafe_profiles")
-                .select("*")
-                .order("created_at", { ascending: false })
-                .limit(100),
-              "cybercafe_profiles"
-            ),
-          () =>
-            safeQuery(
-              supabase.from("admin_staff").select("*").order("created_at", { ascending: false }),
-              "admin_staff"
-            ),
-        ],
-        3
-      );
+          } catch (err: any) {
+            console.warn("Error loading notifications:", err);
+            return { data: [], error: err };
+          }
+        },
+        () =>
+          safeQuery(
+            supabase
+              .from("cybercafe_profiles")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .limit(100),
+            "cybercafe_profiles"
+          ),
+        () =>
+          safeQuery(
+            supabase.from("admin_staff").select("*").order("created_at", { ascending: false }),
+            "admin_staff"
+          ),
+      ],
+      3
+    );
 
     setStaff(customStaff.data || []);
     setUnis(u.data || []);
@@ -1426,7 +1409,6 @@ export default function Admin() {
     setColleges(c.data || []);
     setCerts(ce.data || []);
     setDomains(dm.data || []);
-    setClassesList(cl.data || []);
     setSystemSettings(ss.data || []);
 
     let finalPermissions = ap.data;
@@ -1437,7 +1419,6 @@ export default function Admin() {
     setMyPermissions(finalPermissions);
 
     setNotifications(notifs.data || []);
-    setAssignments(asgnResult.data || []);
     setCyberCafes(cyber.data || []);
 
     try {
@@ -1469,22 +1450,14 @@ export default function Admin() {
               orderBy: "created_at",
               ascending: false,
             }).catch((err: any) => {
-              console.error("Error fetching payment_cancelled:", err);
-              const msg = String(err?.message || err);
-              if (!/payment_cancelled.*does not exist|42P01/i.test(msg)) {
-                toast.error("Failed to load cancelled payments: " + msg);
-              }
+              console.warn("Error fetching payment_cancelled:", err);
               return [] as any[];
             }),
             fetchAllSupabaseRows(supabase, "payment_success", {
               orderBy: "created_at",
               ascending: false,
             }).catch((err: any) => {
-              console.error("Error fetching payment_success:", err);
-              const code = String(err?.code || "");
-              if (code !== "42501") {
-                toast.error("Failed to load payment history: " + (err.message || String(err)));
-              }
+              console.warn("Error fetching payment_success:", err);
               return [] as any[];
             }),
           ]);
@@ -1687,6 +1660,47 @@ export default function Admin() {
     [fetchAllStudentsLight]
   );
 
+  /** Live classes + assignments tabs: full paginated lists (not loaded on core shell). */
+  const loadClassesAssignmentsData = useCallback(async (opts?: { force?: boolean }) => {
+    if (adminDataLoadedRef.current.classesAssignments && !opts?.force) return;
+
+    if (classesAssignmentsLoadInFlightRef.current) {
+      if (!opts?.force) return classesAssignmentsLoadInFlightRef.current;
+      await classesAssignmentsLoadInFlightRef.current;
+      classesAssignmentsLoadInFlightRef.current = null;
+    }
+
+    const task = (async () => {
+      try {
+        const [clRows, asgnRows] = await runInBatches(
+          [
+            () =>
+              fetchAllSupabaseRows(supabase, "classes", {
+                orderBy: "scheduled_at",
+                ascending: true,
+              }),
+            () =>
+              fetchAllSupabaseRows(supabase, "assignments", {
+                orderBy: "created_at",
+                ascending: false,
+              }),
+          ],
+          1
+        );
+        setClassesList(clRows);
+        setAssignments(asgnRows);
+        adminDataLoadedRef.current.classesAssignments = true;
+      } catch (err: unknown) {
+        console.warn("Classes/assignments load:", err);
+      } finally {
+        classesAssignmentsLoadInFlightRef.current = null;
+      }
+    })();
+
+    classesAssignmentsLoadInFlightRef.current = task;
+    return task;
+  }, []);
+
   /** Refresh certificate registry only (fast — avoids reloading all students). */
   const refreshCertificates = useCallback(async () => {
     const { data, error } = await supabase
@@ -1778,6 +1792,9 @@ export default function Admin() {
       }
       if (adminDataLoadedRef.current.commsStudents) {
         tasks.push(loadCommsStudentsData({ force: true }));
+      }
+      if (adminDataLoadedRef.current.classesAssignments) {
+        tasks.push(loadClassesAssignmentsData({ force: true }));
       }
       await Promise.all(tasks);
     } catch (err: any) {
@@ -2046,6 +2063,7 @@ export default function Admin() {
               leads: false,
               attendance: false,
               commsStudents: false,
+              classesAssignments: false,
             };
             navigate(ADMIN_LOGIN_PATH);
             return;
@@ -2068,6 +2086,7 @@ export default function Admin() {
             leads: false,
             attendance: false,
             commsStudents: false,
+            classesAssignments: false,
           };
           navigate(ADMIN_LOGIN_PATH);
         })();
@@ -2122,6 +2141,10 @@ export default function Admin() {
         await loadPaymentsData();
         await loadCommsStudentsData();
       })();
+      return;
+    }
+    if (activeTab === "assignments" || activeTab === "classes") {
+      void loadClassesAssignmentsData();
     }
   }, [
     allowed,
@@ -2131,6 +2154,7 @@ export default function Admin() {
     loadEnrolledEmailsOnly,
     loadAttendanceTabData,
     loadCommsStudentsData,
+    loadClassesAssignmentsData,
     refreshAttendanceCounts,
   ]);
 

@@ -487,8 +487,6 @@ export const RegistrationForm = ({
     course,
     internshipMode,
     password,
-    colleges,
-    unis,
   ]);
 
   useEffect(() => {
