@@ -2,12 +2,6 @@
   "buildCommand": "npm run vercel-build",
   "outputDirectory": "dist",
   "framework": "vite",
-  "functions": {
-    "api/rds-portal.ts": {
-      "maxDuration": 60,
-      "includeFiles": "api/.bundled/**"
-    }
-  },
   "env": {
     "SMTP_HOST": "smtp.hostinger.com",
     "SMTP_USER": "info@apnaintern.in",
@@ -74,15 +68,15 @@
     },
     {
       "source": "/auth/(.*)",
-      "destination": "/api/rds-portal?segment=auth&path=$1"
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/$1"
     },
     {
       "source": "/rest/(.*)",
-      "destination": "/api/rds-portal?segment=rest&path=$1"
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/$1"
     },
     {
       "source": "/storage/(.*)",
-      "destination": "/api/rds-portal?segment=storage&path=$1"
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/storage/$1"
     },
     {
       "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|rds-portal$).*)",
