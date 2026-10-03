@@ -236,6 +236,14 @@ export default {
     }
 
     if (shouldProxy(url.pathname)) {
+      const apiPath = upstreamPath(url.pathname);
+      if (
+        apiPath.startsWith("/rest/") ||
+        apiPath.startsWith("/auth/") ||
+        apiPath.startsWith("/storage/")
+      ) {
+        return proxyRequestToVercel(request, env);
+      }
       const ensureResponse = await tryProxyEnsureApiToVercel(request, env);
       if (ensureResponse) return ensureResponse;
       const vercelSendMailResponse = await tryHandleVercelSendMailActions(request, env);

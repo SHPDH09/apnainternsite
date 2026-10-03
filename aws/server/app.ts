@@ -235,21 +235,40 @@ async function buildApp(): Promise<Express> {
   // Point VITE_SUPABASE_URL=http://localhost:3000 so the browser never hits
   // *.supabase.co during local AWS testing.
   if (localSupabase) {
-    app.get("/auth/v1/settings", authSettings);
-    app.get("/auth/v1/health", (_req, res) => res.json({ version: "local", name: "GoTrue" }));
-    app.post("/auth/v1/token", authToken);
-    app.get("/auth/v1/user", authUser);
-    app.post("/auth/v1/logout", authLogout);
-    app.post("/auth/v1/signup", authSignup);
+    const authRoutes: Array<{ method: "get" | "post"; path: string; handler: express.RequestHandler }> =
+      [
+        { method: "get", path: "/auth/v1/settings", handler: authSettings },
+        {
+          method: "get",
+          path: "/auth/v1/health",
+          handler: (_req, res) => res.json({ version: "local", name: "GoTrue" }),
+        },
+        { method: "post", path: "/auth/v1/token", handler: authToken },
+        { method: "get", path: "/auth/v1/user", handler: authUser },
+        { method: "post", path: "/auth/v1/logout", handler: authLogout },
+        { method: "post", path: "/auth/v1/signup", handler: authSignup },
+      ];
+    for (const route of authRoutes) {
+      app[route.method](route.path, route.handler);
+      app[route.method](`/api${route.path}`, route.handler);
+    }
 
-    app.get("/rest/v1/:table", restGet);
-    app.head("/rest/v1/:table", restGet);
-    app.post("/rest/v1/:table", restPost);
-    app.patch("/rest/v1/:table", restPatch);
-    app.delete("/rest/v1/:table", restDelete);
-    app.post("/rest/v1/rpc/:name", restRpc);
+    const restRoutes: Array<{ method: "get" | "head" | "post" | "patch" | "delete"; path: string; handler: express.RequestHandler }> =
+      [
+        { method: "get", path: "/rest/v1/:table", handler: restGet },
+        { method: "head", path: "/rest/v1/:table", handler: restGet },
+        { method: "post", path: "/rest/v1/:table", handler: restPost },
+        { method: "patch", path: "/rest/v1/:table", handler: restPatch },
+        { method: "delete", path: "/rest/v1/:table", handler: restDelete },
+        { method: "post", path: "/rest/v1/rpc/:name", handler: restRpc },
+      ];
+    for (const route of restRoutes) {
+      app[route.method](route.path, route.handler);
+      app[route.method](`/api${route.path}`, route.handler);
+    }
 
     app.all("/storage/v1/*", handleStorageRequest);
+    app.all("/api/storage/v1/*", handleStorageRequest);
     app.get("/realtime/v1/*", (_req, res) => res.status(501).end());
   }
 
