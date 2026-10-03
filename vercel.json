@@ -68,30 +68,18 @@
     },
     {
       "source": "/auth/(.*)",
-      "destination": "/api/rds-supabase-shim?__surface=auth&__path=$1"
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/$1"
     },
     {
       "source": "/rest/(.*)",
-      "destination": "/api/rds-supabase-shim?__surface=rest&__path=$1"
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/$1"
     },
     {
       "source": "/storage/(.*)",
-      "destination": "/api/rds-supabase-shim?__surface=storage&__path=$1"
+      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/storage/$1"
     },
     {
-      "source": "/api/auth/((?!forgot-password$).*)",
-      "destination": "/api/rds-supabase-shim?__surface=auth&__path=$1"
-    },
-    {
-      "source": "/api/rest/(.*)",
-      "destination": "/api/rds-supabase-shim?__surface=rest&__path=$1"
-    },
-    {
-      "source": "/api/storage/(.*)",
-      "destination": "/api/rds-supabase-shim?__surface=storage&__path=$1"
-    },
-    {
-      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|admin-partner-register$|partner-application-submit$|ensure-partner-applications$|ensure-project-report-templates$|ensure-learning-materials$|ensure-staff-attendance-offices$|staff-office-rpc$|rds-apply-all$|rds-supabase-shim$|rest/|auth/|storage/).*)",
+      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|admin-partner-register$|partner-application-submit$|ensure-partner-applications$|ensure-project-report-templates$|ensure-learning-materials$|ensure-staff-attendance-offices$|staff-office-rpc$|rds-apply-all$).*)",
       "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/$1"
     },
     {

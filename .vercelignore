@@ -20,8 +20,6 @@ api/**
 !api/staffOfficeSqlChunks.ts
 !api/staffOfficeApply.ts
 !api/rds-apply-all.ts
-!api/rds-supabase-shim.ts
-!api/auth/forgot-password.ts
 !api/lib/**
 # Never whitelist api/blog-interaction.ts or api/blogEngagementVercel.ts — breaks Vercel deploy.
 

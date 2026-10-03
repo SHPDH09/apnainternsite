@@ -2,7 +2,9 @@ import { Signer } from "@aws-sdk/rds-signer";
 
 export function rdsIamAuthEnabled(): boolean {
   if (process.env.VERCEL) return true;
-  return /^(1|true|yes)$/i.test(String(process.env.RDS_IAM_AUTH || "").trim());
+  if (/^(1|true|yes)$/i.test(String(process.env.RDS_IAM_AUTH || "").trim())) return true;
+  const url = String(process.env.DATABASE_URL || process.env.RDS_CANONICAL_DATABASE_URL || "");
+  return /\/\/postgres@/i.test(url) && /ap-south-2/i.test(url) && !/:[^/@]+@/.test(url);
 }
 
 function parseDatabaseUrl(raw: string) {
