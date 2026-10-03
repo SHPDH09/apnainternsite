@@ -19,21 +19,19 @@ export default function middleware(request: Request) {
   const url = new URL(request.url);
   const { pathname } = url;
 
-  if (pathname.startsWith("/rest/")) {
-    url.pathname = `/api/rest/${pathname.slice("/rest/".length)}`;
+  const shim = (surface: "rest" | "auth" | "storage", prefix: string) => {
+    const sub = pathname.slice(prefix.length);
+    url.pathname = "/api/rds-supabase-shim";
+    url.searchParams.set("__surface", surface);
+    url.searchParams.set("__path", sub.replace(/^\//, ""));
     return rewrite(url);
-  }
-  if (pathname.startsWith("/auth/")) {
-    url.pathname = `/api/auth/${pathname.slice("/auth/".length)}`;
-    return rewrite(url);
-  }
-  if (pathname.startsWith("/storage/")) {
-    url.pathname = `/api/storage/${pathname.slice("/storage/".length)}`;
-    return rewrite(url);
-  }
-  if (pathname.startsWith("/api/rest/") || pathname.startsWith("/api/auth/") || pathname.startsWith("/api/storage/")) {
-    return rewrite(url);
-  }
+  };
+  if (pathname.startsWith("/rest/")) return shim("rest", "/rest/");
+  if (pathname.startsWith("/auth/")) return shim("auth", "/auth/");
+  if (pathname.startsWith("/storage/")) return shim("storage", "/storage/");
+  if (pathname.startsWith("/api/rest/")) return shim("rest", "/api/rest/");
+  if (pathname.startsWith("/api/auth/")) return shim("auth", "/api/auth/");
+  if (pathname.startsWith("/api/storage/")) return shim("storage", "/api/storage/");
 
   return rewrite(url);
 }
