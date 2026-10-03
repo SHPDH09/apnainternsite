@@ -112,7 +112,11 @@ export function loadAwsRdsTargetDatabaseUrl() {
 }
 
 export function pgClientConfig(url) {
-  const useSsl = /sslmode=require/i.test(url) || /rds\.amazonaws\.com/i.test(url);
+  const useSsl =
+    /sslmode=require/i.test(url) ||
+    /rds\.amazonaws\.com/i.test(url) ||
+    /\.supabase\.co/i.test(url) ||
+    /pooler\.supabase\.com/i.test(url);
   return {
     connectionString: url
       .replace(/([?&])sslmode=[^&]*/gi, "$1")
