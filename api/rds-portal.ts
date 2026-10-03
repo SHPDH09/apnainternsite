@@ -56,6 +56,23 @@ function parseSelect(raw: unknown): string {
   return cols.length ? cols.map((c) => `"${c}"`).join(", ") : "*";
 }
 
+function parseOrder(raw: unknown): string {
+  if (!raw) return "";
+  const s = String(Array.isArray(raw) ? raw[0] : raw);
+  const bits: string[] = [];
+  for (const part of s.split(",")) {
+    const tokens = part.trim().split(".").filter(Boolean);
+    const col = tokens[0];
+    if (!col || !IDENT.test(col)) continue;
+    const dir = tokens[1]?.toLowerCase() === "desc" ? "DESC" : "ASC";
+    let nulls = "";
+    if (tokens.some((t) => t.toLowerCase() === "nullslast")) nulls = " NULLS LAST";
+    else if (tokens.some((t) => t.toLowerCase() === "nullsfirst")) nulls = " NULLS FIRST";
+    bits.push(`"${col}" ${dir}${nulls}`);
+  }
+  return bits.length ? ` ORDER BY ${bits.join(", ")}` : "";
+}
+
 function buildWhere(query: VercelRequest["query"]): { sql: string; params: unknown[] } {
   const params: unknown[] = [];
   const parts: string[] = [];
@@ -72,7 +89,10 @@ function buildWhere(query: VercelRequest["query"]): { sql: string; params: unkno
       parts.push(`"${key}" IS NULL`);
       continue;
     }
-    params.push(rhs);
+    let bind: unknown = rhs;
+    if (rhs === "true") bind = true;
+    else if (rhs === "false") bind = false;
+    params.push(bind);
     const ph = `$${params.length}`;
     const col = `"${key}"`;
     if (op === "eq") parts.push(`${col} = ${ph}`);
@@ -101,9 +121,11 @@ async function tryRestLite(req: VercelRequest, res: VercelResponse, pathOnly: st
   const limit = Math.min(Math.max(Number(req.query.limit) || 1000, 1), 5000);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
   const { sql: where, params } = buildWhere(req.query);
+  const order = parseOrder(req.query.order);
 
   let sql = `SELECT ${cols} FROM public."${table}"`;
   if (where) sql += ` WHERE ${where}`;
+  sql += order;
   sql += ` LIMIT ${limit} OFFSET ${offset}`;
 
   try {
