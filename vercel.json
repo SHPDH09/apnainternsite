@@ -2,6 +2,12 @@
   "buildCommand": "npm run vercel-build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "functions": {
+    "api/rds-portal.ts": {
+      "maxDuration": 60,
+      "includeFiles": "api/.bundled/**"
+    }
+  },
   "env": {
     "SMTP_HOST": "smtp.hostinger.com",
     "SMTP_USER": "info@apnaintern.in",
