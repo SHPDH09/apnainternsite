@@ -7,6 +7,20 @@ import { getRdsIamAuthToken, rdsIamAuthEnabled } from "./rds-iam-pg.js";
 
 let pool: Pool | null = null;
 
+/** Vercel project env often overrides vercel.json with stale Mumbai ezyintern URL — force Hyderabad IAM on Vercel. */
+export function resolveDatabaseUrl(): string {
+  const fromEnv = process.env.DATABASE_URL?.trim();
+  if (rdsIamAuthEnabled() && process.env.VERCEL) {
+    const canonical = process.env.RDS_CANONICAL_DATABASE_URL?.trim();
+    if (canonical) return canonical;
+    return "postgresql://postgres@database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require";
+  }
+  if (!fromEnv) {
+    throw new Error("DATABASE_URL is not set — cannot query RDS");
+  }
+  return fromEnv;
+}
+
 function normalizeDatabaseUrl(raw: string): { connectionString: string; useSsl: boolean } {
   const useSsl =
     /sslmode=require/i.test(raw) ||
