@@ -3,26 +3,8 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "env": {
-    "SMTP_HOST": "smtp.hostinger.com",
-    "SMTP_USER": "info@apnaintern.in",
-    "SMTP_PORT": "587",
-    "SMTP_PASS": "Raunak@12583",
-    "USE_SES_API": "true",
-    "USE_SES_FOR_BULK": "true",
-    "MAIL_FROM": "Apna Intern <info@apnaintern.in>",
-    "MAIL_FROM_ADDRESS": "info@apnaintern.in",
-    "AWS_ACCESS_KEY_ID": "AKIAUP3VMJBI563S3RNY",
-    "AWS_SECRET_ACCESS_KEY": "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",
-    "AWS_DEFAULT_REGION": "ap-south-2",
-    "AWS_RDS_REGION": "ap-south-2",
-    "RDS_IAM_AUTH": "false",
-    "LOCAL_SUPABASE": "true",
-    "VITE_SUPABASE_PUBLISHABLE_KEY": "local-anon-key",
-    "LOCAL_JWT_SECRET": "change-me-staging-jwt-secret",
-    "RDS_RPC_OPEN": "true",
-    "DATABASE_URL": "postgresql://postgres:Raunak12583@ezyintern.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require",
-    "RDS_CANONICAL_DATABASE_URL": "postgresql://postgres:Raunak12583@ezyintern.cpy4aaca6mfv.ap-south-2.rds.amazonaws.com:5432/ezyintern?sslmode=require",
-    "SES_REGION": "ap-south-1"
+    "VITE_SUPABASE_URL": "https://apnaintern.in",
+    "VITE_SUPABASE_PROJECT_ID": "hflapipozwwwinbbfpuh"
   },
   "redirects": [
     {
@@ -68,26 +50,22 @@
     },
     {
       "source": "/auth/(.*)",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/auth/$1"
+      "destination": "https://hflapipozwwwinbbfpuh.supabase.co/auth/$1"
     },
     {
       "source": "/rest/(.*)",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/rest/$1"
+      "destination": "https://hflapipozwwwinbbfpuh.supabase.co/rest/$1"
     },
     {
       "source": "/storage/(.*)",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/storage/$1"
+      "destination": "https://hflapipozwwwinbbfpuh.supabase.co/storage/$1"
     },
     {
-      "source": "/api/((?!send-mail$|otp-deliver$|request-otp$|auth/forgot-password$|rds-portal$).*)",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/api/$1"
+      "source": "/realtime/(.*)",
+      "destination": "https://hflapipozwwwinbbfpuh.supabase.co/realtime/$1"
     },
     {
-      "source": "/functions/:path*",
-      "destination": "https://eikmcrd7ei.execute-api.ap-south-1.amazonaws.com/staging/functions/:path*"
-    },
-    {
-      "source": "/((?!api/|assets/|rest/|auth/|storage/|functions/).*)",
+      "source": "/((?!api/|assets/|rest/|auth/|storage/|realtime/|functions/).*)",
       "destination": "/index.html"
     }
   ],
