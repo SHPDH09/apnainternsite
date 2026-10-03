@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { Pool } from "pg";
+import jwt from "jsonwebtoken";
+import { Pool, type PoolClient } from "pg";
+import { getRpcDef } from "../aws/server/rpc-registry.js";
 
 function portalPathFromRequest(req: VercelRequest): string {
   const segment = String(req.query.segment || "").trim();
@@ -22,7 +24,212 @@ function portalPathFromRequest(req: VercelRequest): string {
 
 const TABLE = /^[a-z_][a-z0-9_]*$/i;
 const IDENT = /^[a-z_][a-z0-9_]*$/i;
+const TS_RPC = new Set([
+  "admin_ensure_site_cms_tables",
+  "admin_ensure_dashboard_service_keys",
+  "admin_ensure_partner_applications",
+  "admin_ensure_project_report_templates",
+  "student_ensure_uniqueness_schema",
+]);
+
+type JwtClaims = { sub: string; email?: string; role?: string };
+
 let litePool: Pool | null = null;
+
+function jwtSecret(): string {
+  return (
+    process.env.LOCAL_JWT_SECRET ||
+    process.env.JWT_SECRET ||
+    "ezyintern-local-dev-secret-change-me"
+  );
+}
+
+function jwtFromRequest(req: VercelRequest): JwtClaims | null {
+  const h = String(req.headers.authorization || "");
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  if (!m) return null;
+  try {
+    const payload = jwt.verify(m[1], jwtSecret(), {
+      issuer: "ezyintern-local",
+    }) as jwt.JwtPayload;
+    if (!payload?.sub) return null;
+    return {
+      sub: String(payload.sub),
+      email: payload.email ? String(payload.email) : undefined,
+      role: payload.role ? String(payload.role) : "authenticated",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function applyJwtClaims(client: PoolClient, jwtClaims: JwtClaims | null): Promise<void> {
+  if (!jwtClaims?.sub) return;
+  await client.query(`SELECT set_config('request.jwt.claim.sub', $1, true)`, [jwtClaims.sub]);
+  await client.query(`SELECT set_config('request.jwt.claim.role', $1, true)`, [
+    jwtClaims.role || "authenticated",
+  ]);
+  if (jwtClaims.email) {
+    await client.query(`SELECT set_config('request.jwt.claim.email', $1, true)`, [
+      jwtClaims.email,
+    ]);
+  }
+}
+
+function rpcBody(req: VercelRequest): Record<string, unknown> {
+  if (req.body && typeof req.body === "object" && !Array.isArray(req.body)) {
+    return req.body as Record<string, unknown>;
+  }
+  return {};
+}
+
+function bindRpcArg(
+  val: unknown,
+  pgType: string | undefined,
+  paramIndex: number
+): { placeholder: string; value: unknown } {
+  const t = (pgType || "").toLowerCase();
+  if (val === null || val === undefined) {
+    return { placeholder: `$${paramIndex}`, value: null };
+  }
+  if (t === "jsonb" || t === "json") {
+    return {
+      placeholder: `$${paramIndex}::${t}`,
+      value: typeof val === "string" ? val : JSON.stringify(val),
+    };
+  }
+  if (
+    typeof val === "object" &&
+    !(val instanceof Date) &&
+    !Buffer.isBuffer(val) &&
+    (!Array.isArray(val) ||
+      val.some((x) => x !== null && typeof x === "object" && !(x instanceof Date)))
+  ) {
+    return {
+      placeholder: `$${paramIndex}::jsonb`,
+      value: JSON.stringify(val),
+    };
+  }
+  if (Array.isArray(val) && t.endsWith("[]")) {
+    return { placeholder: `$${paramIndex}::${t}`, value: val };
+  }
+  return { placeholder: `$${paramIndex}`, value: val };
+}
+
+async function callRpcLite(
+  fnName: string,
+  argOrder: string[],
+  args: Record<string, unknown>,
+  jwtClaims: JwtClaims | null
+): Promise<unknown> {
+  const client = await getLitePool().connect();
+  try {
+    await client.query("BEGIN");
+    await applyJwtClaims(client, jwtClaims);
+
+    const { rows: metaRows } = await client.query<{
+      proretset: boolean;
+      proargnames: string[] | null;
+      argtypes: string[] | null;
+    }>(
+      `SELECT p.proretset,
+              p.proargnames,
+              ARRAY(
+                SELECT format_type(t, NULL)
+                FROM unnest(p.proargtypes) AS t
+              ) AS argtypes
+       FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND p.proname = $1 AND p.prokind = 'f'
+       ORDER BY p.oid
+       LIMIT 1`,
+      [fnName]
+    );
+    if (!metaRows[0]) {
+      throw new Error(`Function public.${fnName} does not exist`);
+    }
+
+    const isSet = Boolean(metaRows[0].proretset);
+    const pgNames = metaRows[0].proargnames || [];
+    const pgTypes = metaRows[0].argtypes || [];
+    const typeByName = new Map<string, string>();
+    for (let i = 0; i < pgNames.length; i++) {
+      if (pgNames[i]) typeByName.set(pgNames[i], pgTypes[i] || "");
+    }
+
+    const placeholders: string[] = [];
+    const values: unknown[] = [];
+    argOrder.forEach((key, i) => {
+      const bound = bindRpcArg(key in args ? args[key] : null, typeByName.get(key), i + 1);
+      placeholders.push(bound.placeholder);
+      values.push(bound.value);
+    });
+    const ph = placeholders.join(", ");
+
+    if (isSet) {
+      const setSql =
+        argOrder.length === 0
+          ? `SELECT row_to_json(t) AS row FROM (SELECT * FROM public.${fnName}()) t`
+          : `SELECT row_to_json(t) AS row FROM (SELECT * FROM public.${fnName}(${ph})) t`;
+      const { rows } = await client.query<{ row: unknown }>(setSql, values);
+      await client.query("COMMIT");
+      return rows.map((r) => r.row);
+    }
+
+    const sql =
+      argOrder.length === 0
+        ? `SELECT public.${fnName}() AS result`
+        : `SELECT public.${fnName}(${ph}) AS result`;
+    const { rows } = await client.query<{ result: unknown }>(sql, values);
+    await client.query("COMMIT");
+    return rows[0]?.result ?? null;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: string): Promise<boolean> {
+  if (req.method !== "POST") return false;
+  const m = pathOnly.match(/^\/rest\/v1\/rpc\/([a-z_][a-z0-9_]*)$/i);
+  if (!m) return false;
+  const name = m[1];
+  if (TS_RPC.has(name)) return false;
+
+  const def = getRpcDef(name);
+  if (!def) return false;
+
+  const jwtClaims = jwtFromRequest(req);
+  const requiresJwt =
+    def.auth === "auth" ||
+    def.auth === "admin" ||
+    name.startsWith("admin_") ||
+    name.startsWith("student_") ||
+    name.startsWith("sync_") ||
+    name.startsWith("get_referral_partner_");
+  if (requiresJwt) {
+    if (def.auth === "public") {
+      // registry-public RPCs (e.g. repair_student_auth_login) — allow without token
+    } else if (!jwtClaims) {
+      res.status(401).json({ message: "JWT required" });
+      return true;
+    }
+  }
+
+  try {
+    const data = await callRpcLite(name, def.args, rpcBody(req), jwtClaims);
+    res.status(200).json(data);
+    return true;
+  } catch (err) {
+    res.status(400).json({
+      message: err instanceof Error ? err.message : String(err),
+      code: (err as { code?: string }).code,
+    });
+    return true;
+  }
+}
 
 function liteConnectionString(): string {
   const raw = String(process.env.DATABASE_URL || "").trim();
@@ -185,6 +392,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   if (pathOnly.startsWith("/rest/")) {
+    const rpcHandled = await tryRpcLite(req, res, pathOnly);
+    if (rpcHandled) return;
     const handled = await tryRestLite(req, res, pathOnly);
     if (handled) return;
   }
