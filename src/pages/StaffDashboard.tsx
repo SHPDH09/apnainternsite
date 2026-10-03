@@ -31,7 +31,7 @@ import {
   type StaffLeadTargets,
 } from "@/lib/leadAssignment";
 import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
-import { fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
+import { fetchAllCollegesCatalog, fetchUniversitiesCatalog } from "@/lib/institutionCatalog";
 import { siteApiUrl, usePollingInsteadOfRealtime } from "@/lib/siteApi";
 import { shouldRunBackgroundPoll } from "@/lib/apiPollingGuard";
 import { 
@@ -715,14 +715,14 @@ const StaffDashboard = () => {
 
     // 4. Load meta (domains, classes, notifications, unis, colleges) independently
     try {
-      const [dom, cl, nt, uniRes, collegesRows] = await Promise.all([
+      const [dom, cl, nt, uniRows, collegesRows] = await Promise.all([
         supabase.from("internship_domains").select("*"),
-        supabase.from("classes").select("*").order("scheduled_at", { ascending: false }),
+        supabase.from("classes").select("*").order("scheduled_at", { ascending: false }).limit(150),
         supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(100),
-        supabase.from("universities").select("*").order("name"),
-        fetchAllCollegesCatalog(supabase),
+        fetchUniversitiesCatalog(supabase, { onFirstPage: (first) => setUnis(first) }),
+        fetchAllCollegesCatalog(supabase, { onFirstPage: (first) => setColleges(first) }),
       ]);
-      setUnis(uniRes.data || []);
+      setUnis(uniRows);
       setColleges(collegesRows);
       setDomains(dom.data || []);
       setClassesList(cl.data || []);

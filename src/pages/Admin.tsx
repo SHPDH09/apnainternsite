@@ -90,7 +90,12 @@ import {
 } from "@/lib/createSubUser";
 import { CollegeAdminCollegePicker } from "@/components/admin/CollegeAdminCollegePicker";
 import { displayCollegeName } from "@/lib/collegeDisplay";
-import { collegesForUniversity, fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
+import {
+  collegesForUniversity,
+  fetchAllCollegesCatalog,
+  fetchUniversitiesCatalog,
+} from "@/lib/institutionCatalog";
+import { runInBatches } from "@/lib/supabaseQueryResilience";
 import { adminUpsertStudentProfile } from "@/lib/adminProfileUpsert";
 import { saveStudentDirectoryUpdate } from "@/lib/saveStudentDirectoryRow";
 import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
@@ -1279,21 +1284,28 @@ export default function Admin() {
     };
   }, [isCafeViewOpen, selectedCafe?.id]);
 
-  const safeQuery = useCallback(async (query: Promise<any>, tableName: string) => {
-    try {
-      const res = await query;
-      if (res.error) {
-        console.error(`Error loading table ${tableName}:`, res.error);
-        toast.error(`Database error loading ${tableName}: ${res.error.message}`);
-        return { data: [], error: res.error };
+  const safeQuery = useCallback(
+    async (query: Promise<any>, tableName: string, opts?: { toast?: boolean }) => {
+      try {
+        const res = await query;
+        if (res.error) {
+          console.warn(`Error loading table ${tableName}:`, res.error);
+          if (opts?.toast) {
+            toast.error(`Database error loading ${tableName}: ${res.error.message}`);
+          }
+          return { data: [], error: res.error };
+        }
+        return res;
+      } catch (err: any) {
+        console.warn(`Exception loading table ${tableName}:`, err);
+        if (opts?.toast) {
+          toast.error(`Error loading ${tableName}: ${err.message || String(err)}`);
+        }
+        return { data: [], error: err };
       }
-      return res;
-    } catch (err: any) {
-      console.error(`Exception loading table ${tableName}:`, err);
-      toast.error(`Error loading ${tableName}: ${err.message || String(err)}`);
-      return { data: [], error: err };
-    }
-  }, []);
+    },
+    []
+  );
 
   /** Fast shell: settings, colleges, permissions — no bulk payments/students. */
   const loadCoreAdmin = useCallback(async () => {
@@ -1302,80 +1314,102 @@ export default function Admin() {
     setCurrentUserId(session.user.id);
     setCurrentUserEmail(session.user.email || "");
 
+    const loadUniversities = async () => {
+      try {
+        const rows = await fetchUniversitiesCatalog(supabase, {
+          onFirstPage: (first) => setUnis(first),
+        });
+        return { data: rows, error: null };
+      } catch (err: any) {
+        console.warn("Error loading universities:", err);
+        return { data: [], error: err };
+      }
+    };
+
+    const loadColleges = async () => {
+      try {
+        const rows = await fetchAllCollegesCatalog(supabase, {
+          onFirstPage: (first) => setColleges(first),
+        });
+        return { data: rows, error: null };
+      } catch (err: any) {
+        console.warn("Error loading colleges:", err);
+        return { data: [], error: err };
+      }
+    };
+
     const [u, c, ce, dm, cl, ss, ap, notifs, asgnResult, cyber, customStaff] =
-      await Promise.all([
-        (async () => {
-          try {
-            const rows = await fetchAllSupabaseRows(supabase, "universities", {
-              orderBy: "name",
-              ascending: true,
-            });
+      await runInBatches(
+        [
+          loadUniversities,
+          loadColleges,
+          () =>
+            safeQuery(
+              supabase
+                .from("certificates")
+                .select("*")
+                .order("created_at", { ascending: false })
+                .limit(100),
+              "certificates"
+            ),
+          async () => {
+            const rows = await fetchInternshipDomainsResilient(supabase);
             return { data: rows, error: null };
-          } catch (err: any) {
-            console.error("Error loading universities:", err);
-            toast.error(`Database error loading universities: ${err?.message || String(err)}`);
-            return { data: [], error: err };
-          }
-        })(),
-        (async () => {
-          try {
-            const rows = await fetchAllCollegesCatalog(supabase);
-            return { data: rows, error: null };
-          } catch (err: any) {
-            console.error("Error loading colleges:", err);
-            toast.error(`Database error loading colleges: ${err?.message || String(err)}`);
-            return { data: [], error: err };
-          }
-        })(),
-        safeQuery(
-          supabase
-            .from("certificates")
-            .select("*")
-            .order("created_at", { ascending: false })
-            .limit(100),
-          "certificates"
-        ),
-        (async () => {
-          const rows = await fetchInternshipDomainsResilient(supabase);
-          return { data: rows, error: null };
-        })(),
-        safeQuery(
-          supabase
-            .from("classes")
-            .select("*")
-            .order("scheduled_at", { ascending: true }),
-          "classes"
-        ),
-        safeQuery(supabase.from("system_settings").select("*"), "system_settings"),
-        safeQuery(
-          supabase.from("admin_permissions").select("*").eq("user_id", session.user.id).maybeSingle(),
-          "admin_permissions"
-        ),
-        (async () => {
-          try {
-            const rows = await fetchAdminNotifications(supabase, 100);
-            return { data: rows, error: null };
-          } catch (err: any) {
-            console.error("Error loading notifications:", err);
-            return { data: [], error: err };
-          }
-        })(),
-        safeQuery(
-          supabase
-            .from("assignments")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          "assignments"
-        ),
-        safeQuery(
-          supabase.from("cybercafe_profiles").select("*").order("created_at", { ascending: false }),
-          "cybercafe_profiles"
-        ),
-        safeQuery(
-          supabase.from("admin_staff").select("*").order("created_at", { ascending: false }),
-          "admin_staff"
-        ),
-      ]);
+          },
+          () =>
+            safeQuery(
+              supabase
+                .from("classes")
+                .select("*")
+                .order("scheduled_at", { ascending: true })
+                .limit(150),
+              "classes"
+            ),
+          () => safeQuery(supabase.from("system_settings").select("*"), "system_settings"),
+          () =>
+            safeQuery(
+              supabase
+                .from("admin_permissions")
+                .select("*")
+                .eq("user_id", session.user.id)
+                .maybeSingle(),
+              "admin_permissions"
+            ),
+          async () => {
+            try {
+              const rows = await fetchAdminNotifications(supabase, 100);
+              return { data: rows, error: null };
+            } catch (err: any) {
+              console.warn("Error loading notifications:", err);
+              return { data: [], error: err };
+            }
+          },
+          () =>
+            safeQuery(
+              supabase
+                .from("assignments")
+                .select("*")
+                .order("created_at", { ascending: false })
+                .limit(150),
+              "assignments"
+            ),
+          () =>
+            safeQuery(
+              supabase
+                .from("cybercafe_profiles")
+                .select("*")
+                .order("created_at", { ascending: false })
+                .limit(100),
+              "cybercafe_profiles"
+            ),
+          () =>
+            safeQuery(
+              supabase.from("admin_staff").select("*").order("created_at", { ascending: false }),
+              "admin_staff"
+            ),
+        ],
+        3
+      );
 
     setStaff(customStaff.data || []);
     setUnis(u.data || []);
