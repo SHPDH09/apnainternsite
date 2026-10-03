@@ -1,0 +1,128 @@
+# One-time Mumbai → Hyderabad RDS clone using GitHub Actions secrets (no manual steps on your laptop).
+
+name: RDS Migrate Region
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_cutover:
+        description: "Only dump+restore; do not update Lambda/Vercel DATABASE_URL"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+concurrency:
+  group: rds-migrate-region
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve SOURCE and TARGET URLs
+        id: urls
+        env:
+          SOURCE_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TARGET_DATABASE_URL: ${{ secrets.TARGET_DATABASE_URL }}
+          HYDERABAD_DATABASE_URL: ${{ secrets.HYDERABAD_DATABASE_URL }}
+          AWS_RDS_TARGET_PASSWORD: ${{ secrets.AWS_RDS_TARGET_PASSWORD }}
+          RDS_MASTER_PASSWORD: ${{ secrets.RDS_MASTER_PASSWORD }}
+          AWS_RDS_TARGET_HOST: database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com
+          AWS_RDS_TARGET_USER: postgres
+          AWS_RDS_TARGET_DATABASE: ezyintern
+          AWS_RDS_TARGET_REGION: ap-south-2
+          USE_RDS_IAM_TARGET: ${{ secrets.USE_RDS_IAM_TARGET || 'true' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-2' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SOURCE_DATABASE_URL:-}" ]; then
+            echo "::error::GitHub secret DATABASE_URL (Mumbai/source) is empty"
+            exit 1
+          fi
+          TARGET="$(node aws/scripts/resolve-target-database-url.mjs)"
+          echo "SOURCE_DATABASE_URL=${SOURCE_DATABASE_URL}" >> "$GITHUB_ENV"
+          echo "TARGET_DATABASE_URL=${TARGET}" >> "$GITHUB_ENV"
+          echo "Resolved TARGET host: database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com"
+
+      - name: Ensure ezyintern database on target (postgres admin)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-south-2
+          USE_RDS_IAM_TARGET: ${{ secrets.USE_RDS_IAM_TARGET || 'true' }}
+          AWS_RDS_TARGET_PASSWORD: ${{ secrets.AWS_RDS_TARGET_PASSWORD }}
+          RDS_MASTER_PASSWORD: ${{ secrets.RDS_MASTER_PASSWORD }}
+        run: |
+          set -euo pipefail
+          HOST="database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com"
+          ADMIN_URL=""
+          if [ -n "${AWS_RDS_TARGET_PASSWORD:-}${RDS_MASTER_PASSWORD:-}" ]; then
+            PASS="${AWS_RDS_TARGET_PASSWORD:-$RDS_MASTER_PASSWORD}"
+            ADMIN_URL="postgresql://postgres:${PASS}@${HOST}:5432/postgres?sslmode=require"
+          elif [ "${USE_RDS_IAM_TARGET:-true}" = "true" ] && [ -n "${AWS_ACCESS_KEY_ID:-}" ]; then
+            TOKEN="$(aws rds generate-db-auth-token --hostname "$HOST" --port 5432 --username postgres --region ap-south-2)"
+            export PGPASSWORD="$TOKEN"
+            ADMIN_URL="postgresql://postgres@${HOST}:5432/postgres?sslmode=require"
+          else
+            echo "::warning::Could not ensure ezyintern DB — continuing (restore may create objects in existing DB)"
+            exit 0
+          fi
+          psql "$ADMIN_URL" -v ON_ERROR_STOP=0 -c "SELECT 1 FROM pg_database WHERE datname = 'ezyintern'" | grep -q 1 || \
+            psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE ezyintern;"
+
+      - name: pg_dump source → pg_restore target
+        run: npm run aws:rds:migrate-region
+
+      - name: Apply latest SQL patches on target
+        env:
+          DATABASE_URL: ${{ env.TARGET_DATABASE_URL }}
+        run: npm run aws:rds:apply-all
+
+      - name: Cut over Lambda DATABASE_URL to Hyderabad
+        if: inputs.skip_cutover != 'true'
+        env:
+          DATABASE_URL: ${{ env.TARGET_DATABASE_URL }}
+          TARGET_DATABASE_URL: ${{ env.TARGET_DATABASE_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION || 'ap-south-1' }}
+          LAMBDA_AWS_REGION: ap-south-1
+        run: |
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+            echo "::warning::AWS keys missing — skipped Lambda DATABASE_URL update"
+            exit 0
+          fi
+          node aws/scripts/update-lambda-database-url.mjs
+
+      - name: Cut over Vercel DATABASE_URL to Hyderabad
+        if: inputs.skip_cutover != 'true'
+        env:
+          DATABASE_URL: ${{ env.TARGET_DATABASE_URL }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: bash aws/scripts/sync-vercel-database-url.sh
+
+      - name: Summary
+        run: |
+          echo "✅ Region migration job finished."
+          echo "Target cluster: database-1.cluster-cpy4aaca6mfv.ap-south-2.rds.amazonaws.com (ezyintern)"
