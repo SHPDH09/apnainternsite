@@ -19,15 +19,25 @@ function portalPathFromRequest(req: VercelRequest): string {
   return raw;
 }
 
-let surfaceHandlerPromise: Promise<
+let restHandlerPromise: Promise<
+  (req: VercelRequest, res: VercelResponse) => Promise<void>
+> | null = null;
+let storageHandlerPromise: Promise<
   (req: VercelRequest, res: VercelResponse) => Promise<void>
 > | null = null;
 
-function loadSurfaceHandler(): Promise<(req: VercelRequest, res: VercelResponse) => Promise<void>> {
-  if (!surfaceHandlerPromise) {
-    surfaceHandlerPromise = import("./.bundled/supabase-surface.mjs").then((mod) => mod.default);
+function loadRestHandler(): Promise<(req: VercelRequest, res: VercelResponse) => Promise<void>> {
+  if (!restHandlerPromise) {
+    restHandlerPromise = import("./.bundled/rest-surface.mjs").then((mod) => mod.default);
   }
-  return surfaceHandlerPromise;
+  return restHandlerPromise;
+}
+
+function loadStorageHandler(): Promise<(req: VercelRequest, res: VercelResponse) => Promise<void>> {
+  if (!storageHandlerPromise) {
+    storageHandlerPromise = import("./.bundled/supabase-surface.mjs").then((mod) => mod.default);
+  }
+  return storageHandlerPromise;
 }
 
 /** GoTrue settings — no Postgres; avoid cold-loading the full surface bundle. */
@@ -51,7 +61,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   req.url = rewritten;
-  const fn = await loadSurfaceHandler();
+  const fn = pathOnly.startsWith("/rest/")
+    ? await loadRestHandler()
+    : await loadStorageHandler();
   await fn(req, res);
 }
 

@@ -27,11 +27,19 @@ export function resolveDatabaseUrl(): string {
     process.env.VERCEL || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 
   if (preferHyderabadOnStaleUrl) {
+    const vercelDb = process.env.DATABASE_URL?.trim();
+    if (vercelDb && isSupabaseDatabaseUrl(vercelDb)) {
+      return vercelDb;
+    }
+    if (!vercelDb) {
+      throw new Error(
+        "DATABASE_URL is not set on Vercel. Configure Supabase pooler URL in project env."
+      );
+    }
     const canonical = process.env.RDS_CANONICAL_DATABASE_URL?.trim();
     if (canonical && isHyderabadDatabaseUrl(canonical) && !isStaleRdsDatabaseUrl(canonical)) {
       return canonical;
     }
-    const vercelDb = process.env.DATABASE_URL?.trim();
     if (vercelDb && isHyderabadDatabaseUrl(vercelDb) && !isStaleRdsDatabaseUrl(vercelDb)) {
       return vercelDb;
     }
