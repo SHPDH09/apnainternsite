@@ -40,6 +40,7 @@ import { loadRootEnv } from "./load-env";
 import { ensureAllCmsTables } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentAttendanceMarkRpc } from "./attendance-bootstrap";
+import { ensureCertificateIssueRpc } from "./certificate-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import { ensureProjectReportSchema } from "./project-report-bootstrap";
 import { ensureStaffAttendanceOfficesSchema } from "./staff-attendance-offices-bootstrap";
@@ -187,6 +188,14 @@ async function buildApp(): Promise<Express> {
       }
     } catch (err) {
       console.warn("[attendance-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const cert = await ensureCertificateIssueRpc();
+      if (cert.applied) {
+        console.log("[certificate-bootstrap] applied certificate issue RPC");
+      }
+    } catch (err) {
+      console.warn("[certificate-bootstrap] startup ensure failed:", err);
     }
     try {
       const upload = await ensureStudentDataUploadSchema();

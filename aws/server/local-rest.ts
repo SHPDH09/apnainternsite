@@ -15,6 +15,7 @@ import {
 } from "./partner-applications-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentAttendanceMarkRpc } from "./attendance-bootstrap";
+import { ensureCertificateIssueRpc } from "./certificate-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import {
   ensureProjectReportSchema,
@@ -766,6 +767,13 @@ export async function restRpc(req: Request, res: Response) {
           /column "id" is of type uuid/i.test(msg) ||
           /function public\.student_mark_attendance does not exist/i.test(msg) ||
           /could not find the function/i.test(msg));
+      const isCertBulkRpc = name === "admin_bulk_issue_certificates";
+      const shouldBootstrapCertificates =
+        isCertBulkRpc &&
+        (code === "42883" ||
+          /function public\.admin_bulk_issue_certificates does not exist/i.test(msg) ||
+          /could not find the function/i.test(msg) ||
+          /operator does not exist.*uuid.*text/i.test(msg));
 
       if (
         !shouldBootstrapRegistration &&
@@ -773,7 +781,8 @@ export async function restRpc(req: Request, res: Response) {
         !shouldBootstrapOffices &&
         !shouldBootstrapSalary &&
         !shouldBootstrapUniqueness &&
-        !shouldBootstrapStudentAttendance
+        !shouldBootstrapStudentAttendance &&
+        !shouldBootstrapCertificates
       ) {
         throw firstErr;
       }
@@ -801,6 +810,10 @@ export async function restRpc(req: Request, res: Response) {
       if (shouldBootstrapStudentAttendance) {
         console.warn("[rest/rpc] student_mark_attendance failed, applying bootstrap and retrying:", msg);
         await ensureStudentAttendanceMarkRpc();
+      }
+      if (shouldBootstrapCertificates) {
+        console.warn("[rest/rpc] admin_bulk_issue_certificates failed, applying bootstrap and retrying:", msg);
+        await ensureCertificateIssueRpc();
       }
       const data = await invokeRpc();
       res.json(data);

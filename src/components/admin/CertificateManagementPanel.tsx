@@ -52,6 +52,7 @@ import {
   fetchStudentsByIdsForCerts,
   fetchTopAssignmentScoreByStudent,
   filterStudentsForCertTargets,
+  bulkIssueCertificatesViaRpc,
 } from "@/lib/certificateAdmin";
 import {
   CERTIFICATE_INTERNSHIP_PERIOD,
@@ -423,14 +424,28 @@ export function CertificateManagementPanel({
         status: "Active",
       }));
 
-      const { data: inserted, error } = await supabase
-        .from("certificates")
-        .insert(rows)
-        .select("*");
-      if (error) throw error;
+      let insertedRows: CertificateRow[] = [];
+      try {
+        const rpcResult = await bulkIssueCertificatesViaRpc(supabase, rows);
+        insertedRows = rpcResult.inserted as CertificateRow[];
+        if (rpcResult.issued === 0 && rows.length > 0 && insertedRows.length === 0) {
+          throw new Error(
+            "No certificates were issued. Check that each student has a valid login account (auth user)."
+          );
+        }
+      } catch (rpcErr) {
+        const rpcMsg = rpcErr instanceof Error ? rpcErr.message : String(rpcErr);
+        const missingRpc = /does not exist|42883|could not find the function/i.test(rpcMsg);
+        if (!missingRpc) throw rpcErr;
+        const { data: inserted, error } = await supabase
+          .from("certificates")
+          .insert(rows)
+          .select("*");
+        if (error) throw error;
+        insertedRows = (inserted as CertificateRow[]) || [];
+      }
 
-      if (inserted?.length) {
-        const insertedRows = inserted as CertificateRow[];
+      if (insertedRows.length) {
         setLocalCerts((prev) => [...insertedRows, ...prev]);
         setIssuedCertsByUserId((prev) => {
           const next = new Map(prev);
@@ -442,26 +457,28 @@ export function CertificateManagementPanel({
         });
       }
 
+      const issuedCount = insertedRows.length;
+
       void onLogAction?.(
         "BULK_ACTION",
         "certificate",
-        `Issued ${eligible.length} certificate(s)`,
-        { count: eligible.length, period: CERTIFICATE_INTERNSHIP_PERIOD }
+        `Issued ${issuedCount} certificate(s)`,
+        { count: issuedCount, period: CERTIFICATE_INTERNSHIP_PERIOD }
       );
 
-      for (const row of rows) {
-        const student = eligible.find((s) => s.id === row.user_id);
+      for (const row of insertedRows) {
+        const student = eligible.find((s) => s.id === row.user_id || certUserKey(s.id) === certUserKey(row.user_id));
         if (student?.email) {
           sendCertificateEmail({
             to: student.email,
-            studentName: row.student_name,
-            programme: row.internship_name,
-            certificateId: row.certificate_id,
+            studentName: row.student_name || student.full_name || "Student",
+            programme: row.internship_name || resolveInternshipName(student),
+            certificateId: row.certificate_id || "",
           });
         }
       }
 
-      toast.success(`Generated ${eligible.length} certificate(s)`);
+      toast.success(`Generated ${issuedCount} certificate(s)`);
       setSelectedIds([]);
       void onRefreshCertificates?.();
     } catch (e: unknown) {

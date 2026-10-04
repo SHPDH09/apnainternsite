@@ -197,6 +197,7 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["p_search", "p_universities", "p_colleges", "p_domain", "p_mode"],
     auth: "admin",
   },
+  admin_bulk_issue_certificates: { args: ["p_rows"], auth: "auth" },
   admin_list_registration_leads: {
     args: ["p_limit", "p_offset", "p_search", "p_university", "p_college"],
     auth: "admin",
