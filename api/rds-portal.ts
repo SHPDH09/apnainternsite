@@ -8,6 +8,11 @@ import {
   ensureSystemSettingsSchemaVercel,
   isMissingSystemSettingsError,
 } from "../aws/server/system-settings-bootstrap.js";
+import {
+  buildWhere,
+  parseOrder,
+  parseSelect,
+} from "../aws/server/vercel-lite-rest-filters.js";
 
 function portalPathFromRequest(req: VercelRequest): string {
   const segment = String(req.query.segment || "").trim();
@@ -257,10 +262,18 @@ async function tryTsEnsureRpcLite(
   if (req.method !== "POST") return false;
   const m = pathOnly.match(/^\/rest\/v1\/rpc\/([a-z_][a-z0-9_]*)$/i);
   if (!m) return false;
-  if (m[1] !== "admin_ensure_system_settings") return false;
+  const name = m[1];
+  if (!TS_RPC.has(name)) return false;
   try {
-    const result = await ensureSystemSettingsSchemaVercel();
-    res.status(200).json(result);
+    if (name === "admin_ensure_system_settings") {
+      const result = await ensureSystemSettingsSchemaVercel();
+      res.status(200).json(result);
+      return true;
+    }
+    const { runTsRpc } = await import("../aws/server/ts-rpc-handlers.js");
+    const data = await runTsRpc(name);
+    if (data === null) return false;
+    res.status(200).json(data);
     return true;
   } catch (err) {
     res.status(400).json({
@@ -304,96 +317,16 @@ async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: str
     res.status(200).json(data);
     return true;
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/does not exist/i.test(msg)) {
+      return false;
+    }
     res.status(400).json({
-      message: err instanceof Error ? err.message : String(err),
+      message: msg,
       code: (err as { code?: string }).code,
     });
     return true;
   }
-}
-
-function parseSelect(raw: unknown): string {
-  const s = String(raw || "*").trim();
-  if (!s || s === "*") return "*";
-  const cols = s
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean)
-    .filter((c) => IDENT.test(c));
-  return cols.length ? cols.map((c) => `"${c}"`).join(", ") : "*";
-}
-
-function parseOrder(raw: unknown): string {
-  if (!raw) return "";
-  const s = String(Array.isArray(raw) ? raw[0] : raw);
-  const bits: string[] = [];
-  for (const part of s.split(",")) {
-    const tokens = part.trim().split(".").filter(Boolean);
-    const col = tokens[0];
-    if (!col || !IDENT.test(col)) continue;
-    const dir = tokens[1]?.toLowerCase() === "desc" ? "DESC" : "ASC";
-    let nulls = "";
-    if (tokens.some((t) => t.toLowerCase() === "nullslast")) nulls = " NULLS LAST";
-    else if (tokens.some((t) => t.toLowerCase() === "nullsfirst")) nulls = " NULLS FIRST";
-    bits.push(`"${col}" ${dir}${nulls}`);
-  }
-  return bits.length ? ` ORDER BY ${bits.join(", ")}` : "";
-}
-
-function buildWhere(query: VercelRequest["query"]): { sql: string; params: unknown[] } {
-  const params: unknown[] = [];
-  const parts: string[] = [];
-  for (const [key, rawVal] of Object.entries(query)) {
-    if (["segment", "path", "select", "order", "limit", "offset"].includes(key)) continue;
-    if (!IDENT.test(key)) continue;
-    const val = Array.isArray(rawVal) ? rawVal[0] : rawVal;
-    const s = String(val ?? "");
-    const inMatch = s.match(/^in\.\((.*)\)$/is);
-    if (inMatch) {
-      const inner = inMatch[1].trim();
-      const items = inner
-        ? inner
-            .split(",")
-            .map((x) => x.trim())
-            .filter(Boolean)
-        : [];
-      if (!items.length) {
-        parts.push("FALSE");
-        continue;
-      }
-      params.push(items);
-      parts.push(`"${key}" = ANY($${params.length}::text[])`);
-      continue;
-    }
-
-    const m = s.match(/^(eq|neq|gt|gte|lt|lte|like|ilike|is)\.(.*)$/i);
-    if (!m) continue;
-    const op = m[1].toLowerCase();
-    const rhs = m[2];
-    if (op === "is" && rhs === "null") {
-      parts.push(`"${key}" IS NULL`);
-      continue;
-    }
-    if (rhs === "null") {
-      parts.push(`"${key}" IS NULL`);
-      continue;
-    }
-    let bind: unknown = rhs;
-    if (rhs === "true") bind = true;
-    else if (rhs === "false") bind = false;
-    params.push(bind);
-    const ph = `$${params.length}`;
-    const col = `"${key}"`;
-    if (op === "eq") parts.push(`${col} = ${ph}`);
-    else if (op === "neq") parts.push(`${col} <> ${ph}`);
-    else if (op === "gt") parts.push(`${col} > ${ph}`);
-    else if (op === "gte") parts.push(`${col} >= ${ph}`);
-    else if (op === "lt") parts.push(`${col} < ${ph}`);
-    else if (op === "lte") parts.push(`${col} <= ${ph}`);
-    else if (op === "like") parts.push(`${col} LIKE ${ph}`);
-    else if (op === "ilike") parts.push(`${col} ILIKE ${ph}`);
-  }
-  return { sql: parts.length ? parts.join(" AND ") : "", params };
 }
 
 async function tryRestLite(req: VercelRequest, res: VercelResponse, pathOnly: string): Promise<boolean> {
@@ -409,7 +342,7 @@ async function tryRestLite(req: VercelRequest, res: VercelResponse, pathOnly: st
   const cols = parseSelect(req.query.select);
   const limit = Math.min(Math.max(Number(req.query.limit) || 1000, 1), 5000);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
-  const { sql: where, params } = buildWhere(req.query);
+  const { sql: where, params } = buildWhere(req.query as Record<string, unknown>);
   const order = parseOrder(req.query.order);
 
   let sql = `SELECT ${cols} FROM public."${table}"`;

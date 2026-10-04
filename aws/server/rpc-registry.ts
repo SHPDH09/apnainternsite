@@ -121,6 +121,7 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
       "p_college",
       "p_start",
       "p_end",
+      "p_mode",
     ],
     auth: "admin",
   },
@@ -130,6 +131,11 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
   },
   student_unread_notification_count: { args: [], auth: "auth" },
   admin_list_students_light: { args: ["p_limit", "p_offset"], auth: "admin" },
+  admin_count_added_registrations: { args: ["p_search"], auth: "admin" },
+  admin_list_added_registrations: {
+    args: ["p_limit", "p_offset", "p_search"],
+    auth: "admin",
+  },
   admin_mark_student_attendance_day: {
     args: ["p_student_id", "p_marked_at"],
     auth: "admin",
