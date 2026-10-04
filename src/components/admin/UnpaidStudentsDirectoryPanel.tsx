@@ -14,7 +14,12 @@ import {
 } from "@/components/ui/table";
 import { AdminListPagination } from "@/components/admin/ui/AdminListPagination";
 import { AdminPageHeader, AdminTableShell } from "@/components/admin/ui";
-import { fetchAllSupabaseRows, fetchSupabaseTablePage } from "@/lib/fetchAllSupabaseRows";
+import { fetchSupabaseTablePage } from "@/lib/fetchAllSupabaseRows";
+import {
+  fetchPaidEnrollmentKeys,
+  fetchUnpaidRegistrationLeadsPage,
+} from "@/lib/unpaidStudentsAdmin";
+import { parseStudentMetadata, isStudentPendingDirectoryPayment } from "@/lib/studentPaymentAccess";
 
 type UnpaidRow = {
   id: string;
@@ -40,30 +45,11 @@ export function UnpaidStudentsDirectoryPanel({ client }: Props) {
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const paidKeysRef = useRef<{ userIds: Set<string>; emails: Set<string> } | null>(null);
+  const paidKeysRef = useRef<Awaited<ReturnType<typeof fetchPaidEnrollmentKeys>> | null>(null);
 
   const ensurePaidKeys = useCallback(async () => {
     if (paidKeysRef.current) return paidKeysRef.current;
-    const payments = await fetchAllSupabaseRows<{ user_id?: string; email?: string }>(
-      client,
-      "payment_success",
-      {
-        select: "user_id,email",
-        orderBy: "created_at",
-        ascending: false,
-        pageSize: 500,
-        maxRows: 40_000,
-      }
-    );
-    const userIds = new Set(
-      payments.map((p) => String(p.user_id || "")).filter(Boolean)
-    );
-    const emails = new Set(
-      payments
-        .map((p) => String(p.email || "").trim().toLowerCase())
-        .filter(Boolean)
-    );
-    paidKeysRef.current = { userIds, emails };
+    paidKeysRef.current = await fetchPaidEnrollmentKeys(client);
     return paidKeysRef.current;
   }, [client]);
 
@@ -80,7 +66,7 @@ export function UnpaidStudentsDirectoryPanel({ client }: Props) {
         orderBy: "created_at",
         ascending: false,
         select:
-          "id,full_name,email,contact_number,university_name,college_name,status,created_at",
+          "id,full_name,email,contact_number,university_name,college_name,status,created_at,metadata",
         modify: (q) => {
           let query = q;
           if (searchQ) {
@@ -100,10 +86,12 @@ export function UnpaidStudentsDirectoryPanel({ client }: Props) {
           if (paid.userIds.has(id)) return false;
           if (email && paid.emails.has(email)) return false;
           const status = String(s.status || "").toLowerCase();
+          const meta = parseStudentMetadata(s.metadata);
+          if (isStudentPendingDirectoryPayment(meta)) return true;
           return (
             status.includes("pending") ||
             status.includes("unpaid") ||
-            !paid.userIds.has(id)
+            status.includes("payment")
           );
         })
         .map((s) => ({
@@ -118,45 +106,20 @@ export function UnpaidStudentsDirectoryPanel({ client }: Props) {
           source: "student" as const,
         }));
 
-      const { rows: leadPage, total: leadTotal } = await fetchSupabaseTablePage<
-        Record<string, unknown>
-      >(client, "registration_leads", {
-        page,
-        pageSize: PAGE_SIZE,
-        orderBy: "updated_at",
-        ascending: false,
-        select:
-          "id,full_name,email,phone,university_name,college_name,created_at,cart_stage",
-        modify: (q) => {
-          let query = q;
-          if (searchQ) {
-            const s = searchQ.replace(/"/g, '\\"');
-            query = query.or(
-              `full_name.ilike.%${s}%,email.ilike.%${s}%,college_name.ilike.%${s}%`
-            );
-          }
-          return query;
-        },
-      });
+      const { rows: leadRows, total: leadTotal } = await fetchUnpaidRegistrationLeadsPage(
+        client,
+        {
+          page,
+          pageSize: PAGE_SIZE,
+          search: searchQ || undefined,
+          paid,
+        }
+      );
 
-      const unpaidLeads: UnpaidRow[] = leadPage
-        .filter((l) => {
-          const stage = String(l.cart_stage || "").toLowerCase();
-          const email = String(l.email || "").trim().toLowerCase();
-          if (email && paid.emails.has(email)) return false;
-          return !stage.includes("converted") && !stage.includes("paid");
-        })
-        .map((l) => ({
-          id: String(l.id),
-          full_name: (l.full_name as string) || null,
-          email: (l.email as string) || null,
-          contact_number: (l.phone as string) || null,
-          university_name: (l.university_name as string) || null,
-          college_name: (l.college_name as string) || null,
-          status: String(l.cart_stage || "abandoned"),
-          created_at: (l.created_at as string) || null,
-          source: "lead" as const,
-        }));
+      const unpaidLeads: UnpaidRow[] = leadRows.map((l) => ({
+        ...l,
+        source: "lead" as const,
+      }));
 
       setRows([...unpaidStudents, ...unpaidLeads]);
       setTotalCount(studentTotal + leadTotal);
@@ -186,7 +149,16 @@ export function UnpaidStudentsDirectoryPanel({ client }: Props) {
         title="Unpaid Students"
         description="Students and abandoned registrations without a successful payment record."
         actions={
-          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => void load()}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              paidKeysRef.current = null;
+              void load();
+            }}
+          >
             <RefreshCw className="size-4" />
             Refresh
           </Button>
