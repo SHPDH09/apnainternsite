@@ -2,6 +2,12 @@
   "buildCommand": "npm run vercel-build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "functions": {
+    "api/rds-portal.ts": {
+      "maxDuration": 60,
+      "includeFiles": "aws/server/sql/**"
+    }
+  },
   "env": {
     "VITE_SUPABASE_URL": "https://apnaintern.in",
     "VITE_SUPABASE_PROJECT_ID": "hflapipozwwwinbbfpuh",
