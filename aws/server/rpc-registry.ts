@@ -42,6 +42,10 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["p_query", "p_student_name", "p_roll_number"],
     auth: "public",
   },
+  verify_course_certificate_public: {
+    args: ["p_code"],
+    auth: "public",
+  },
   verify_id_card_public: {
     args: ["p_card_number"],
     auth: "public",

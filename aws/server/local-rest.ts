@@ -15,7 +15,11 @@ import {
 } from "./partner-applications-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentAttendanceMarkRpc } from "./attendance-bootstrap";
-import { ensureCertificateIssueRpc } from "./certificate-bootstrap";
+import {
+  ensureCertificateIssueRpc,
+  isPublicCertificateVerifyMissingError,
+  isPublicCertificateVerifyRpc,
+} from "./certificate-bootstrap";
 import {
   ensureClassLinkRpc,
   isClassLinkRpc,
@@ -781,6 +785,8 @@ export async function restRpc(req: Request, res: Response) {
           /operator does not exist.*uuid.*text/i.test(msg));
       const shouldBootstrapClassLink =
         isClassLinkRpc(name) && isClassLinkRpcMissingError(firstErr);
+      const shouldBootstrapCertVerify =
+        isPublicCertificateVerifyRpc(name) && isPublicCertificateVerifyMissingError(firstErr);
 
       if (
         !shouldBootstrapRegistration &&
@@ -790,7 +796,8 @@ export async function restRpc(req: Request, res: Response) {
         !shouldBootstrapUniqueness &&
         !shouldBootstrapStudentAttendance &&
         !shouldBootstrapCertificates &&
-        !shouldBootstrapClassLink
+        !shouldBootstrapClassLink &&
+        !shouldBootstrapCertVerify
       ) {
         throw firstErr;
       }
@@ -826,6 +833,10 @@ export async function restRpc(req: Request, res: Response) {
       if (shouldBootstrapClassLink) {
         console.warn("[rest/rpc] class link RPC failed, applying bootstrap and retrying:", msg);
         await ensureClassLinkRpc();
+      }
+      if (shouldBootstrapCertVerify) {
+        console.warn("[rest/rpc] certificate verify RPC failed, applying bootstrap and retrying:", msg);
+        await ensureCertificateIssueRpc();
       }
       const data = await invokeRpc();
       res.json(data);

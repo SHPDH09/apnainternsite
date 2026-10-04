@@ -14,6 +14,11 @@ import {
   isClassLinkRpcMissingError,
 } from "../aws/server/class-link-bootstrap.js";
 import {
+  ensureCertificateIssueRpc,
+  isPublicCertificateVerifyMissingError,
+  isPublicCertificateVerifyRpc,
+} from "../aws/server/certificate-bootstrap.js";
+import {
   buildWhere,
   parseOrder,
   parseSelect,
@@ -323,9 +328,13 @@ async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: str
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (isClassLinkRpc(name) && isClassLinkRpcMissingError(err)) {
+    if (
+      (isClassLinkRpc(name) && isClassLinkRpcMissingError(err)) ||
+      (isPublicCertificateVerifyRpc(name) && isPublicCertificateVerifyMissingError(err))
+    ) {
       try {
-        await ensureClassLinkRpc();
+        if (isClassLinkRpc(name)) await ensureClassLinkRpc();
+        if (isPublicCertificateVerifyRpc(name)) await ensureCertificateIssueRpc();
         const data = await callRpcLite(name, def.args, rpcBody(req), jwtClaims);
         res.status(200).json(data);
         return true;
