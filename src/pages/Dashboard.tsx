@@ -735,6 +735,17 @@ const Dashboard = () => {
 
     // Prefer RPC (sets id/marked_at server-side; works even if table defaults were missing).
     const { data: rpcData, error: rpcErr } = await supabase.rpc("student_mark_attendance");
+    if (rpcErr) {
+      const rpcMsg = rpcErr.message || "";
+      if (/Unable to mark attendance/i.test(rpcMsg)) {
+        toast.error("Self attendance marking is closed for your university.");
+        return;
+      }
+      if (/Not authenticated/i.test(rpcMsg)) {
+        toast.error("Please sign in again to mark attendance.");
+        return;
+      }
+    }
     if (!rpcErr && rpcData && typeof rpcData === "object") {
       const payload = rpcData as { ok?: boolean; already_marked?: boolean };
       if (payload.already_marked) {
@@ -780,7 +791,12 @@ const Dashboard = () => {
       created_at: nowIso,
     });
     if (error) {
-      toast.error(error.message || rpcErr?.message || "Failed to mark attendance");
+      const detail = error.message || rpcErr?.message || "Failed to mark attendance";
+      toast.error(detail);
+      return;
+    }
+    if (rpcErr) {
+      toast.error(rpcErr.message || "Failed to mark attendance. Refresh and try again.");
       return;
     }
     toast.success("Attendance marked successfully.");

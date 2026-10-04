@@ -44,7 +44,7 @@ BEGIN
 
   SELECT s.university_name INTO v_uni
   FROM public.students s
-  WHERE s.id = v_uid::text
+  WHERE s.id::text = v_uid::text
   LIMIT 1;
 
   IF COALESCE(lower(trim(v_uni)), '') ~ '(lnmu|lalit\s*narayan\s*mithila|bnmu|bhupendra\s*narayan\s*mandal)'
@@ -62,7 +62,7 @@ BEGIN
 
   SELECT a.id INTO v_existing
   FROM public.attendance a
-  WHERE a.student_id = v_uid
+  WHERE a.student_id::text = v_uid::text
     AND a.marked_at >= v_day_start
     AND a.marked_at < v_day_end
   LIMIT 1;

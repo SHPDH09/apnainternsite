@@ -14,6 +14,7 @@ import {
   isPartnerApplicationsTable,
 } from "./partner-applications-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
+import { ensureStudentAttendanceMarkRpc } from "./attendance-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import {
   ensureProjectReportSchema,
@@ -756,13 +757,23 @@ export async function restRpc(req: Request, res: Response) {
         isStaffSalaryRpc(name) && isStaffSalaryRpcMissingError(firstErr);
       const shouldBootstrapUniqueness =
         isValidateStudentUniquenessRpc(name) && isValidateStudentUniquenessMissingError(firstErr);
+      const isStudentMarkAttendance = name === "student_mark_attendance";
+      const shouldBootstrapStudentAttendance =
+        isStudentMarkAttendance &&
+        (code === "42883" ||
+          code === "42804" ||
+          /operator does not exist.*uuid.*text/i.test(msg) ||
+          /column "id" is of type uuid/i.test(msg) ||
+          /function public\.student_mark_attendance does not exist/i.test(msg) ||
+          /could not find the function/i.test(msg));
 
       if (
         !shouldBootstrapRegistration &&
         !shouldBootstrapUpload &&
         !shouldBootstrapOffices &&
         !shouldBootstrapSalary &&
-        !shouldBootstrapUniqueness
+        !shouldBootstrapUniqueness &&
+        !shouldBootstrapStudentAttendance
       ) {
         throw firstErr;
       }
@@ -786,6 +797,10 @@ export async function restRpc(req: Request, res: Response) {
       if (shouldBootstrapUniqueness) {
         console.warn("[rest/rpc] validate_student_uniqueness failed, applying bootstrap and retrying:", msg);
         await ensureStudentUniquenessSchema();
+      }
+      if (shouldBootstrapStudentAttendance) {
+        console.warn("[rest/rpc] student_mark_attendance failed, applying bootstrap and retrying:", msg);
+        await ensureStudentAttendanceMarkRpc();
       }
       const data = await invokeRpc();
       res.json(data);
