@@ -5,6 +5,7 @@ import { SiteLoader } from "@/components/SiteLoader";
 import { isAdminAreaPath, isCollegeAreaPath, isReferralAreaPath, loginPathForProtectedRoute } from "@/lib/authRoutes";
 import { isAdminPortalSessionActive } from "@/lib/adminAuthSession";
 import { isStudentPortalSessionActive } from "@/lib/studentAuthSession";
+import { isImpersonatingStudent } from "@/lib/studentPaymentAccess";
 
 const STUDENT_DASHBOARD_PATH = "/dashboard";
 const AUTH_LOADER_MAX_MS = 14_000;
@@ -55,8 +56,10 @@ export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) 
 
   // Role check
   if (allowedRoles && allowedRoles.length > 0) {
-    const hasRequiredRole = roles.some(role => allowedRoles.includes(role));
-    
+    const adminPreviewStudentDashboard = isStudentDashboard && isImpersonatingStudent();
+    const hasRequiredRole =
+      adminPreviewStudentDashboard || roles.some((role) => allowedRoles.includes(role));
+
     if (!hasRequiredRole) {
       // Unauthorized — never render admin/staff/super/cyber-only pages for the wrong role.
       const portalRoles: UserRole[] = ["super_admin", "admin", "staff", "cybercafe"];

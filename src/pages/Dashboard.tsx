@@ -44,6 +44,7 @@ import {
   hasRequiredCertificateIdentityFields,
 } from "@/lib/certificateFormat";
 import { downloadCertificatePdf } from "@/lib/certificatePdf";
+import { readImpersonateStudentId } from "@/lib/studentPaymentAccess";
 import {
   hasInternshipAccess,
   internshipUpgradePaymentPath,
@@ -247,7 +248,7 @@ const Dashboard = () => {
         return;
       }
 
-      const impersonateId = localStorage.getItem("impersonate_id");
+      const impersonateId = readImpersonateStudentId();
       const uid = impersonateId || session.user.id;
       const isImpersonating = !!impersonateId;
       setCurrentUserId(session.user.id);
@@ -528,7 +529,7 @@ const Dashboard = () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const uid = localStorage.getItem("impersonate_id") || session.user.id;
+      const uid = readImpersonateStudentId() || session.user.id;
 
       const previousEmail = String(profile?.email || session.user.email || "")
         .trim()
@@ -731,7 +732,7 @@ const Dashboard = () => {
     }
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    const uid = localStorage.getItem("impersonate_id") || session.user.id;
+    const uid = readImpersonateStudentId() || session.user.id;
 
     // Prefer RPC (sets id/marked_at server-side; works even if table defaults were missing).
     const { data: rpcData, error: rpcErr } = await supabase.rpc("student_mark_attendance");
@@ -999,10 +1000,10 @@ const Dashboard = () => {
       <main className="flex-1 py-6 md:py-8">
         <div className="container mx-auto px-4 max-w-7xl">
           {activeView !== "home" &&
-          (localStorage.getItem("impersonate_id") ||
-            (isAdmin && !localStorage.getItem("impersonate_id"))) ? (
+          (readImpersonateStudentId() ||
+            (isAdmin && !readImpersonateStudentId())) ? (
             <div className="mb-6 flex flex-wrap gap-2 student-dash-animate-in">
-              {localStorage.getItem("impersonate_id") ? (
+              {readImpersonateStudentId() ? (
                 <Button
                   variant="outline"
                   className="rounded-lg border-destructive text-destructive hover:bg-destructive/10"
@@ -1014,7 +1015,7 @@ const Dashboard = () => {
                   Exit preview
                 </Button>
               ) : null}
-              {isAdmin && !localStorage.getItem("impersonate_id") ? (
+              {isAdmin && !readImpersonateStudentId() ? (
                 <Button
                   variant="outline"
                   className="gap-2 rounded-lg border-slate-300 hover:bg-slate-50"
@@ -1068,7 +1069,7 @@ const Dashboard = () => {
           ) : activeView === "courses" ? (
             currentUserId ? (
               <StudentMyCoursesPanel
-                studentId={localStorage.getItem("impersonate_id") || currentUserId}
+                studentId={readImpersonateStudentId() || currentUserId}
               />
             ) : null
           ) : activeView === "profile" ? (
@@ -1164,7 +1165,7 @@ const Dashboard = () => {
                 onViewDocument={documentActions.viewDocument}
                 onDownloadDocument={documentActions.downloadDocument}
                 onUploadDocument={documentActions.uploadDocument}
-                studentId={localStorage.getItem("impersonate_id") || currentUserId}
+                studentId={readImpersonateStudentId() || currentUserId}
                 onOpenMyCourses={() => setActiveView("courses")}
                 internshipUnlocked={internshipUnlocked}
                 onLockedInternshipClick={goUnlockInternship}

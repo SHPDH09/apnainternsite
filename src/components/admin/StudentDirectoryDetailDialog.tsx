@@ -229,8 +229,10 @@ export function StudentDirectoryDetailDialog({
 
   const handleOpenStudentDashboard = () => {
     if (!student?.id) return;
-    localStorage.setItem(IMPERSONATE_KEY, String(student.id));
-    window.open("/dashboard", "_blank", "noopener,noreferrer");
+    const studentId = String(student.id);
+    localStorage.setItem(IMPERSONATE_KEY, studentId);
+    const url = `/dashboard?impersonate=${encodeURIComponent(studentId)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
     toast.success("Opening student dashboard in a new tab (admin preview mode).");
   };
 
