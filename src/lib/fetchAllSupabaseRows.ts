@@ -1,5 +1,6 @@
 import type { PostgrestFilterBuilder } from "@supabase/postgrest-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CATALOG_PAGE_SIZE, withSupabaseRetry } from "@/lib/supabaseQueryResilience";
 
 type Row = Record<string, unknown>;
 type Query = PostgrestFilterBuilder<any, any, any, any[], string, unknown, "GET">;
@@ -46,7 +47,7 @@ async function fetchAllPaginated<T extends Row>(
   const orderBy = options?.orderBy ?? "created_at";
   const ascending = options?.ascending ?? false;
   const tieBreaker = options?.tieBreaker ?? "id";
-  const pageSize = options?.pageSize ?? 1000;
+  const pageSize = options?.pageSize ?? CATALOG_PAGE_SIZE;
   const maxRows = options?.maxRows ?? 200_000;
   const modify = options?.modify;
 
@@ -68,8 +69,11 @@ async function fetchAllPaginated<T extends Row>(
       query = applyKeysetCursor(query, orderBy, tieBreaker, ascending, cursor);
     }
 
-    const { data, error } = await query;
-    if (error) throw error;
+    const { data } = await withSupabaseRetry(`fetchAll page ${page}`, async () => {
+      const res = await query;
+      if (res.error) throw res.error;
+      return res;
+    });
 
     const batch = (data || []) as T[];
     if (!batch.length) break;
@@ -97,6 +101,36 @@ async function fetchAllPaginated<T extends Row>(
   return all;
 }
 
+/** One page (for fast first paint). */
+export async function fetchSupabasePage<T extends Row = Row>(
+  supabase: SupabaseClient,
+  table: string,
+  options?: FetchAllSupabaseRowsOptions & { limit?: number }
+): Promise<T[]> {
+  const select = options?.select ?? "*";
+  const orderBy = options?.orderBy ?? "created_at";
+  const ascending = options?.ascending ?? false;
+  const tieBreaker = options?.tieBreaker ?? "id";
+  const limit = options?.limit ?? options?.pageSize ?? CATALOG_PAGE_SIZE;
+  const modify = options?.modify;
+
+  let query = (supabase.from(table) as unknown as Query)
+    .select(select)
+    .order(orderBy, { ascending })
+    .limit(limit);
+  if (tieBreaker && tieBreaker !== orderBy) {
+    query = query.order(tieBreaker, { ascending });
+  }
+  if (modify) query = modify(query);
+
+  const { data } = await withSupabaseRetry(`page ${table}`, async () => {
+    const res = await query;
+    if (res.error) throw res.error;
+    return res;
+  });
+  return (data || []) as T[];
+}
+
 /** Paginate past PostgREST max-rows (often 1000) using stable keyset pagination. */
 export async function fetchAllSupabaseRows<T extends Row = Row>(
   supabase: SupabaseClient,
@@ -117,6 +151,40 @@ export async function fetchAllSupabaseRpcRows<T extends Row = Row>(
     () => (args ? supabase.rpc(rpcName, args) : supabase.rpc(rpcName)) as unknown as Query,
     options
   );
+}
+
+/** Offset page with exact total (for admin tables; max 200 rows per page). */
+export async function fetchSupabaseTablePage<T extends Row = Row>(
+  supabase: SupabaseClient,
+  table: string,
+  options: FetchAllSupabaseRowsOptions & { page: number; pageSize: number }
+): Promise<{ rows: T[]; total: number }> {
+  const pageSize = Math.max(1, Math.min(options.pageSize, 200));
+  const page = Math.max(0, options.page);
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+  const select = options.select ?? "*";
+  const orderBy = options.orderBy ?? "created_at";
+  const ascending = options.ascending ?? false;
+  const tieBreaker = options.tieBreaker ?? "id";
+  const modify = options.modify;
+
+  let query = (supabase.from(table) as unknown as Query)
+    .select(select, { count: "exact" })
+    .order(orderBy, { ascending })
+    .range(from, to);
+  if (tieBreaker && tieBreaker !== orderBy) {
+    query = query.order(tieBreaker, { ascending });
+  }
+  if (modify) query = modify(query);
+
+  const { data, error, count } = await withSupabaseRetry(`table page ${table}`, async () => {
+    const res = await query;
+    if (res.error) throw res.error;
+    return res;
+  });
+
+  return { rows: (data || []) as T[], total: count ?? 0 };
 }
 
 /** Exact row count for a table (ignores PostgREST default 1000-row page cap). */

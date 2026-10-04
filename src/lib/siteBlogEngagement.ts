@@ -157,6 +157,17 @@ async function postBlogInteraction(
   body: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   const action = String(body.action || "").trim() as BlogInteractionAction;
+  try {
+    const res = await fetch(apiUrl("/api/blog-interaction"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (res.ok && json.ok !== false) return json;
+  } catch {
+    /* fall back to send-mail */
+  }
   return postBlogViaSendMail(action, body);
 }
 

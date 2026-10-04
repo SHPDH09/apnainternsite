@@ -6,8 +6,25 @@ export function isStudentPaymentGateEnforced(): boolean {
   return import.meta.env.VITE_REGISTRATION_PAYMENT_OPTIONAL !== "true";
 }
 
+/** Admin preview: student id from localStorage or ?impersonate= on /dashboard. */
+export function readImpersonateStudentId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.localStorage.getItem("impersonate_id")?.trim();
+    if (stored) return stored;
+    const fromQuery = new URLSearchParams(window.location.search).get("impersonate")?.trim();
+    if (fromQuery) {
+      window.localStorage.setItem("impersonate_id", fromQuery);
+      return fromQuery;
+    }
+  } catch {
+    /* private mode / blocked storage */
+  }
+  return null;
+}
+
 export function isImpersonatingStudent(): boolean {
-  return typeof localStorage !== "undefined" && !!localStorage.getItem("impersonate_id");
+  return !!readImpersonateStudentId();
 }
 
 /**

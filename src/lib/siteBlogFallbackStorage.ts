@@ -121,10 +121,16 @@ async function readEnvelope(client: SupabaseClient): Promise<FallbackBlogPost[]>
   const viaHelper = publicStorageObjectUrl("logos", FALLBACK_OBJECT_PATH);
   if (viaHelper && !candidates.includes(viaHelper)) candidates.push(viaHelper);
 
+  const fetchOpts: RequestInit = { cache: "no-store" };
+  if (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal) {
+    fetchOpts.signal = AbortSignal.timeout(4500);
+  }
+
   for (const publicUrl of candidates) {
     try {
-      const res = await fetch(publicUrl, { cache: "no-store" });
+      const res = await fetch(publicUrl, fetchOpts);
       if (res.ok) return parseEnvelope(await res.text());
+      if (res.status === 504 || res.status === 502 || res.status === 503) continue;
       if (res.status !== 404) {
         const body = await res.text().catch(() => "");
         if (/not implemented|not_found/i.test(body)) continue;

@@ -64,6 +64,11 @@ import { FeesManagementPanel } from "@/components/admin/FeesManagementPanel";
 import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
 import { BulkUploadStudentBadge } from "@/components/BulkUploadStudentBadge";
 import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
+import { fetchRegistrationLeadsPage } from "@/lib/registrationLeadsAdmin";
+import {
+  fetchPaymentDashboardSample,
+  fetchRecentCancelledForLeads,
+} from "@/lib/paymentsAdmin";
 import {
   ATTENDANCE_ELIGIBILITY_MIN_PERCENT,
   LNMU_BULK_ATTENDANCE_END,
@@ -87,7 +92,12 @@ import { filterCommsRecipients } from "@/lib/adminBulkComms";
 import { InternshipModeFilterSelect } from "@/components/admin/InternshipModeFilterSelect";
 import { MultiSelectCheckboxGroup } from "@/components/admin/MultiSelectCheckboxGroup";
 import { collegesForUniversityNames, pruneCollegesForUniversities } from "@/lib/classLinkTargeting";
-import { collegesForUniversity, fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
+import {
+  collegesForUniversity,
+  fetchAllCollegesCatalog,
+  fetchUniversitiesCatalog,
+} from "@/lib/institutionCatalog";
+import { fetchSystemSettingsResilient } from "@/lib/systemSettingsResilience";
 import { displayCollegeName } from "@/lib/collegeDisplay";
 import {
   setLoginPasswordViaRpc,
@@ -655,30 +665,32 @@ const SuperAdmin = () => {
         .filter(r => r.role === 'admin' || r.role === 'super_admin')
         .map(r => r.user_id);
 
-      const [paymentSuccessRows, cancelledPaymentRows, regDraftRows] = await Promise.all([
-        fetchAllSupabaseRows(supabase, "payment_success", {
-          orderBy: "created_at",
-          ascending: false,
-        }),
-        fetchAllSupabaseRows(supabase, "payment_cancelled", {
-          orderBy: "created_at",
-          ascending: false,
-        }),
-        fetchAllSupabaseRows(supabase, "registration_leads", {
-          orderBy: "updated_at",
-          ascending: false,
-        }),
+      const [paymentSample, cancelledPaymentRows, regDraftPage] = await Promise.all([
+        fetchPaymentDashboardSample(supabase),
+        fetchRecentCancelledForLeads(supabase),
+        fetchRegistrationLeadsPage(supabase, { page: 0, pageSize: 100 }),
       ]);
+      const paymentSuccessRows = paymentSample.success;
+      const regDraftRows = regDraftPage.rows;
 
-      const [p, u, cRows, de, ce, dm, cl, ss, ap, pc, notifications, visitStats, ss_res] = await Promise.all([
+      const [p, uniRows, cRows, de, ce, dm, cl, ss, ap, pc, notifications, visitStats, ss_res] =
+        await Promise.all([
         supabase.from("profiles").select("*").in("id", staffUserIds),
-        supabase.from("universities").select("*").order("name"),
-        fetchAllCollegesCatalog(supabase),
+        fetchUniversitiesCatalog(supabase, { onFirstPage: (first) => setUnis(first) }),
+        fetchAllCollegesCatalog(supabase, { onFirstPage: (first) => setColleges(first) }),
         supabase.from("departments").select("*").order("name"),
         supabase.from("certificates").select("*").order("created_at", { ascending: false }).limit(100),
         supabase.from("internship_domains").select("*").order("name"),
-        supabase.from("classes").select("*").order("scheduled_at", { ascending: true }),
-        supabase.from("system_settings").select("*"),
+        fetchAllSupabaseRows(supabase, "classes", {
+          orderBy: "scheduled_at",
+          ascending: true,
+          pageSize: 250,
+          maxRows: 4_000,
+        }).catch((err) => {
+          console.warn("[super-admin] classes:", err);
+          return [] as Record<string, unknown>[];
+        }),
+        fetchSystemSettingsResilient(supabase),
         supabase.from("admin_permissions").select("*"),
         (async () => {
           const { fetchAdminPaymentConfig } = await import("@/lib/paymentConfigAdmin");
@@ -717,13 +729,13 @@ const SuperAdmin = () => {
       }));
 
       setStaff(staffList);
-      setUnis(u.data || []);
+      setUnis(uniRows || []);
       setColleges(c.data || []);
       setDepartments(de.data || []);
       setCerts(ce.data || []);
       setDomains(dm.data || []);
-      setClassesList(cl.data || []);
-      setSystemSettings(ss.data || []);
+      setClassesList(Array.isArray(cl) ? cl : cl.data || []);
+      setSystemSettings(Array.isArray(ss) ? ss : ss?.data || []);
       setAdminPermissions(ap.data || []);
       setPaymentConfig(pc.data || { id: 1, razorpay_key_id: '', razorpay_key_secret: '', amount_paise: 9900, is_active: false });
       
@@ -1555,6 +1567,7 @@ const SuperAdmin = () => {
   };
 
   const toggleSystemSetting = async (key: string, current: boolean) => {
+    await fetchSystemSettingsResilient(supabase);
     const { error } = await supabase.from("system_settings").update({ is_enabled: !current }).eq("key", key);
     if (error) {
       toast.error("Update failed");

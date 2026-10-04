@@ -90,7 +90,13 @@ import {
 } from "@/lib/createSubUser";
 import { CollegeAdminCollegePicker } from "@/components/admin/CollegeAdminCollegePicker";
 import { displayCollegeName } from "@/lib/collegeDisplay";
-import { collegesForUniversity, fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
+import {
+  collegesForUniversity,
+  fetchAllCollegesCatalog,
+  fetchUniversitiesCatalog,
+} from "@/lib/institutionCatalog";
+import { runInBatches } from "@/lib/supabaseQueryResilience";
+import { fetchSystemSettingsResilient } from "@/lib/systemSettingsResilience";
 import { adminUpsertStudentProfile } from "@/lib/adminProfileUpsert";
 import { saveStudentDirectoryUpdate } from "@/lib/saveStudentDirectoryRow";
 import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
@@ -119,6 +125,12 @@ import {
 } from "@/lib/adminBulkComms";
 import { buildLeadHuntRows } from "@/lib/leadHunt";
 import { fetchRegistrationLeadsPage } from "@/lib/registrationLeadsAdmin";
+import {
+  fetchPaymentDashboardSample,
+  fetchPaymentSuccessPage,
+  fetchRecentCancelledForLeads,
+  fetchRecentFailedForLeads,
+} from "@/lib/paymentsAdmin";
 import { StudentEditFormFields } from "@/components/StudentEditFormFields";
 import type { StudentEditFormVariant } from "@/components/StudentEditFormFields";
 import {
@@ -275,6 +287,9 @@ export default function Admin() {
   const [domains, setDomains] = useState<any[]>([]);
   const [classesList, setClassesList] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [paymentsTotalCount, setPaymentsTotalCount] = useState(0);
+  const [dashboardPaymentRows, setDashboardPaymentRows] = useState<any[]>([]);
+  const [dashboardCancelledRows, setDashboardCancelledRows] = useState<any[]>([]);
   const [failedPayments, setFailedPayments] = useState<any[]>([]);
   const [cancelledPayments, setCancelledPayments] = useState<any[]>([]);
   const [visitorCount, setVisitorCount] = useState(0);
@@ -883,14 +898,18 @@ export default function Admin() {
   const adminDataLoadedRef = useRef({
     core: false,
     payments: false,
+    paymentsDashboard: false,
+    leadsExtras: false,
     leads: false,
     attendance: false,
     commsStudents: false,
+    classesAssignments: false,
   });
   const paymentsLoadInFlightRef = useRef<Promise<void> | null>(null);
   const leadsLoadInFlightRef = useRef<Promise<void> | null>(null);
   const attendanceLoadInFlightRef = useRef<Promise<void> | null>(null);
   const commsStudentsLoadInFlightRef = useRef<Promise<void> | null>(null);
+  const classesAssignmentsLoadInFlightRef = useRef<Promise<void> | null>(null);
   const enrolledEmailsRef = useRef<Set<string>>(new Set());
   const cancelledPaymentsRef = useRef<any[]>([]);
   const adminInitDoneRef = useRef(false);
@@ -1279,21 +1298,28 @@ export default function Admin() {
     };
   }, [isCafeViewOpen, selectedCafe?.id]);
 
-  const safeQuery = useCallback(async (query: Promise<any>, tableName: string) => {
-    try {
-      const res = await query;
-      if (res.error) {
-        console.error(`Error loading table ${tableName}:`, res.error);
-        toast.error(`Database error loading ${tableName}: ${res.error.message}`);
-        return { data: [], error: res.error };
+  const safeQuery = useCallback(
+    async (query: Promise<any>, tableName: string, opts?: { toast?: boolean }) => {
+      try {
+        const res = await query;
+        if (res.error) {
+          console.warn(`Error loading table ${tableName}:`, res.error);
+          if (opts?.toast) {
+            toast.error(`Database error loading ${tableName}: ${res.error.message}`);
+          }
+          return { data: [], error: res.error };
+        }
+        return res;
+      } catch (err: any) {
+        console.warn(`Exception loading table ${tableName}:`, err);
+        if (opts?.toast) {
+          toast.error(`Error loading ${tableName}: ${err.message || String(err)}`);
+        }
+        return { data: [], error: err };
       }
-      return res;
-    } catch (err: any) {
-      console.error(`Exception loading table ${tableName}:`, err);
-      toast.error(`Error loading ${tableName}: ${err.message || String(err)}`);
-      return { data: [], error: err };
-    }
-  }, []);
+    },
+    []
+  );
 
   /** Fast shell: settings, colleges, permissions — no bulk payments/students. */
   const loadCoreAdmin = useCallback(async () => {
@@ -1302,80 +1328,86 @@ export default function Admin() {
     setCurrentUserId(session.user.id);
     setCurrentUserEmail(session.user.email || "");
 
-    const [u, c, ce, dm, cl, ss, ap, notifs, asgnResult, cyber, customStaff] =
-      await Promise.all([
-        (async () => {
-          try {
-            const rows = await fetchAllSupabaseRows(supabase, "universities", {
-              orderBy: "name",
-              ascending: true,
-            });
-            return { data: rows, error: null };
-          } catch (err: any) {
-            console.error("Error loading universities:", err);
-            toast.error(`Database error loading universities: ${err?.message || String(err)}`);
-            return { data: [], error: err };
-          }
-        })(),
-        (async () => {
-          try {
-            const rows = await fetchAllCollegesCatalog(supabase);
-            return { data: rows, error: null };
-          } catch (err: any) {
-            console.error("Error loading colleges:", err);
-            toast.error(`Database error loading colleges: ${err?.message || String(err)}`);
-            return { data: [], error: err };
-          }
-        })(),
-        safeQuery(
-          supabase
-            .from("certificates")
-            .select("*")
-            .order("created_at", { ascending: false })
-            .limit(100),
-          "certificates"
-        ),
-        (async () => {
+    const loadUniversities = async () => {
+      try {
+        const rows = await fetchUniversitiesCatalog(supabase, {
+          onFirstPage: (first) => setUnis(first),
+        });
+        return { data: rows, error: null };
+      } catch (err: any) {
+        console.warn("Error loading universities:", err);
+        return { data: [], error: err };
+      }
+    };
+
+    const loadColleges = async () => {
+      try {
+        const rows = await fetchAllCollegesCatalog(supabase, {
+          onFirstPage: (first) => setColleges(first),
+        });
+        return { data: rows, error: null };
+      } catch (err: any) {
+        console.warn("Error loading colleges:", err);
+        return { data: [], error: err };
+      }
+    };
+
+    const [u, c, ce, dm, ss, ap, notifs, cyber, customStaff] = await runInBatches(
+      [
+        loadUniversities,
+        loadColleges,
+        () =>
+          safeQuery(
+            supabase
+              .from("certificates")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .limit(100),
+            "certificates"
+          ),
+        async () => {
           const rows = await fetchInternshipDomainsResilient(supabase);
           return { data: rows, error: null };
-        })(),
-        safeQuery(
-          supabase
-            .from("classes")
-            .select("*")
-            .order("scheduled_at", { ascending: true }),
-          "classes"
-        ),
-        safeQuery(supabase.from("system_settings").select("*"), "system_settings"),
-        safeQuery(
-          supabase.from("admin_permissions").select("*").eq("user_id", session.user.id).maybeSingle(),
-          "admin_permissions"
-        ),
-        (async () => {
+        },
+        async () => ({
+          data: await fetchSystemSettingsResilient(supabase),
+          error: null,
+        }),
+        () =>
+          safeQuery(
+            supabase
+              .from("admin_permissions")
+              .select("*")
+              .eq("user_id", session.user.id)
+              .maybeSingle(),
+            "admin_permissions"
+          ),
+        async () => {
           try {
             const rows = await fetchAdminNotifications(supabase, 100);
             return { data: rows, error: null };
           } catch (err: any) {
-            console.error("Error loading notifications:", err);
+            console.warn("Error loading notifications:", err);
             return { data: [], error: err };
           }
-        })(),
-        safeQuery(
-          supabase
-            .from("assignments")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          "assignments"
-        ),
-        safeQuery(
-          supabase.from("cybercafe_profiles").select("*").order("created_at", { ascending: false }),
-          "cybercafe_profiles"
-        ),
-        safeQuery(
-          supabase.from("admin_staff").select("*").order("created_at", { ascending: false }),
-          "admin_staff"
-        ),
-      ]);
+        },
+        () =>
+          safeQuery(
+            supabase
+              .from("cybercafe_profiles")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .limit(100),
+            "cybercafe_profiles"
+          ),
+        () =>
+          safeQuery(
+            supabase.from("admin_staff").select("*").order("created_at", { ascending: false }),
+            "admin_staff"
+          ),
+      ],
+      3
+    );
 
     setStaff(customStaff.data || []);
     setUnis(u.data || []);
@@ -1392,7 +1424,6 @@ export default function Admin() {
     setColleges(c.data || []);
     setCerts(ce.data || []);
     setDomains(dm.data || []);
-    setClassesList(cl.data || []);
     setSystemSettings(ss.data || []);
 
     let finalPermissions = ap.data;
@@ -1403,7 +1434,6 @@ export default function Admin() {
     setMyPermissions(finalPermissions);
 
     setNotifications(notifs.data || []);
-    setAssignments(asgnResult.data || []);
     setCyberCafes(cyber.data || []);
 
     try {
@@ -1418,63 +1448,94 @@ export default function Admin() {
     return true;
   }, [navigate, safeQuery]);
 
-  /** Payment history for dashboard + transactions + lead stats. */
+  /** Dashboard revenue charts — bounded sample, not full payment table. */
+  const loadPaymentsDashboardData = useCallback(async (opts?: { force?: boolean }) => {
+    if (adminDataLoadedRef.current.paymentsDashboard && !opts?.force) return;
+    setIsPaymentsLoading(true);
+    try {
+      const { success, cancelled } = await fetchPaymentDashboardSample(supabase);
+      setDashboardPaymentRows(
+        success.filter((p: any) => p.status === "success" || !p.status)
+      );
+      setDashboardCancelledRows(cancelled);
+      adminDataLoadedRef.current.paymentsDashboard = true;
+    } catch (err: any) {
+      console.warn("Payment dashboard sample:", err);
+    } finally {
+      setIsPaymentsLoading(false);
+    }
+  }, []);
+
+  /** Payments tab — one server page at a time. */
+  const loadPaymentsListPage = useCallback(async () => {
+    setIsPaymentsLoading(true);
+    try {
+      const { rows, total } = await fetchPaymentSuccessPage(
+        supabase,
+        payPage,
+        payPageSize,
+        {
+          search: paySearchTerm,
+          college: payCollegeFilter,
+          startDate: payStartDate,
+          endDate: payEndDate,
+          status: "success",
+        }
+      );
+      setPayments(rows);
+      setPaymentsTotalCount(total);
+      adminDataLoadedRef.current.payments = true;
+    } catch (err: any) {
+      console.warn("Error fetching payment_success page:", err);
+      toast.error("Failed to load payments: " + (err?.message || String(err)));
+    } finally {
+      setIsPaymentsLoading(false);
+    }
+  }, [
+    payPage,
+    payPageSize,
+    paySearchTerm,
+    payCollegeFilter,
+    payStartDate,
+    payEndDate,
+  ]);
+
+  /** Recent cancelled/failed rows for Leads Hub (bounded prefetch). */
+  const loadLeadsPaymentExtras = useCallback(async (opts?: { force?: boolean }) => {
+    if (adminDataLoadedRef.current.leadsExtras && !opts?.force) return;
+    try {
+      const [cancelled, failed] = await Promise.all([
+        fetchRecentCancelledForLeads(supabase),
+        fetchRecentFailedForLeads(supabase),
+      ]);
+      cancelledPaymentsRef.current = cancelled;
+      setCancelledPayments(cancelled);
+      setFailedPayments(failed);
+      syncLeadsCommsFromCancelled(cancelled);
+      adminDataLoadedRef.current.leadsExtras = true;
+    } catch (err: any) {
+      console.warn("Leads payment extras:", err);
+    }
+  }, []);
+
   const loadPaymentsData = useCallback(
     async (opts?: { force?: boolean }) => {
-      if (adminDataLoadedRef.current.payments && !opts?.force) return;
       if (paymentsLoadInFlightRef.current) return paymentsLoadInFlightRef.current;
-
       const task = (async () => {
-        setIsPaymentsLoading(true);
-        try {
-          let pcRows: any[] = [];
-          let paymentSuccessRows: any[] = [];
-
-          const [cancelled, success] = await Promise.all([
-            fetchAllSupabaseRows(supabase, "payment_cancelled", {
-              orderBy: "created_at",
-              ascending: false,
-            }).catch((err: any) => {
-              console.error("Error fetching payment_cancelled:", err);
-              const msg = String(err?.message || err);
-              if (!/payment_cancelled.*does not exist|42P01/i.test(msg)) {
-                toast.error("Failed to load cancelled payments: " + msg);
-              }
-              return [] as any[];
-            }),
-            fetchAllSupabaseRows(supabase, "payment_success", {
-              orderBy: "created_at",
-              ascending: false,
-            }).catch((err: any) => {
-              console.error("Error fetching payment_success:", err);
-              const code = String(err?.code || "");
-              if (code !== "42501") {
-                toast.error("Failed to load payment history: " + (err.message || String(err)));
-              }
-              return [] as any[];
-            }),
-          ]);
-
-          pcRows = cancelled;
-          paymentSuccessRows = success;
-
-          const allUnified = paymentSuccessRows;
-          setPayments(allUnified.filter((p: any) => p.status === "success" || !p.status));
-          setFailedPayments(allUnified.filter((p: any) => p.status === "failed"));
-          cancelledPaymentsRef.current = pcRows;
-          setCancelledPayments(pcRows);
-          syncLeadsCommsFromCancelled(pcRows);
-          adminDataLoadedRef.current.payments = true;
-        } finally {
-          setIsPaymentsLoading(false);
-          paymentsLoadInFlightRef.current = null;
+        await loadPaymentsDashboardData(opts);
+        if (activeTab === "payments") {
+          await loadPaymentsListPage();
         }
       })();
-
       paymentsLoadInFlightRef.current = task;
+      try {
+        await task;
+      } finally {
+        paymentsLoadInFlightRef.current = null;
+      }
       return task;
     },
-    []
+    [activeTab, loadPaymentsDashboardData, loadPaymentsListPage]
   );
 
   /** Registration draft leads for Leads Hub — server-paginated for AWS speed. */
@@ -1514,12 +1575,8 @@ export default function Admin() {
   const loadEnrolledEmailsOnly = useCallback(async () => {
     if (enrolledEmailsRef.current.size > 0) return;
     try {
-      const rows = await fetchAllSupabaseRows<{ email?: string }>(supabase, "students", {
-        select: "email",
-        orderBy: "created_at",
-        ascending: false,
-      });
-      applyEnrolledEmails(rows.map((r) => r.email));
+      const rows = await fetchAdminStudentsLight(supabase);
+      applyEnrolledEmails(rows.map((r) => String(r.email || "")));
       if (cancelledPaymentsRef.current.length > 0) {
         syncLeadsCommsFromCancelled(cancelledPaymentsRef.current);
       }
@@ -1653,6 +1710,51 @@ export default function Admin() {
     [fetchAllStudentsLight]
   );
 
+  /** Live classes + assignments tabs: full paginated lists (not loaded on core shell). */
+  const loadClassesAssignmentsData = useCallback(async (opts?: { force?: boolean }) => {
+    if (adminDataLoadedRef.current.classesAssignments && !opts?.force) return;
+
+    if (classesAssignmentsLoadInFlightRef.current) {
+      if (!opts?.force) return classesAssignmentsLoadInFlightRef.current;
+      await classesAssignmentsLoadInFlightRef.current;
+      classesAssignmentsLoadInFlightRef.current = null;
+    }
+
+    const task = (async () => {
+      try {
+        const [clRows, asgnRows] = await runInBatches(
+          [
+            () =>
+              fetchAllSupabaseRows(supabase, "classes", {
+                orderBy: "scheduled_at",
+                ascending: true,
+                pageSize: 250,
+                maxRows: 4_000,
+              }),
+            () =>
+              fetchAllSupabaseRows(supabase, "assignments", {
+                orderBy: "created_at",
+                ascending: false,
+                pageSize: 250,
+                maxRows: 4_000,
+              }),
+          ],
+          1
+        );
+        setClassesList(clRows);
+        setAssignments(asgnRows);
+        adminDataLoadedRef.current.classesAssignments = true;
+      } catch (err: unknown) {
+        console.warn("Classes/assignments load:", err);
+      } finally {
+        classesAssignmentsLoadInFlightRef.current = null;
+      }
+    })();
+
+    classesAssignmentsLoadInFlightRef.current = task;
+    return task;
+  }, []);
+
   /** Refresh certificate registry only (fast — avoids reloading all students). */
   const refreshCertificates = useCallback(async () => {
     const { data, error } = await supabase
@@ -1733,8 +1835,11 @@ export default function Admin() {
       if (!ok) return;
 
       const tasks: Promise<void>[] = [];
-      if (adminDataLoadedRef.current.payments) {
+      if (adminDataLoadedRef.current.payments || adminDataLoadedRef.current.paymentsDashboard) {
         tasks.push(loadPaymentsData({ force: true }));
+      }
+      if (adminDataLoadedRef.current.leadsExtras) {
+        tasks.push(loadLeadsPaymentExtras({ force: true }));
       }
       if (adminDataLoadedRef.current.leads) {
         tasks.push(loadRegistrationLeadsData({ force: true }));
@@ -1744,6 +1849,9 @@ export default function Admin() {
       }
       if (adminDataLoadedRef.current.commsStudents) {
         tasks.push(loadCommsStudentsData({ force: true }));
+      }
+      if (adminDataLoadedRef.current.classesAssignments) {
+        tasks.push(loadClassesAssignmentsData({ force: true }));
       }
       await Promise.all(tasks);
     } catch (err: any) {
@@ -2012,6 +2120,7 @@ export default function Admin() {
               leads: false,
               attendance: false,
               commsStudents: false,
+              classesAssignments: false,
             };
             navigate(ADMIN_LOGIN_PATH);
             return;
@@ -2034,6 +2143,7 @@ export default function Admin() {
             leads: false,
             attendance: false,
             commsStudents: false,
+            classesAssignments: false,
           };
           navigate(ADMIN_LOGIN_PATH);
         })();
@@ -2054,18 +2164,18 @@ export default function Admin() {
   useEffect(() => {
     if (!allowed) return;
 
-    if (
-      activeTab === "dashboard" ||
-      activeTab === "payments" ||
-      activeTab === "check-payment" ||
-      activeTab === "unpaid-students"
-    ) {
-      void loadPaymentsData();
+    if (activeTab === "dashboard" || activeTab === "check-payment" || activeTab === "unpaid-students") {
+      void loadPaymentsDashboardData();
+      return;
+    }
+    if (activeTab === "payments") {
+      void loadPaymentsDashboardData();
+      void loadPaymentsListPage();
       return;
     }
     if (activeTab === "leads") {
       void (async () => {
-        await loadPaymentsData();
+        await loadLeadsPaymentExtras();
         if (!adminDataLoadedRef.current.commsStudents) {
           await loadEnrolledEmailsOnly();
         }
@@ -2085,18 +2195,25 @@ export default function Admin() {
     }
     if (activeTab === "comms") {
       void (async () => {
-        await loadPaymentsData();
+        await loadLeadsPaymentExtras();
         await loadCommsStudentsData();
       })();
+      return;
+    }
+    if (activeTab === "assignments" || activeTab === "classes") {
+      void loadClassesAssignmentsData();
     }
   }, [
     allowed,
     activeTab,
-    loadPaymentsData,
+    loadPaymentsDashboardData,
+    loadPaymentsListPage,
+    loadLeadsPaymentExtras,
     loadRegistrationLeadsData,
     loadEnrolledEmailsOnly,
     loadAttendanceTabData,
     loadCommsStudentsData,
+    loadClassesAssignmentsData,
     refreshAttendanceCounts,
   ]);
 
@@ -3112,64 +3229,31 @@ Apna Intern Team`;
     await executeTransferLead(lead, password);
   };
 
-  // Payment Filtering Logic
-  const filteredPayments = payments.filter(pay => {
-    // Date filter
-    if (payStartDate) {
-      const payDate = new Date(pay.created_at);
-      const start = new Date(payStartDate);
-      start.setHours(0, 0, 0, 0);
-      if (payDate < start) return false;
-    }
-    if (payEndDate) {
-      const payDate = new Date(pay.created_at);
-      const end = new Date(payEndDate);
-      end.setHours(23, 59, 59, 999);
-      if (payDate > end) return false;
-    }
-    
-    // Search filter
-    if (paySearchTerm) {
-      const s = paySearchTerm.toLowerCase();
-      const student = students.find(
-        (st) => st.email?.toLowerCase() === pay.email?.toLowerCase()
-      );
-      if (
-        !pay.full_name?.toLowerCase().includes(s) &&
-        !pay.email?.toLowerCase().includes(s) &&
-        !pay.payment_id?.toLowerCase().includes(s) &&
-        !pay.college_name?.toLowerCase().includes(s) &&
-        !student?.contact_number?.toLowerCase().includes(s)
-      ) {
-        return false;
-      }
-    }
-
-    // College filter — prefer payment row, then loaded directory page
-    if (payCollegeFilter !== "all") {
-      const college =
-        pay.college_name ||
-        students.find((s) => s.email?.toLowerCase() === pay.email?.toLowerCase())?.college_name;
-      if (college !== payCollegeFilter) return false;
-    }
-    
-    return true;
-  });
-
-  const payPageCount = Math.max(1, Math.ceil(filteredPayments.length / payPageSize));
+  const payPageCount = Math.max(1, Math.ceil(paymentsTotalCount / payPageSize));
   const paySafePage = Math.min(payPage, payPageCount - 1);
-  const paginatedPayments = useMemo(
-    () =>
-      filteredPayments.slice(
-        paySafePage * payPageSize,
-        (paySafePage + 1) * payPageSize
-      ),
-    [filteredPayments, paySafePage, payPageSize]
-  );
+  const paginatedPayments = payments;
 
   useEffect(() => {
     setPayPage(0);
   }, [payStartDate, payEndDate, payCollegeFilter, paySearchTerm]);
+
+  useEffect(() => {
+    if (!allowed || activeTab !== "payments") return;
+    const delay = paySearchTerm.trim() ? 300 : 0;
+    const timer = setTimeout(() => {
+      void loadPaymentsListPage();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [
+    allowed,
+    activeTab,
+    payPage,
+    paySearchTerm,
+    payCollegeFilter,
+    payStartDate,
+    payEndDate,
+    loadPaymentsListPage,
+  ]);
 
   const handleUpdateAdminPassword = async () => {
     setProcessing(true);
@@ -3280,8 +3364,8 @@ Apna Intern Team`;
               <>
               <TabsContent value="dashboard" className="mt-0">
                 <AdminDashboardPanel
-                  payments={payments}
-                  cancelledPayments={cancelledPayments}
+                  payments={dashboardPaymentRows}
+                  cancelledPayments={dashboardCancelledRows}
                   studentTotalCount={studentTotalCount}
                   visitorCount={visitorCount}
                   uniqueVisitorCount={uniqueVisitorCount}
@@ -3583,7 +3667,7 @@ Apna Intern Team`;
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="hero" className="bg-green-100 text-green-700 hover:bg-green-200 border-none px-4 py-1.5 font-bold">
-                        Count: {filteredPayments.length}
+                        Count: {paymentsTotalCount}
                       </Badge>
                     </div>
                   </div>
@@ -3670,8 +3754,8 @@ Apna Intern Team`;
                   </ScrollArea>
                   <div className="p-4 bg-muted/10 border-t flex flex-col md:flex-row items-center justify-between gap-4 mt-0 rounded-b-xl">
                     <div className="text-xs text-muted-foreground font-medium">
-                      Showing {filteredPayments.length === 0 ? 0 : paySafePage * payPageSize + 1} to{" "}
-                      {Math.min(filteredPayments.length, (paySafePage + 1) * payPageSize)} of {filteredPayments.length}{" "}
+                      Showing {paymentsTotalCount === 0 ? 0 : paySafePage * payPageSize + 1} to{" "}
+                      {Math.min(paymentsTotalCount, (paySafePage + 1) * payPageSize)} of {paymentsTotalCount}{" "}
                       transactions
                     </div>
                     <div className="flex items-center gap-2">

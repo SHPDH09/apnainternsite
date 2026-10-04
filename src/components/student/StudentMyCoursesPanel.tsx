@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Award,
@@ -23,6 +23,24 @@ import {
   listStudentEnrollments,
   type Enrollment,
 } from "@/lib/coursesApi";
+import {
+  CourseCertificateDocument,
+  type CourseCertificateDisplayData,
+} from "@/components/CourseCertificateDocument";
+import {
+  courseCertificateDisplayFromEnrollment,
+  fetchCourseCertificatesByEnrollmentIds,
+  type CourseCertificateRow,
+} from "@/lib/courseCertificate";
+import { downloadCertificatePdf } from "@/lib/certificatePdf";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Props = {
   studentId: string;
@@ -47,6 +65,11 @@ function statusBadgeVariant(enrollment: Enrollment): "default" | "secondary" | "
 export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) {
   const [loading, setLoading] = useState(true);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [certByEnrollment, setCertByEnrollment] = useState<Record<string, CourseCertificateRow>>({});
+  const [certPreview, setCertPreview] = useState<CourseCertificateDisplayData | null>(null);
+  const [certDialogOpen, setCertDialogOpen] = useState(false);
+  const [certDownloading, setCertDownloading] = useState(false);
+  const certRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +77,13 @@ export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) 
       setLoading(true);
       try {
         const rows = await listStudentEnrollments(supabase, studentId);
-        if (!cancelled) setEnrollments(rows);
+        if (cancelled) return;
+        setEnrollments(rows);
+        const completedIds = rows
+          .filter((e) => e.status === "completed" || e.progress_percent >= 100)
+          .map((e) => e.id);
+        const certMap = await fetchCourseCertificatesByEnrollmentIds(supabase, completedIds);
+        if (!cancelled) setCertByEnrollment(certMap);
       } catch (err) {
         console.warn("[my-courses] load failed:", err);
       } finally {
@@ -65,6 +94,32 @@ export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) 
       cancelled = true;
     };
   }, [studentId]);
+
+  const openCourseCertificate = (enrollment: Enrollment) => {
+    const cert = certByEnrollment[enrollment.id];
+    if (!cert) {
+      toast.error("Certificate not issued yet. Contact support or wait for admin to issue it.");
+      return;
+    }
+    setCertPreview(courseCertificateDisplayFromEnrollment(enrollment, cert, enrollment.student_name));
+    setCertDialogOpen(true);
+  };
+
+  const downloadCourseCertificate = async () => {
+    if (!certRef.current || !certPreview) return;
+    setCertDownloading(true);
+    try {
+      await downloadCertificatePdf(
+        certRef.current,
+        `Course_Certificate_${certPreview.certificateCode}.pdf`
+      );
+      toast.success("Certificate downloaded!");
+    } catch {
+      toast.error("Download failed. Please try again.");
+    } finally {
+      setCertDownloading(false);
+    }
+  };
 
   const grouped = useMemo(() => {
     const active = enrollments.filter((e) => e.status === "active");
@@ -155,7 +210,7 @@ export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) 
                   size="sm"
                   variant="outline"
                   className="gap-2 rounded-lg font-medium"
-                  onClick={() => toast.info("Certificate download will be available soon.")}
+                  onClick={() => openCourseCertificate(enrollment)}
                 >
                   <Download className="size-4" />
                   Certificate
@@ -194,6 +249,28 @@ export function StudentMyCoursesPanel({ studentId, compact, onViewAll }: Props) 
 
   return (
     <div className="space-y-8 student-dash-animate-in">
+      <Dialog open={certDialogOpen} onOpenChange={setCertDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Course certificate</DialogTitle>
+            <DialogDescription>Download your official course completion certificate.</DialogDescription>
+          </DialogHeader>
+          {certPreview ? (
+            <div className="overflow-x-auto rounded-lg bg-slate-100 p-4">
+              <CourseCertificateDocument ref={certRef} data={certPreview} />
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCertDialogOpen(false)}>
+              Close
+            </Button>
+            <Button className="gap-2" onClick={downloadCourseCertificate} disabled={certDownloading}>
+              {certDownloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              Download PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <StudentPageHero
         initial="C"
         title="My courses"

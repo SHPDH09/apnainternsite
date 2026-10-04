@@ -32,6 +32,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -47,9 +48,9 @@ import {
   blogStatusLabel,
   createBlogPost,
   deleteBlogPost,
-  ensureSiteBlogStorage,
   estimateReadMinutes,
   fetchAdminBlogPosts,
+  fetchAdminBlogPostById,
   formatBlogDate,
   formatSiteBlogError,
   isBlogPostPublic,
@@ -189,16 +190,6 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
     void reload();
   }, [reload]);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        await ensureSiteBlogStorage(client);
-      } catch (err) {
-        console.warn("[BlogManagementPanel] blog storage ensure:", err);
-      }
-    })();
-  }, [client]);
-
   const stats = useMemo(() => {
     const published = rows.filter((r) => r.status === "published").length;
     const scheduled = rows.filter((r) => r.status === "scheduled").length;
@@ -241,6 +232,14 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
     setEditor(rowToEditor(row));
     setEditorTab("write");
     setEditorOpen(true);
+    void (async () => {
+      try {
+        const full = await fetchAdminBlogPostById(client, row.id);
+        if (full) setEditor(rowToEditor(full));
+      } catch (err) {
+        console.warn("[BlogManagementPanel] load full post:", err);
+      }
+    })();
   };
 
   const insertAtCursor = (snippet: string) => {
@@ -545,6 +544,9 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
         <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editor.id ? "Edit post" : "New blog / vlog post"}</DialogTitle>
+            <DialogDescription className="sr-only">
+              Create or edit blog and vlog content, cover image, and publish settings.
+            </DialogDescription>
           </DialogHeader>
 
           <Tabs value={editorTab} onValueChange={(v) => setEditorTab(v as typeof editorTab)}>

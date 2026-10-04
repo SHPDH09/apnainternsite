@@ -9,11 +9,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Search, CheckCircle2, XCircle, Loader2, Award, User, ShieldCheck, Download } from "lucide-react";
 import { toast } from "sonner";
 import { IssuedCertificateDocument } from "@/components/IssuedCertificateDocument";
-import {
-  certificateDisplayFromRecord,
-} from "@/lib/certificateFormat";
+import { CourseCertificateDocument } from "@/components/CourseCertificateDocument";
+import { certificateDisplayFromRecord } from "@/lib/certificateFormat";
 import { verifyCertificatePublic } from "@/lib/certificateVerify";
 import { downloadCertificatePdf } from "@/lib/certificatePdf";
+import { courseCertificateDisplayFromVerify } from "@/lib/courseCertificate";
 
 const VerifyCertificate = () => {
   const [searchParams] = useSearchParams();
@@ -24,6 +24,10 @@ const VerifyCertificate = () => {
   const [generating, setGenerating] = useState(false);
   const [cert, setCert] = useState<any>(null);
   const [student, setStudent] = useState<any>(null);
+  const [verifyKind, setVerifyKind] = useState<"internship" | "course" | null>(null);
+  const [courseVerifyPayload, setCourseVerifyPayload] = useState<
+    ReturnType<typeof courseCertificateDisplayFromVerify>
+  >(null);
   const [error, setError] = useState(false);
   const certRef = useRef<HTMLDivElement>(null);
   const autoVerifiedRef = useRef(false);
@@ -44,6 +48,8 @@ const VerifyCertificate = () => {
     setError(false);
     setCert(null);
     setStudent(null);
+    setVerifyKind(null);
+    setCourseVerifyPayload(null);
 
     try {
       const result = await verifyCertificatePublic(supabase, {
@@ -55,6 +61,10 @@ const VerifyCertificate = () => {
       if (result.found && result.cert) {
         setCert(result.cert);
         setStudent(result.student);
+        setVerifyKind(result.kind === "course" ? "course" : "internship");
+        if (result.kind === "course" && result.courseCertificate) {
+          setCourseVerifyPayload(courseCertificateDisplayFromVerify(result.courseCertificate));
+        }
         toast.success("Certificate verified successfully!");
       } else {
         setError(true);
@@ -84,10 +94,11 @@ const VerifyCertificate = () => {
     if (!certRef.current) return;
     setGenerating(true);
     try {
-      await downloadCertificatePdf(
-        certRef.current,
-        `ApnaIntern_Certificate_${cert?.certificate_id || student?.full_name?.replace(/\s+/g, "_") || "Student"}.pdf`
-      );
+      const fileStem =
+        verifyKind === "course"
+          ? `Course_Certificate_${cert?.certificate_id || "Student"}`
+          : `ApnaIntern_Certificate_${cert?.certificate_id || student?.full_name?.replace(/\s+/g, "_") || "Student"}`;
+      await downloadCertificatePdf(certRef.current, `${fileStem}.pdf`);
       toast.success("Certificate downloaded!");
     } catch {
       toast.error("Download failed. Please try again.");
@@ -107,7 +118,7 @@ const VerifyCertificate = () => {
             </div>
             <h1 className="text-4xl font-black text-slate-900 mb-4">Certificate Verification</h1>
             <p className="text-slate-500 max-w-xl mx-auto">
-              Verify the authenticity of Apna Intern certificates. Use Certificate ID, email, phone, or student name with university roll number.
+              Verify internship or course certificates. Use Certificate ID (including CRS-* course codes), email, phone, or student name with university roll number.
             </p>
           </div>
 
@@ -180,7 +191,11 @@ const VerifyCertificate = () => {
               <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
                 {[
                   { icon: User, label: "Intern Name", value: student?.full_name || cert.student_name },
-                  { icon: Award, label: "Program", value: student?.course || cert.internship_name },
+                  {
+                    icon: Award,
+                    label: verifyKind === "course" ? "Course" : "Program",
+                    value: student?.course || cert.internship_name,
+                  },
                   { icon: ShieldCheck, label: "Status", value: cert.status || "Active", green: true },
                 ].map(({ icon: Icon, label, value, green }) => (
                   <Card key={label} className="p-4 border-none shadow-sm">
@@ -202,7 +217,11 @@ const VerifyCertificate = () => {
                   Certificate Preview
                 </p>
                 <div className="flex justify-center overflow-x-auto">
-                  <IssuedCertificateDocument ref={certRef} data={certificateDisplayData} />
+                  {verifyKind === "course" && courseVerifyPayload ? (
+                    <CourseCertificateDocument ref={certRef} data={courseVerifyPayload} />
+                  ) : (
+                    <IssuedCertificateDocument ref={certRef} data={certificateDisplayData} />
+                  )}
                 </div>
               </div>
             </div>

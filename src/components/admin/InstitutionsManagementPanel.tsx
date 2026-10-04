@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
+import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
 import { resolveStorageUrl } from "@/lib/storageUrl";
 
 type Props = {
@@ -40,14 +41,18 @@ export function InstitutionsManagementPanel({ isActive = true }: Props) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: uniRows }, collegeRows] = await Promise.all([
-        supabase.from("universities").select("id,name,logo_url").order("name"),
+      const [uniRows, collegeRows] = await Promise.all([
+        fetchAllSupabaseRows<{ id: string; name: string; logo_url?: string | null }>(
+          supabase,
+          "universities",
+          { select: "id,name,logo_url", orderBy: "name", ascending: true }
+        ),
         fetchAllCollegesCatalog(supabase),
       ]);
-      setUnis((uniRows || []) as typeof unis);
+      setUnis(uniRows);
       setColleges(collegeRows as typeof colleges);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to load institutions");
+      console.warn("[institutions]", e);
     } finally {
       setLoading(false);
     }

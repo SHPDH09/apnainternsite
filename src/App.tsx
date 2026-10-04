@@ -44,10 +44,6 @@ import BlogPost from "./pages/BlogPost.tsx";
 import Terms from "./pages/Terms.tsx";
 import Privacy from "./pages/Privacy.tsx";
 import WaCrmApp from "./wa-crm/WaCrmApp.tsx";
-import { VisitorTracker } from "./components/VisitorTracker";
-import { SitePopupsHost } from "./components/NoticePopup";
-import { ProtectedRoute } from "./components/ProtectedRoute";
-import { StudentDashboardGate } from "./components/StudentDashboardGate";
 import { AdminSessionRefresh } from "./components/AdminSessionRefresh";
 import { StudentSessionRefresh } from "./components/StudentSessionRefresh";
 import { authConfirmPathWithTokens } from "@/lib/authRedirectGuard";
@@ -177,6 +173,7 @@ const App = () => (
               </ProtectedRoute>
             }
           />
+          <Route path="/staff" element={<Navigate to="/staff-dashboard" replace />} />
           <Route
             path="/staff-dashboard"
             element={

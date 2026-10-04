@@ -20,6 +20,8 @@ import rpcByName from "../../api/rpc-call";
 import dataSelect from "../../api/data-select";
 import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
 import ensureBlogCms from "../../api/ensure-blog-cms";
+import adminBlogPosts from "../../api/admin-blog-posts";
+import adminBlogLeads from "../../api/admin-blog-leads";
 import publicBlogMedia from "../../api/public/blog-media";
 import ensureDashboardServiceKeys from "../../api/ensure-dashboard-service-keys";
 import ensureProjectReportTemplates from "../../api/ensure-project-report-templates";
@@ -37,10 +39,14 @@ import { mountWaCrmRoutes } from "./wa-crm/router.js";
 import { loadRootEnv } from "./load-env";
 import { ensureAllCmsTables } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
+import { ensureStudentAttendanceMarkRpc } from "./attendance-bootstrap";
+import { ensureCertificateIssueRpc } from "./certificate-bootstrap";
+import { ensureClassLinkRpc } from "./class-link-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import { ensureProjectReportSchema } from "./project-report-bootstrap";
 import { ensureStaffAttendanceOfficesSchema } from "./staff-attendance-offices-bootstrap";
 import { ensureStaffSalarySchema } from "./staff-salary-bootstrap";
+import { ensureSystemSettingsSchema } from "./system-settings-bootstrap";
 import {
   authLogout,
   authSettings,
@@ -163,6 +169,8 @@ async function buildApp(): Promise<Express> {
     try {
       await ensureAllCmsTables();
       console.log("[cms-bootstrap] site CMS tables ready");
+      await ensureSystemSettingsSchema();
+      console.log("[system-settings-bootstrap] system_settings ready");
     } catch (err) {
       console.warn("[cms-bootstrap] startup ensure failed:", err);
     }
@@ -173,6 +181,30 @@ async function buildApp(): Promise<Express> {
       }
     } catch (err) {
       console.warn("[registration-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const att = await ensureStudentAttendanceMarkRpc();
+      if (att.applied) {
+        console.log("[attendance-bootstrap] applied student_mark_attendance RPC");
+      }
+    } catch (err) {
+      console.warn("[attendance-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const cert = await ensureCertificateIssueRpc();
+      if (cert.applied) {
+        console.log("[certificate-bootstrap] applied certificate issue RPC");
+      }
+    } catch (err) {
+      console.warn("[certificate-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const classLink = await ensureClassLinkRpc();
+      if (classLink.applied) {
+        console.log("[class-link-bootstrap] applied live class admin RPCs");
+      }
+    } catch (err) {
+      console.warn("[class-link-bootstrap] startup ensure failed:", err);
     }
     try {
       const upload = await ensureStudentDataUploadSchema();
@@ -283,6 +315,8 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/admin-register", handler: adminRegister },
     { method: "post", path: "/api/bootstrap-grant-admin", handler: bootstrapGrantAdmin },
     { method: "post", path: "/api/ensure-blog-cms", handler: ensureBlogCms },
+    { method: "get", path: "/api/admin-blog-posts", handler: adminBlogPosts },
+    { method: "get", path: "/api/admin-blog-leads", handler: adminBlogLeads },
     { method: "post", path: "/api/ensure-dashboard-service-keys", handler: ensureDashboardServiceKeys },
     { method: "post", path: "/api/ensure-project-report-templates", handler: ensureProjectReportTemplates },
     { method: "post", path: "/api/project-report-docx-to-pdf", handler: projectReportDocxToPdf },

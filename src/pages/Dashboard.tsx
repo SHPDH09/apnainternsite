@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { syncDirectoryPasswordAfterAuthChange } from "@/lib/studentCredentials";
+import { portalSignOut } from "@/lib/portalSignOut";
 import {
   REGISTRATION_PASSWORD_MIN_LENGTH,
   setLoginPasswordViaRpc,
@@ -34,7 +35,8 @@ import {
 import { OfferLetter } from "@/components/OfferLetter";
 import { IssuedCertificateDocument } from "@/components/IssuedCertificateDocument";
 import { downloadOfferLetterPdf } from "@/lib/offerLetterPdf";
-import { fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
+import { fetchAllCollegesCatalog, fetchUniversitiesCatalog } from "@/lib/institutionCatalog";
+import { fetchSystemSettingsResilient } from "@/lib/systemSettingsResilience";
 import {
   certificateDisplayFromRecord,
   resolveUniversityRollNo,
@@ -42,6 +44,7 @@ import {
   hasRequiredCertificateIdentityFields,
 } from "@/lib/certificateFormat";
 import { downloadCertificatePdf } from "@/lib/certificatePdf";
+import { readImpersonateStudentId } from "@/lib/studentPaymentAccess";
 import {
   hasInternshipAccess,
   internshipUpgradePaymentPath,
@@ -245,7 +248,7 @@ const Dashboard = () => {
         return;
       }
 
-      const impersonateId = localStorage.getItem("impersonate_id");
+      const impersonateId = readImpersonateStudentId();
       const uid = impersonateId || session.user.id;
       const isImpersonating = !!impersonateId;
       setCurrentUserId(session.user.id);
@@ -259,7 +262,7 @@ const Dashboard = () => {
         }),
         fetchRolesForUser(supabase, session.user.id),
         supabase.from("certificates").select("*").eq("user_id", uid).maybeSingle(),
-        supabase.from("system_settings").select("*"),
+        fetchSystemSettingsResilient(supabase),
         fetchStudentNotifications(supabase, uid).catch(() => []),
         fetchUnreadNotificationCount(supabase).catch(() => 0),
         fetchStudentAssignments(supabase).catch(() => []),
@@ -294,7 +297,7 @@ const Dashboard = () => {
       void warmStudentUniquenessValidation();
       setCert(c.data);
       setPayment(pay.data);
-      setSystemSettings(ss.data || []);
+      setSystemSettings(Array.isArray(ss) ? ss : []);
       setNotifications(Array.isArray(n) ? n : n?.data || []);
       setUnreadNotifCount(typeof unreadN === "number" ? unreadN : Number(unreadN ?? 0));
 
@@ -331,12 +334,12 @@ const Dashboard = () => {
       const domainName =
         studentLoad.profile?.internship_domain || studentLoad.profile?.course;
 
-      const [uData, collegesRows, dData] = await Promise.all([
-        supabase.from("universities").select("*").order("name"),
-        fetchAllCollegesCatalog(supabase),
+      const [uniRows, collegesRows, dData] = await Promise.all([
+        fetchUniversitiesCatalog(supabase, { onFirstPage: (first) => setUnis(first) }),
+        fetchAllCollegesCatalog(supabase, { onFirstPage: (first) => setColleges(first) }),
         supabase.from("internship_domains").select("*").order("name"),
       ]);
-      setUnis(uData.data || []);
+      setUnis(uniRows);
       setColleges(collegesRows);
       setDomains(dData.data || []);
 
@@ -363,7 +366,7 @@ const Dashboard = () => {
                 course: studentLoad.profile?.course,
               },
               cls,
-              { colleges: collegesRows, unis: uData.data || [] }
+              { colleges: collegesRows, unis: uniRows }
             )
         );
       }
@@ -526,7 +529,7 @@ const Dashboard = () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const uid = localStorage.getItem("impersonate_id") || session.user.id;
+      const uid = readImpersonateStudentId() || session.user.id;
 
       const previousEmail = String(profile?.email || session.user.email || "")
         .trim()
@@ -729,10 +732,21 @@ const Dashboard = () => {
     }
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    const uid = localStorage.getItem("impersonate_id") || session.user.id;
+    const uid = readImpersonateStudentId() || session.user.id;
 
     // Prefer RPC (sets id/marked_at server-side; works even if table defaults were missing).
     const { data: rpcData, error: rpcErr } = await supabase.rpc("student_mark_attendance");
+    if (rpcErr) {
+      const rpcMsg = rpcErr.message || "";
+      if (/Unable to mark attendance/i.test(rpcMsg)) {
+        toast.error("Self attendance marking is closed for your university.");
+        return;
+      }
+      if (/Not authenticated/i.test(rpcMsg)) {
+        toast.error("Please sign in again to mark attendance.");
+        return;
+      }
+    }
     if (!rpcErr && rpcData && typeof rpcData === "object") {
       const payload = rpcData as { ok?: boolean; already_marked?: boolean };
       if (payload.already_marked) {
@@ -778,7 +792,12 @@ const Dashboard = () => {
       created_at: nowIso,
     });
     if (error) {
-      toast.error(error.message || rpcErr?.message || "Failed to mark attendance");
+      const detail = error.message || rpcErr?.message || "Failed to mark attendance";
+      toast.error(detail);
+      return;
+    }
+    if (rpcErr) {
+      toast.error(rpcErr.message || "Failed to mark attendance. Refresh and try again.");
       return;
     }
     toast.success("Attendance marked successfully.");
@@ -967,7 +986,7 @@ const Dashboard = () => {
             </Button>
             <div className="hidden md:block w-px h-4 bg-slate-200" />
             <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 gap-2 rounded-xl" onClick={async () => {
-              await supabase.auth.signOut();
+              await portalSignOut(supabase);
               navigate("/login");
             }}>
               <LogOut className="size-4" />
@@ -981,10 +1000,10 @@ const Dashboard = () => {
       <main className="flex-1 py-6 md:py-8">
         <div className="container mx-auto px-4 max-w-7xl">
           {activeView !== "home" &&
-          (localStorage.getItem("impersonate_id") ||
-            (isAdmin && !localStorage.getItem("impersonate_id"))) ? (
+          (readImpersonateStudentId() ||
+            (isAdmin && !readImpersonateStudentId())) ? (
             <div className="mb-6 flex flex-wrap gap-2 student-dash-animate-in">
-              {localStorage.getItem("impersonate_id") ? (
+              {readImpersonateStudentId() ? (
                 <Button
                   variant="outline"
                   className="rounded-lg border-destructive text-destructive hover:bg-destructive/10"
@@ -996,7 +1015,7 @@ const Dashboard = () => {
                   Exit preview
                 </Button>
               ) : null}
-              {isAdmin && !localStorage.getItem("impersonate_id") ? (
+              {isAdmin && !readImpersonateStudentId() ? (
                 <Button
                   variant="outline"
                   className="gap-2 rounded-lg border-slate-300 hover:bg-slate-50"
@@ -1013,7 +1032,7 @@ const Dashboard = () => {
               currentUserId={currentUserId}
               settingsActive={activeView === "settings"}
               onSignOut={async () => {
-                await supabase.auth.signOut();
+                await portalSignOut(supabase);
                 navigate("/login");
               }}
               onPasswordSubmit={async (e) => {
@@ -1050,7 +1069,7 @@ const Dashboard = () => {
           ) : activeView === "courses" ? (
             currentUserId ? (
               <StudentMyCoursesPanel
-                studentId={localStorage.getItem("impersonate_id") || currentUserId}
+                studentId={readImpersonateStudentId() || currentUserId}
               />
             ) : null
           ) : activeView === "profile" ? (
@@ -1146,7 +1165,7 @@ const Dashboard = () => {
                 onViewDocument={documentActions.viewDocument}
                 onDownloadDocument={documentActions.downloadDocument}
                 onUploadDocument={documentActions.uploadDocument}
-                studentId={localStorage.getItem("impersonate_id") || currentUserId}
+                studentId={readImpersonateStudentId() || currentUserId}
                 onOpenMyCourses={() => setActiveView("courses")}
                 internshipUnlocked={internshipUnlocked}
                 onLockedInternshipClick={goUnlockInternship}

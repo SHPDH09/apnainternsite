@@ -1,4 +1,5 @@
 -- Public certificate verification for home /verify page (RDS-adapted).
+-- apna_cert_verify_v38
 -- students.id + metadata are text; certificates.user_id is uuid.
 
 CREATE OR REPLACE FUNCTION public.verify_certificate_public(

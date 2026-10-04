@@ -1,11 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  isCourseCertificateCode,
+  verifyCourseCertificatePublic,
+  type CourseCertificateVerifyResult,
+} from "@/lib/courseCertificate";
 
 export type CertificateVerifyResult = {
   found: boolean;
+  kind?: "internship" | "course";
   cert: Record<string, unknown> | null;
   student: Record<string, unknown> | null;
   attendanceDays: number;
   bestMarksPercent: number | null;
+  courseCertificate?: CourseCertificateVerifyResult | null;
 };
 
 type RpcRow = {
@@ -24,8 +31,38 @@ export async function verifyCertificatePublic(
     rollNumber?: string;
   }
 ): Promise<CertificateVerifyResult> {
+  const q = opts.query?.trim() || "";
+  if (q && isCourseCertificateCode(q)) {
+    const courseResult = await verifyCourseCertificatePublic(client, q);
+    if (!courseResult.found) {
+      return {
+        found: false,
+        kind: "course",
+        cert: null,
+        student: courseResult.student,
+        attendanceDays: 0,
+        bestMarksPercent: null,
+        courseCertificate: courseResult,
+      };
+    }
+    return {
+      found: true,
+      kind: "course",
+      cert: {
+        certificate_id: courseResult.certificateCode,
+        internship_name: courseResult.course?.title,
+        issue_date: courseResult.issuedAt,
+        status: "Verified",
+      },
+      student: courseResult.student,
+      attendanceDays: 0,
+      bestMarksPercent: null,
+      courseCertificate: courseResult,
+    };
+  }
+
   const { data, error } = await client.rpc("verify_certificate_public", {
-    p_query: opts.query?.trim() || null,
+    p_query: q || null,
     p_student_name: opts.studentName?.trim() || null,
     p_roll_number: opts.rollNumber?.trim() || null,
   });
@@ -36,10 +73,12 @@ export async function verifyCertificatePublic(
   if (!row.found) {
     return {
       found: false,
+      kind: "internship",
       cert: null,
       student: null,
       attendanceDays: 0,
       bestMarksPercent: null,
+      courseCertificate: null,
     };
   }
 
@@ -47,6 +86,7 @@ export async function verifyCertificatePublic(
 
   return {
     found: true,
+    kind: "internship",
     cert: row.cert ?? null,
     student,
     attendanceDays: Number(row.attendance_days) || 0,
@@ -54,5 +94,6 @@ export async function verifyCertificatePublic(
       row.best_marks_percent != null && Number.isFinite(Number(row.best_marks_percent))
         ? Number(row.best_marks_percent)
         : null,
+    courseCertificate: null,
   };
 }

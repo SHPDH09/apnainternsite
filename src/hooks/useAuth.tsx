@@ -10,10 +10,26 @@ import {
 } from '@/lib/adminAuthSession';
 import { isStudentPortalSessionActive } from '@/lib/studentAuthSession';
 import { fetchCybercafeExists, fetchRolesForUser } from '@/lib/portalAuth';
+import { isOwnerAdminEmail } from '@/lib/supabaseEnv';
 
 export type UserRole = 'super_admin' | 'admin' | 'staff' | 'student' | 'cybercafe' | 'college_admin' | 'referral_partner';
 
 const ROLES_CACHE_PREFIX = 'ezyintern_cached_roles_';
+const AUTH_STEP_TIMEOUT_MS = 12_000;
+
+async function withAuthStepTimeout<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      fn(),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}_timeout`)), AUTH_STEP_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function readCachedRoles(userId: string): UserRole[] {
   if (typeof window === 'undefined') return [];
@@ -48,10 +64,18 @@ export const useAuth = () => {
     const checkAuth = async () => {
       try {
         if (isAdminPortalSessionActive()) {
-          await ensureAdminAuthSession(supabase);
+          try {
+            await withAuthStepTimeout('ensureAdminAuthSession', () =>
+              ensureAdminAuthSession(supabase)
+            );
+          } catch (err) {
+            console.warn('[useAuth] ensureAdminAuthSession:', err);
+          }
         }
 
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await withAuthStepTimeout('getSession', () =>
+          supabase.auth.getSession()
+        );
         if (cancelled) return;
 
         if (!session) {
@@ -66,24 +90,42 @@ export const useAuth = () => {
 
         let rolesList: UserRole[] = [];
         try {
-          const roles = await fetchRolesForUser(supabase, session.user.id);
+          const roles = await withAuthStepTimeout('fetchRolesForUser', () =>
+            fetchRolesForUser(supabase, session.user.id)
+          );
           rolesList = roles as UserRole[];
         } catch (rolesError) {
           const msg = rolesError instanceof Error ? rolesError.message : String(rolesError);
           console.error('[useAuth] user_roles:', msg);
           const cached = readCachedRoles(session.user.id);
           if (cached.length > 0) {
+            rolesList = cached;
             rolesRef.current = cached;
             setRoles(cached);
           } else if (rolesRef.current.length > 0) {
+            rolesList = rolesRef.current;
             setRoles(rolesRef.current);
+          } else if (isOwnerAdminEmail(session.user.email)) {
+            rolesList = ['super_admin'];
+            rolesRef.current = rolesList;
+            setRoles(rolesList);
+          } else {
+            rolesList = ['student'];
+            rolesRef.current = rolesList;
+            setRoles(rolesList);
           }
-          return;
         }
 
         if (cancelled) return;
 
-        const cybercafe = await fetchCybercafeExists(supabase, session.user.id);
+        let cybercafe = false;
+        try {
+          cybercafe = await withAuthStepTimeout('fetchCybercafeExists', () =>
+            fetchCybercafeExists(supabase, session.user.id)
+          );
+        } catch (err) {
+          console.warn('[useAuth] fetchCybercafeExists:', err);
+        }
 
         if (cancelled) return;
 

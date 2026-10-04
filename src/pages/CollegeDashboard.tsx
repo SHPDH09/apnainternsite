@@ -289,7 +289,8 @@ export default function CollegeDashboard() {
   const pageCount = Math.max(1, Math.ceil(pageTotal / PAGE_SIZE));
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    const { portalSignOut } = await import("@/lib/portalSignOut");
+    await portalSignOut(supabase);
     navigate(COLLEGE_LOGIN_PATH, { replace: true });
   };
 

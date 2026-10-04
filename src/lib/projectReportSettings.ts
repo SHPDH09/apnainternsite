@@ -355,18 +355,33 @@ export async function saveProjectReportDomainTemplate(
   const path = `project-report-templates/${domainKey.replace(/\s+/g, "-")}/${Date.now()}-${safeName}`;
 
   let uploadErr: { message: string } | null = null;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const { error } = await client.storage.from(BUCKET).upload(path, pdfFile, {
-      upsert: true,
-      contentType: "application/pdf",
-    });
-    if (!error) {
-      uploadErr = null;
-      break;
+  let uploaded = false;
+  if (typeof window !== "undefined") {
+    try {
+      const { uploadFileViaPresignedPut } = await import("@/lib/directStorageUpload");
+      await uploadFileViaPresignedPut(client, { bucket: BUCKET, objectKey: path, file: pdfFile });
+      uploaded = true;
+    } catch (presignErr) {
+      uploadErr = {
+        message: presignErr instanceof Error ? presignErr.message : String(presignErr),
+      };
     }
-    uploadErr = error;
-    if (!/503|502|504|timeout|unavailable/i.test(error.message)) break;
-    await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  if (!uploaded) {
+    uploadErr = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const { error } = await client.storage.from(BUCKET).upload(path, pdfFile, {
+        upsert: true,
+        contentType: "application/pdf",
+      });
+      if (!error) {
+        uploadErr = null;
+        break;
+      }
+      uploadErr = error;
+      if (!/503|502|504|timeout|unavailable|FUNCTION_INVOCATION/i.test(error.message)) break;
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
   }
   if (uploadErr) {
     if (/bucket not found/i.test(uploadErr.message)) {

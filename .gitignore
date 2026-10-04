@@ -34,3 +34,7 @@ aws/sam/samconfig.toml
 captures/
 meta-blog.json
 meta-mail.json
+.vercel
+.env*
+api/.bundled/
+supabase/.temp/

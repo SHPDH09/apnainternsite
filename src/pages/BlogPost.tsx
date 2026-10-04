@@ -43,13 +43,17 @@ export default function BlogPost() {
         else {
           setPost(row);
           setViewCount(Number(row.view_count ?? 0));
-          let unlocked = isBlogReaderUnlockedOnDevice();
-          if (!unlocked) {
-            unlocked = await hydrateBlogReaderUnlockFromServer();
-          }
-          setLeadUnlocked(unlocked);
-          setLeadOpen(!unlocked);
+          const localUnlocked = isBlogReaderUnlockedOnDevice();
+          setLeadUnlocked(localUnlocked);
+          setLeadOpen(!localUnlocked);
           document.title = `${row.meta_title || row.title} · Apna Intern`;
+          if (!localUnlocked) {
+            void hydrateBlogReaderUnlockFromServer().then((serverUnlocked) => {
+              if (cancelled || !serverUnlocked) return;
+              setLeadUnlocked(true);
+              setLeadOpen(false);
+            });
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -65,21 +69,17 @@ export default function BlogPost() {
     let cancelled = false;
     void (async () => {
       if (!blogViewRecordedThisSession(post.id)) {
-        const next = await incrementBlogPostView(post.id);
-        if (!cancelled && next > 0) {
-          setViewCount(next);
-          markBlogViewRecorded(post.id);
-        }
+        markBlogViewRecorded(post.id);
+        let next = await incrementBlogPostView(post.id);
+        if (next <= 0) next = await fetchBlogPostViewCount(post.id);
+        if (!cancelled && next > 0) setViewCount(next);
+      } else if (!cancelled) {
+        const current = await fetchBlogPostViewCount(post.id);
+        if (current > 0) setViewCount(current);
       }
     })();
-    const poll = setInterval(() => {
-      void fetchBlogPostViewCount(post.id).then((n) => {
-        if (!cancelled && n >= 0) setViewCount(n);
-      });
-    }, 4000);
     return () => {
       cancelled = true;
-      clearInterval(poll);
     };
   }, [post?.id]);
 
@@ -177,17 +177,18 @@ export default function BlogPost() {
 
         {contentLocked ? (
           <div className="relative">
+            {post.excerpt ? (
+              <p className="pointer-events-none max-h-[min(40vh,20rem)] overflow-hidden text-base leading-relaxed text-slate-700 opacity-90">
+                {post.excerpt}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-500">Unlock to read the full article.</p>
+            )}
             <div
-              className="pointer-events-none max-h-[min(52vh,28rem)] overflow-hidden select-none opacity-90"
-              aria-hidden
-            >
-              <BlogMarkdownContent content={post.content} />
-            </div>
-            <div
-              className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-white/75 to-white"
+              className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-white/80 to-white"
               aria-hidden
             />
-            <div className="relative -mt-24 flex flex-col items-center gap-4 px-4 pb-6 pt-16 text-center sm:-mt-28">
+            <div className="relative -mt-16 flex flex-col items-center gap-4 px-4 pb-6 pt-12 text-center sm:-mt-20">
               <p className="max-w-md text-sm leading-relaxed text-slate-600">
                 Share your name, email, and mobile once to unlock the full article. We use this only to share
                 internship updates — you can skip and come back anytime.

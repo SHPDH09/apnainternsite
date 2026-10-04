@@ -162,7 +162,8 @@ const CyberCafeDashboard = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    const { portalSignOut } = await import("@/lib/portalSignOut");
+    await portalSignOut(supabase);
     navigate(CYBER_CAFE_LOGIN_PATH);
   };
 

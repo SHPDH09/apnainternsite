@@ -42,6 +42,10 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["p_query", "p_student_name", "p_roll_number"],
     auth: "public",
   },
+  verify_course_certificate_public: {
+    args: ["p_code"],
+    auth: "public",
+  },
   verify_id_card_public: {
     args: ["p_card_number"],
     auth: "public",
@@ -121,6 +125,7 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
       "p_college",
       "p_start",
       "p_end",
+      "p_mode",
     ],
     auth: "admin",
   },
@@ -130,6 +135,11 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
   },
   student_unread_notification_count: { args: [], auth: "auth" },
   admin_list_students_light: { args: ["p_limit", "p_offset"], auth: "admin" },
+  admin_count_added_registrations: { args: ["p_search"], auth: "admin" },
+  admin_list_added_registrations: {
+    args: ["p_limit", "p_offset", "p_search"],
+    auth: "admin",
+  },
   admin_mark_student_attendance_day: {
     args: ["p_student_id", "p_marked_at"],
     auth: "admin",
@@ -191,6 +201,10 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["p_search", "p_universities", "p_colleges", "p_domain", "p_mode"],
     auth: "admin",
   },
+  admin_bulk_issue_certificates: { args: ["p_rows"], auth: "auth" },
+  admin_insert_class_link: { args: ["p_row"], auth: "auth" },
+  admin_update_class_link: { args: ["p_id", "p_row"], auth: "auth" },
+  admin_insert_class_link_minimal: { args: ["p_row"], auth: "auth" },
   admin_list_registration_leads: {
     args: ["p_limit", "p_offset", "p_search", "p_university", "p_college"],
     auth: "admin",

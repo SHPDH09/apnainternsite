@@ -497,6 +497,51 @@ export async function fetchStudentsByIdsForCerts(
   return map;
 }
 
+export async function bulkIssueCertificatesViaRpc(
+  client: SupabaseClient,
+  rows: Array<{
+    user_id: string;
+    student_name: string;
+    internship_name: string;
+    duration: string;
+    certificate_id: string;
+    status: string;
+  }>
+): Promise<{ inserted: CertificateRecord[]; issued: number; skipped: number }> {
+  if (rows.length === 0) {
+    return { inserted: [], issued: 0, skipped: 0 };
+  }
+
+  const { data, error } = await client.rpc("admin_bulk_issue_certificates", {
+    p_rows: rows,
+  });
+  if (error) throw error;
+
+  const payload = (data ?? {}) as {
+    ok?: boolean;
+    issued?: number;
+    skipped?: number;
+    rows?: CertificateRecord[] | string;
+  };
+
+  let inserted: CertificateRecord[] = [];
+  if (Array.isArray(payload.rows)) {
+    inserted = payload.rows;
+  } else if (typeof payload.rows === "string") {
+    try {
+      inserted = JSON.parse(payload.rows) as CertificateRecord[];
+    } catch {
+      inserted = [];
+    }
+  }
+
+  return {
+    inserted,
+    issued: Number(payload.issued) || inserted.length,
+    skipped: Number(payload.skipped) || 0,
+  };
+}
+
 export function buildCertificateInsertRows(
   students: CertEligibleStudent[],
   internshipName: string

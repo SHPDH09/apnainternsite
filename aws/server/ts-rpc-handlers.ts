@@ -7,6 +7,7 @@ import { ensureDashboardServiceKeysTable } from "./dashboard-service-keys-bootst
 import { ensurePartnerApplicationsTables } from "./partner-applications-bootstrap.js";
 import { ensureProjectReportSchema } from "./project-report-bootstrap.js";
 import { ensureStudentUniquenessSchema } from "./student-uniqueness-bootstrap.js";
+import { ensureSystemSettingsSchema } from "./system-settings-bootstrap.js";
 
 export async function runTsRpc(name: string): Promise<unknown | null> {
   if (name === "admin_ensure_site_cms_tables") {
@@ -24,6 +25,9 @@ export async function runTsRpc(name: string): Promise<unknown | null> {
   if (name === "student_ensure_uniqueness_schema") {
     return ensureStudentUniquenessSchema();
   }
+  if (name === "admin_ensure_system_settings") {
+    return ensureSystemSettingsSchema();
+  }
   return null;
 }
 
@@ -33,6 +37,7 @@ export function isTsRpc(name: string): boolean {
     name === "admin_ensure_dashboard_service_keys" ||
     name === "admin_ensure_partner_applications" ||
     name === "admin_ensure_project_report_templates" ||
-    name === "student_ensure_uniqueness_schema"
+    name === "student_ensure_uniqueness_schema" ||
+    name === "admin_ensure_system_settings"
   );
 }

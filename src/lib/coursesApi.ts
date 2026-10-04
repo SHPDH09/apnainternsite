@@ -1165,13 +1165,16 @@ export async function issueCourseCertificate(
   issuedBy: string
 ): Promise<{ certificate_code: string }> {
   const code = `CRS-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-  const { error } = await client.from("course_certificates").upsert({
-    enrollment_id: enrollmentId,
-    certificate_code: code,
-    issued_by: issuedBy,
-    issued_at: new Date().toISOString(),
-    template_snapshot: {},
-  });
+  const { error } = await client.from("course_certificates").upsert(
+    {
+      enrollment_id: enrollmentId,
+      certificate_code: code,
+      issued_by: issuedBy,
+      issued_at: new Date().toISOString(),
+      template_snapshot: {},
+    },
+    { onConflict: "enrollment_id" }
+  );
   if (error) throw error;
   await client
     .from("course_enrollments")

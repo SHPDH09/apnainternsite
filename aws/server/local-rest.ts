@@ -14,6 +14,17 @@ import {
   isPartnerApplicationsTable,
 } from "./partner-applications-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
+import { ensureStudentAttendanceMarkRpc } from "./attendance-bootstrap";
+import {
+  ensureCertificateIssueRpc,
+  isPublicCertificateVerifyMissingError,
+  isPublicCertificateVerifyRpc,
+} from "./certificate-bootstrap";
+import {
+  ensureClassLinkRpc,
+  isClassLinkRpc,
+  isClassLinkRpcMissingError,
+} from "./class-link-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import {
   ensureProjectReportSchema,
@@ -36,6 +47,10 @@ import {
   isValidateStudentUniquenessMissingError,
   isValidateStudentUniquenessRpc,
 } from "./student-uniqueness-bootstrap";
+import {
+  ensureSystemSettingsSchema,
+  isSystemSettingsTable,
+} from "./system-settings-bootstrap";
 import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
 
 function jwtFromRequest(req: Request) {
@@ -97,6 +112,10 @@ async function withCmsRetry<T>(table: string, run: () => Promise<T>): Promise<T>
       }
       if (table === "learning_materials") {
         await ensureLearningMaterialsSchema();
+        return await run();
+      }
+      if (isSystemSettingsTable(table)) {
+        await ensureSystemSettingsSchema();
         return await run();
       }
     }
@@ -730,7 +749,9 @@ export async function restRpc(req: Request, res: Response) {
       const shouldBootstrapRegistration =
         isRegistrationRpc &&
         (code === "42883" ||
+          code === "42804" ||
           /btrim\(uuid\)/i.test(msg) ||
+          /column "id" is of type uuid but expression is of type text/i.test(msg) ||
           /could not find the function/i.test(msg) ||
           /function public\.admin_create_minimal_student_registration does not exist/i.test(msg));
       const shouldBootstrapUpload =
@@ -746,13 +767,37 @@ export async function restRpc(req: Request, res: Response) {
         isStaffSalaryRpc(name) && isStaffSalaryRpcMissingError(firstErr);
       const shouldBootstrapUniqueness =
         isValidateStudentUniquenessRpc(name) && isValidateStudentUniquenessMissingError(firstErr);
+      const isStudentMarkAttendance = name === "student_mark_attendance";
+      const shouldBootstrapStudentAttendance =
+        isStudentMarkAttendance &&
+        (code === "42883" ||
+          code === "42804" ||
+          /operator does not exist.*uuid.*text/i.test(msg) ||
+          /column "id" is of type uuid/i.test(msg) ||
+          /function public\.student_mark_attendance does not exist/i.test(msg) ||
+          /could not find the function/i.test(msg));
+      const isCertBulkRpc = name === "admin_bulk_issue_certificates";
+      const shouldBootstrapCertificates =
+        isCertBulkRpc &&
+        (code === "42883" ||
+          /function public\.admin_bulk_issue_certificates does not exist/i.test(msg) ||
+          /could not find the function/i.test(msg) ||
+          /operator does not exist.*uuid.*text/i.test(msg));
+      const shouldBootstrapClassLink =
+        isClassLinkRpc(name) && isClassLinkRpcMissingError(firstErr);
+      const shouldBootstrapCertVerify =
+        isPublicCertificateVerifyRpc(name) && isPublicCertificateVerifyMissingError(firstErr);
 
       if (
         !shouldBootstrapRegistration &&
         !shouldBootstrapUpload &&
         !shouldBootstrapOffices &&
         !shouldBootstrapSalary &&
-        !shouldBootstrapUniqueness
+        !shouldBootstrapUniqueness &&
+        !shouldBootstrapStudentAttendance &&
+        !shouldBootstrapCertificates &&
+        !shouldBootstrapClassLink &&
+        !shouldBootstrapCertVerify
       ) {
         throw firstErr;
       }
@@ -776,6 +821,22 @@ export async function restRpc(req: Request, res: Response) {
       if (shouldBootstrapUniqueness) {
         console.warn("[rest/rpc] validate_student_uniqueness failed, applying bootstrap and retrying:", msg);
         await ensureStudentUniquenessSchema();
+      }
+      if (shouldBootstrapStudentAttendance) {
+        console.warn("[rest/rpc] student_mark_attendance failed, applying bootstrap and retrying:", msg);
+        await ensureStudentAttendanceMarkRpc();
+      }
+      if (shouldBootstrapCertificates) {
+        console.warn("[rest/rpc] admin_bulk_issue_certificates failed, applying bootstrap and retrying:", msg);
+        await ensureCertificateIssueRpc();
+      }
+      if (shouldBootstrapClassLink) {
+        console.warn("[rest/rpc] class link RPC failed, applying bootstrap and retrying:", msg);
+        await ensureClassLinkRpc();
+      }
+      if (shouldBootstrapCertVerify) {
+        console.warn("[rest/rpc] certificate verify RPC failed, applying bootstrap and retrying:", msg);
+        await ensureCertificateIssueRpc();
       }
       const data = await invokeRpc();
       res.json(data);

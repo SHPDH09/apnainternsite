@@ -1035,7 +1035,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { rows } = await blogEngagementQuery<{ view_count: string }>(
             `UPDATE public.site_blog_posts
              SET view_count = view_count + 1
-             WHERE id = $1::uuid AND is_active = true
+             WHERE id = $1::uuid
+               AND is_active = true
+               AND (
+                 status IS NULL
+                 OR btrim(coalesce(status, '')) = ''
+                 OR lower(btrim(status)) IN ('published', 'scheduled')
+               )
              RETURNING view_count`,
             [postId]
           );

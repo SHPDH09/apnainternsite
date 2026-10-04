@@ -178,14 +178,20 @@ export function LeadAssignmentPanel({ client, isActive }: Props) {
           fetchAllSupabaseRows(client, "registration_leads", {
             orderBy: "updated_at",
             ascending: false,
+            pageSize: 250,
+            maxRows: 4_000,
           }),
           fetchAllSupabaseRows(client, "payment_cancelled", {
             orderBy: "created_at",
             ascending: false,
+            pageSize: 250,
+            maxRows: 2_000,
           }),
           fetchAllSupabaseRows(client, "payment_success", {
             orderBy: "created_at",
             ascending: false,
+            pageSize: 250,
+            maxRows: 2_000,
             modify: (q) => q.eq("status", "failed"),
           }),
           // Reuse shared students-light cache instead of a separate full email dump.

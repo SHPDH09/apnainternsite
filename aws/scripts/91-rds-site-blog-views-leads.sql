@@ -50,7 +50,11 @@ BEGIN
       updated_at = updated_at
   WHERE id = p_post_id
     AND is_active = true
-    AND status IN ('published', 'scheduled')
+    AND (
+      status IS NULL
+      OR btrim(coalesce(status, '')) = ''
+      OR lower(btrim(status)) IN ('published', 'scheduled')
+    )
   RETURNING view_count INTO v_count;
   RETURN coalesce(v_count, 0);
 END;

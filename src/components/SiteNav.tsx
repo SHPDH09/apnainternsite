@@ -83,7 +83,8 @@ export const SiteNav = () => {
   }, []);
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    const { portalSignOut } = await import("@/lib/portalSignOut");
+    await portalSignOut(supabase, { adminPortal: isAdmin || isSuperAdmin || isStaff });
     navigate("/");
   };
 

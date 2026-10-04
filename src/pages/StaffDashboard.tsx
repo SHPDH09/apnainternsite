@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ADMIN_LOGIN_PATH, buildStudentCredentialLoginLink } from "@/lib/authRoutes";
 import { persistAdminAuthSession, adminIntentionalSignOut, ensureAdminAuthSession, isAdminPortalSessionActive } from "@/lib/adminAuthSession";
+import { portalSignOut } from "@/lib/portalSignOut";
 import { mergeRegistrationMetadataFromStudentRow } from "@/lib/studentSync";
 import {
   hydrateStudentEditWithEngineeringDetails,
@@ -30,7 +31,9 @@ import {
   type StaffLeadTargets,
 } from "@/lib/leadAssignment";
 import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
-import { fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
+import { fetchRegistrationLeadsPage } from "@/lib/registrationLeadsAdmin";
+import { fetchPaymentDashboardSample } from "@/lib/paymentsAdmin";
+import { fetchAllCollegesCatalog, fetchUniversitiesCatalog } from "@/lib/institutionCatalog";
 import { siteApiUrl, usePollingInsteadOfRealtime } from "@/lib/siteApi";
 import { shouldRunBackgroundPoll } from "@/lib/apiPollingGuard";
 import { 
@@ -283,7 +286,6 @@ const StaffDashboard = () => {
   const [cancelledPayments, setCancelledPayments] = useState<any[]>([]);
   const [registrationDraftLeads, setRegistrationDraftLeads] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [classesList, setClassesList] = useState<any[]>([]);
   const [domains, setDomains] = useState<any[]>([]);
   const [unis, setUnis] = useState<any[]>([]);
   const [colleges, setColleges] = useState<any[]>([]);
@@ -429,7 +431,7 @@ const StaffDashboard = () => {
     
     if (staffRow?.is_blocked) {
       toast.error("Your staff account is blocked. Contact an administrator.");
-      await supabase.auth.signOut();
+      await portalSignOut(supabase, { adminPortal: true });
       navigate(ADMIN_LOGIN_PATH);
       return;
     }
@@ -568,7 +570,7 @@ const StaffDashboard = () => {
       const msg = rolesError instanceof Error ? rolesError.message : String(rolesError);
       console.error("[StaffDashboard] user_roles:", msg);
       toast.error("Could not verify your staff access. Ask an admin to run supabase/hotfix_staff_user_roles_rls.sql.");
-      await supabase.auth.signOut();
+      await portalSignOut(supabase, { adminPortal: true });
       navigate(ADMIN_LOGIN_PATH);
       return;
     }
@@ -577,7 +579,7 @@ const StaffDashboard = () => {
     );
     if (!hasAuthorizedRole) {
       toast.error("You don't have staff access on this account. Sign in at the admin portal with a staff email.");
-      await supabase.auth.signOut();
+      await portalSignOut(supabase, { adminPortal: true });
       navigate(ADMIN_LOGIN_PATH);
       return;
     }
@@ -637,44 +639,35 @@ const StaffDashboard = () => {
   };
 
   const loadData = async () => {
-    // 1. Load payment_success
+    // 1–2. Payments sample (dashboard speed; not full table dump)
     try {
-      const rows = await fetchAllSupabaseRows(supabase, "payment_success", {
-        orderBy: "created_at",
-        ascending: false,
-      });
-      // Include rows with status='success', status=null, or any non-failed status
-      setPayments(rows.filter((p: any) => p.status !== 'failed'));
-      setFailedPayments(rows.filter((p: any) => p.status === 'failed'));
-    } catch (e: any) {
-      const msg = String(e?.message || e || '');
-      console.error("Load payment_success Error:", e);
-      if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('rls') || msg.toLowerCase().includes('row-level') || msg.toLowerCase().includes('policy')) {
-        toast.error('Payments blocked by database policy. Ask an admin to run supabase/hotfix_staff_full_access.sql in the Supabase SQL Editor.');
-      } else {
-        toast.error('Failed to load payments. Check console for details.');
+      const { success, cancelled } = await fetchPaymentDashboardSample(supabase);
+      setPayments(success.filter((p: { status?: string }) => p.status !== "failed"));
+      setFailedPayments(success.filter((p: { status?: string }) => p.status === "failed"));
+      setCancelledPayments(cancelled);
+    } catch (e: unknown) {
+      const msg = String((e as { message?: string })?.message || e || "");
+      console.error("Load payments sample Error:", e);
+      if (
+        msg.toLowerCase().includes("permission") ||
+        msg.toLowerCase().includes("rls") ||
+        msg.toLowerCase().includes("row-level") ||
+        msg.toLowerCase().includes("policy")
+      ) {
+        toast.error(
+          "Payments blocked by database policy. Ask an admin to run supabase/hotfix_staff_full_access.sql in the Supabase SQL Editor."
+        );
       }
     }
 
-    // 2. Load payment_cancelled
+    // 3. Registration drafts — first page (Leads hub loads more on demand)
     try {
-      const rows = await fetchAllSupabaseRows(supabase, "payment_cancelled", {
-        orderBy: "created_at",
-        ascending: false,
-      });
-      setCancelledPayments(rows);
-    } catch (e: any) {
-      console.error("Load payment_cancelled Error:", e);
-    }
-
-    // 3. Load registration_leads
-    try {
-      const rows = await fetchAllSupabaseRows(supabase, "registration_leads", {
-        orderBy: "updated_at",
-        ascending: false,
+      const { rows } = await fetchRegistrationLeadsPage(supabase, {
+        page: 0,
+        pageSize: 100,
       });
       setRegistrationDraftLeads(rows);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Load registration_leads Error:", e);
     }
 
@@ -714,17 +707,15 @@ const StaffDashboard = () => {
 
     // 4. Load meta (domains, classes, notifications, unis, colleges) independently
     try {
-      const [dom, cl, nt, uniRes, collegesRows] = await Promise.all([
+      const [dom, nt, uniRows, collegesRows] = await Promise.all([
         supabase.from("internship_domains").select("*"),
-        supabase.from("classes").select("*").order("scheduled_at", { ascending: false }),
         supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(100),
-        supabase.from("universities").select("*").order("name"),
-        fetchAllCollegesCatalog(supabase),
+        fetchUniversitiesCatalog(supabase, { onFirstPage: (first) => setUnis(first) }),
+        fetchAllCollegesCatalog(supabase, { onFirstPage: (first) => setColleges(first) }),
       ]);
-      setUnis(uniRes.data || []);
+      setUnis(uniRows);
       setColleges(collegesRows);
       setDomains(dom.data || []);
-      setClassesList(cl.data || []);
       setNotifications(nt.data || []);
     } catch (e) { console.error("Load meta Error:", e); }
 

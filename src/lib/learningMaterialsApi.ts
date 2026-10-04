@@ -11,6 +11,7 @@ import {
   studentMatchesClassTargets,
 } from "@/lib/classLinkTargeting";
 import { ensureAdminAuthSession } from "@/lib/adminAuthSession";
+import { uploadFileViaPresignedPut } from "@/lib/directStorageUpload";
 
 export type LearningMaterialType = "learning_material" | "project_report";
 
@@ -160,6 +161,18 @@ async function uploadWithRetry(
   file: File,
   contentType?: string
 ): Promise<{ error: { message: string } | null }> {
+  if (typeof window !== "undefined") {
+    try {
+      await uploadFileViaPresignedPut(client, { bucket: BUCKET, objectKey: path, file });
+      return { error: null };
+    } catch (presignErr) {
+      const presignMsg = presignErr instanceof Error ? presignErr.message : String(presignErr);
+      if (!/503|not configured|prepare upload/i.test(presignMsg)) {
+        return { error: { message: presignMsg } };
+      }
+    }
+  }
+
   let lastErr: { message: string } | null = null;
   for (let attempt = 0; attempt < 4; attempt++) {
     const { error } = await client.storage.from(BUCKET).upload(path, file, {
@@ -168,7 +181,7 @@ async function uploadWithRetry(
     });
     if (!error) return { error: null };
     lastErr = error;
-    if (!/503|502|504|timeout|unavailable/i.test(error.message)) break;
+    if (!/503|502|504|timeout|unavailable|FUNCTION_INVOCATION/i.test(error.message)) break;
     await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
   }
   return { error: lastErr };

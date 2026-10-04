@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Download, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -16,22 +16,14 @@ import {
 } from "@/components/ui/table";
 import { adminCardClass } from "@/components/admin/ui/adminStyles";
 import { AdminListPagination } from "@/components/admin/ui/AdminListPagination";
-import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
+import {
+  fetchAdminBlogLeadsPage,
+  fetchAllAdminBlogLeads,
+  type AdminBlogLeadRow,
+} from "@/lib/blogLeadsAdmin";
 import { formatBlogDate } from "@/lib/siteBlogApi";
 
 const BLOG_LEADS_PAGE_SIZE = 20;
-
-export type SiteBlogLead = {
-  id: string;
-  post_id?: string | null;
-  post_slug?: string | null;
-  post_title?: string | null;
-  full_name: string;
-  email: string;
-  phone: string;
-  college_name?: string | null;
-  created_at?: string | null;
-};
 
 type Props = {
   client: SupabaseClient;
@@ -43,7 +35,8 @@ function csvEscape(value: string): string {
 }
 
 export function BlogLeadsPanel({ client }: Props) {
-  const [rows, setRows] = useState<SiteBlogLead[]>([]);
+  const [rows, setRows] = useState<AdminBlogLeadRow[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [phoneSearch, setPhoneSearch] = useState("");
   const [textSearch, setTextSearch] = useState("");
@@ -54,85 +47,74 @@ export function BlogLeadsPanel({ client }: Props) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchAllSupabaseRows(client, "site_blog_leads", {
-        order: { column: "created_at", ascending: false },
+      const { rows: pageRows, total } = await fetchAdminBlogLeadsPage(client, {
+        page: leadsPage,
+        pageSize: BLOG_LEADS_PAGE_SIZE,
+        phoneSearch,
+        textSearch,
+        dateFrom,
+        dateTo,
       });
-      setRows((data || []) as SiteBlogLead[]);
+      setRows(pageRows);
+      setTotalCount(total);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not load blog leads.");
       setRows([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
-  }, [client]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  const filtered = useMemo(() => {
-    const phoneQ = phoneSearch.replace(/\D/g, "");
-    const textQ = textSearch.trim().toLowerCase();
-    const fromTs = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
-    const toTs = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
-
-    return rows.filter((r) => {
-      if (phoneQ) {
-        const p = String(r.phone || "").replace(/\D/g, "");
-        if (!p.includes(phoneQ)) return false;
-      }
-      if (textQ) {
-        const blob = [r.full_name, r.email, r.college_name, r.post_title, r.post_slug]
-          .map((x) => String(x || "").toLowerCase())
-          .join(" ");
-        if (!blob.includes(textQ)) return false;
-      }
-      if (fromTs || toTs) {
-        const ts = r.created_at ? new Date(r.created_at).getTime() : NaN;
-        if (Number.isNaN(ts)) return false;
-        if (fromTs != null && ts < fromTs) return false;
-        if (toTs != null && ts > toTs) return false;
-      }
-      return true;
-    });
-  }, [rows, phoneSearch, textSearch, dateFrom, dateTo]);
+  }, [client, leadsPage, phoneSearch, textSearch, dateFrom, dateTo]);
 
   useEffect(() => {
     setLeadsPage(0);
   }, [phoneSearch, textSearch, dateFrom, dateTo]);
 
-  const leadsPageCount = Math.max(1, Math.ceil(filtered.length / BLOG_LEADS_PAGE_SIZE));
-  const safeLeadsPage = Math.min(leadsPage, leadsPageCount - 1);
-  const pagedLeads = filtered.slice(
-    safeLeadsPage * BLOG_LEADS_PAGE_SIZE,
-    (safeLeadsPage + 1) * BLOG_LEADS_PAGE_SIZE
-  );
+  useEffect(() => {
+    const delay = textSearch.trim() || phoneSearch.trim() ? 300 : 0;
+    const timer = setTimeout(() => {
+      void reload();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [reload, leadsPage, phoneSearch, textSearch, dateFrom, dateTo]);
 
-  const downloadCsv = () => {
-    const header = ["Date", "Name", "Email", "Phone", "College", "Post title", "Post slug"];
-    const lines = [
-      header.join(","),
-      ...filtered.map((r) =>
-        [
-          r.created_at ? new Date(r.created_at).toISOString() : "",
-          r.full_name,
-          r.email,
-          r.phone,
-          r.college_name || "",
-          r.post_title || "",
-          r.post_slug || "",
-        ]
-          .map((c) => csvEscape(String(c)))
-          .join(",")
-      ),
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `blog-leads-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const downloadCsv = async () => {
+    const toastId = toast.loading("Preparing CSV…");
+    try {
+      const all = await fetchAllAdminBlogLeads(client, {
+        phoneSearch,
+        textSearch,
+        dateFrom,
+        dateTo,
+      });
+      const header = ["Date", "Name", "Email", "Phone", "College", "Post title", "Post slug"];
+      const lines = [
+        header.join(","),
+        ...all.map((r) =>
+          [
+            r.created_at ? new Date(r.created_at).toISOString() : "",
+            r.full_name,
+            r.email,
+            r.phone,
+            r.college_name || "",
+            r.post_title || "",
+            r.post_slug || "",
+          ]
+            .map((c) => csvEscape(String(c)))
+            .join(",")
+        ),
+      ];
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `blog-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${all.length} leads`, { id: toastId });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed", { id: toastId });
+    }
   };
 
   return (
@@ -170,12 +152,18 @@ export function BlogLeadsPanel({ client }: Props) {
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
           </div>
-          <Button type="button" variant="outline" className="shrink-0" onClick={downloadCsv} disabled={!filtered.length}>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => void downloadCsv()}
+            disabled={!totalCount}
+          >
             <Download className="mr-2 size-4" /> Download CSV
           </Button>
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          {filtered.length} of {rows.length} leads match filters (paginated below).
+          {totalCount} blog reader leads (server-paginated).
         </p>
       </div>
 
@@ -183,8 +171,8 @@ export function BlogLeadsPanel({ client }: Props) {
         <div className="flex justify-center py-16">
           <Loader2 className="size-8 animate-spin text-[#5AA3E6]" />
         </div>
-      ) : filtered.length === 0 ? (
-        <p className="py-12 text-center text-sm text-slate-500">No blog leads match your filters.</p>
+      ) : totalCount === 0 ? (
+        <p className="py-12 text-center text-sm text-slate-500">No blog leads yet.</p>
       ) : (
         <ScrollArea className={adminCardClass + " max-h-[560px]"}>
           <Table>
@@ -198,7 +186,7 @@ export function BlogLeadsPanel({ client }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pagedLeads.map((r) => (
+              {rows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="whitespace-nowrap text-xs text-slate-600">
                     {formatBlogDate(r.created_at) || "—"}
@@ -222,11 +210,11 @@ export function BlogLeadsPanel({ client }: Props) {
           </Table>
         </ScrollArea>
       )}
-      {!loading && filtered.length > 0 ? (
+      {!loading && totalCount > 0 ? (
         <AdminListPagination
-          page={safeLeadsPage}
+          page={leadsPage}
           pageSize={BLOG_LEADS_PAGE_SIZE}
-          total={filtered.length}
+          total={totalCount}
           onPageChange={setLeadsPage}
           label="Leads"
         />
