@@ -738,7 +738,9 @@ export async function restRpc(req: Request, res: Response) {
       const shouldBootstrapRegistration =
         isRegistrationRpc &&
         (code === "42883" ||
+          code === "42804" ||
           /btrim\(uuid\)/i.test(msg) ||
+          /column "id" is of type uuid but expression is of type text/i.test(msg) ||
           /could not find the function/i.test(msg) ||
           /function public\.admin_create_minimal_student_registration does not exist/i.test(msg));
       const shouldBootstrapUpload =

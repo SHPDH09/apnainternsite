@@ -11,12 +11,13 @@ const PREREQ_SQL = [
   "aws/scripts/19-rds-fix-password-text-id.sql",
 ] as const;
 
-const MAIN_SQL = "aws/scripts/20-rds-fix-admin-create-registration-text-meta.sql";
+const SQL_TEXT_ID = "aws/scripts/20-rds-fix-admin-create-registration-text-meta.sql";
+const SQL_UUID_ID = "aws/scripts/21-rds-admin-create-registration-uuid-id.sql";
 
 /** Marker in the RDS-safe admin registration function (text student id). */
-const RDS_FIX_MARKER = "WHERE s.id = v_uid::text";
-
-let bootstrapped = false;
+const TEXT_ID_MARKER = "WHERE s.id = v_uid::text";
+/** Marker in uuid-id admin registration function (script 21). */
+const UUID_ID_MARKER = "apna_admin_reg_uuid_v21";
 
 function resolveSqlPath(rel: string): string {
   const bundled = path.join(moduleDir, "sql", path.basename(rel));
@@ -39,7 +40,22 @@ async function runSqlFile(rel: string): Promise<void> {
   }
 }
 
+async function studentsIdColumnType(): Promise<string> {
+  const { rows } = await query<{ data_type: string }>(
+    `SELECT data_type
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'students'
+       AND column_name = 'id'
+     LIMIT 1`
+  );
+  return String(rows[0]?.data_type || "uuid").toLowerCase();
+}
+
 async function registrationRpcNeedsFix(): Promise<boolean> {
+  const idType = await studentsIdColumnType();
+  const wantsUuid = idType === "uuid";
+
   const { rows } = await query<{ args: string; def: string }>(
     `SELECT
        pg_get_function_identity_arguments(p.oid) AS args,
@@ -54,20 +70,27 @@ async function registrationRpcNeedsFix(): Promise<boolean> {
   const row = rows[0];
   if (!row) return true;
   if (!String(row.args || "").includes("p_registration_source")) return true;
-  if (!String(row.def || "").includes(RDS_FIX_MARKER)) return true;
-  return false;
+
+  const def = String(row.def || "");
+  const hasTextBody = def.includes(TEXT_ID_MARKER) || def.includes("v_uid::text, v_email, v_name");
+  const hasUuidBody = def.includes(UUID_ID_MARKER);
+
+  if (wantsUuid) {
+    return !hasUuidBody || hasTextBody;
+  }
+  return !hasTextBody;
+}
+
+async function pickMainSqlFile(): Promise<string> {
+  const idType = await studentsIdColumnType();
+  return idType === "uuid" ? SQL_UUID_ID : SQL_TEXT_ID;
 }
 
 /**
- * Ensure admin_create_minimal_student_registration exists with RDS text-id/metadata fixes.
+ * Ensure admin_create_minimal_student_registration matches students.id column type.
  * Safe to call on every Lambda cold start (no-op when already applied).
  */
 export async function ensureAdminRegistrationRpc(): Promise<{ ok: true; applied: boolean }> {
-  if (bootstrapped) {
-    return { ok: true, applied: false };
-  }
-  bootstrapped = true;
-
   const needsFix = await registrationRpcNeedsFix();
   if (!needsFix) {
     return { ok: true, applied: false };
@@ -84,7 +107,10 @@ export async function ensureAdminRegistrationRpc(): Promise<{ ok: true; applied:
     }
   }
 
-  await runSqlFile(MAIN_SQL);
-  console.log("[registration-bootstrap] admin_create_minimal_student_registration ready");
+  const mainSql = await pickMainSqlFile();
+  await runSqlFile(mainSql);
+  console.log(
+    `[registration-bootstrap] admin_create_minimal_student_registration ready (${path.basename(mainSql)})`
+  );
   return { ok: true, applied: true };
 }
