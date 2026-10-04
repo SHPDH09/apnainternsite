@@ -6,7 +6,7 @@ import {
   resolveStorageUrl,
   rewriteBlogMarkdownImageUrls,
 } from "@/lib/storageUrl";
-import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
+import { withSupabaseRetry } from "@/lib/supabaseQueryResilience";
 import {
   createFallbackBlogPost,
   deleteFallbackBlogPost,
@@ -635,18 +635,106 @@ async function locateBlogPost(
 }
 
 const BLOG_SELECT_ADMIN_LIST = BLOG_SELECT_LIST_PUBLIC;
+const ADMIN_BLOG_FETCH_TIMEOUT_MS = 12_000;
 
-async function fetchRdsAdminBlogPosts(client: SupabaseClient): Promise<SiteBlogPost[]> {
-  const rows = await withBlogStorageRetry(client, () =>
-    fetchAllSupabaseRows<SiteBlogPost>(client, "site_blog_posts", {
-      select: BLOG_SELECT_ADMIN_LIST,
-      orderBy: "updated_at",
-      ascending: false,
-      pageSize: 80,
-      maxRows: 800,
-    })
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** One fast RDS round-trip via Vercel (avoids REST + S3 fan-out that caused 504s). */
+async function fetchAdminBlogPostsViaApi(accessToken: string): Promise<SiteBlogPost[]> {
+  if (typeof window === "undefined") return [];
+  const origin = window.location.origin.replace(/\/$/, "");
+  const res = await fetchWithTimeout(
+    `${origin}/api/admin-blog-posts?limit=250`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+    ADMIN_BLOG_FETCH_TIMEOUT_MS
   );
-  return rows.map(mapCoverUrl);
+  if (!res.ok) return [];
+  const json = (await res.json().catch(() => null)) as {
+    ok?: boolean;
+    data?: SiteBlogPost[];
+  } | null;
+  if (!json?.ok || !Array.isArray(json.data)) return [];
+  return json.data.map(mapCoverUrl);
+}
+
+async function fetchAdminBlogPostsViaDirectRest(accessToken: string): Promise<SiteBlogPost[]> {
+  if (typeof window === "undefined") return [];
+  const base = resolveSupabaseUrl().replace(/\/$/, "");
+  if (!base) return [];
+
+  const key = resolveSupabaseAnonKey();
+  const selects = [
+    BLOG_SELECT_LIST_MINIMAL,
+    BLOG_SELECT_ADMIN_LIST.replace(", view_count", ""),
+    BLOG_SELECT_ADMIN_LIST,
+  ];
+
+  for (const select of selects) {
+    const params = new URLSearchParams({
+      select,
+      order: "updated_at.desc",
+      limit: "250",
+    });
+    try {
+      const res = await fetchWithTimeout(
+        `${base}/rest/v1/site_blog_posts?${params.toString()}`,
+        {
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+        ADMIN_BLOG_FETCH_TIMEOUT_MS
+      );
+      if (!res.ok) continue;
+      const data = (await res.json()) as SiteBlogPost[] | { message?: string };
+      if (!Array.isArray(data) || !data.length) continue;
+      return data.map(mapCoverUrl);
+    } catch {
+      /* try next select */
+    }
+  }
+  return [];
+}
+
+async function queryAdminBlogPostsSinglePage(client: SupabaseClient): Promise<SiteBlogPost[]> {
+  const selects = [
+    BLOG_SELECT_LIST_MINIMAL,
+    BLOG_SELECT_ADMIN_LIST.replace(", view_count", ""),
+    BLOG_SELECT_ADMIN_LIST,
+  ];
+  for (const select of selects) {
+    const { data, error } = await withSupabaseRetry(
+      "admin blog list",
+      () =>
+        client
+          .from("site_blog_posts")
+          .select(select)
+          .order("updated_at", { ascending: false, nullsFirst: false })
+          .limit(250),
+      { attempts: 2 }
+    );
+    if (error) {
+      if (isSiteBlogTableMissing(error)) throw error;
+      continue;
+    }
+    if (data?.length) {
+      setSiteBlogTableAvailableKnown(true);
+      return (data as SiteBlogPost[]).map(mapCoverUrl);
+    }
+  }
+  return [];
 }
 
 /** Full post (including body) for admin editor — list fetch omits content for speed. */
@@ -654,6 +742,25 @@ export async function fetchAdminBlogPostById(
   client: SupabaseClient,
   id: string
 ): Promise<SiteBlogPost | null> {
+  const { data: sessionData } = await client.auth.getSession();
+  const token = sessionData.session?.access_token?.trim();
+  if (token && typeof window !== "undefined") {
+    try {
+      const origin = window.location.origin.replace(/\/$/, "");
+      const res = await fetchWithTimeout(
+        `${origin}/api/admin-blog-posts?id=${encodeURIComponent(id)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+        ADMIN_BLOG_FETCH_TIMEOUT_MS
+      );
+      if (res.ok) {
+        const json = (await res.json()) as { ok?: boolean; data?: SiteBlogPost | null };
+        if (json?.ok && json.data) return mapPublicBlogPost(json.data);
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
   const where = await locateBlogPost(client, id);
   if (where === "fallback") {
     const row = await findFallbackBlogPostById(client, id);
@@ -687,35 +794,41 @@ function mergeBlogPostsById(...groups: SiteBlogPost[][]): SiteBlogPost[] {
 }
 
 export async function fetchAdminBlogPosts(client: SupabaseClient): Promise<SiteBlogPost[]> {
-  resetSiteBlogStorageCache();
-  const fallbackRows = sortBlogPosts((await fetchFallbackAdminBlogPosts(client)).map(mapCoverUrl));
+  const { data: sessionData } = await client.auth.getSession();
+  const token = sessionData.session?.access_token?.trim();
 
-  let tableOk = false;
-  try {
-    tableOk = await siteBlogTableAvailable(client);
-  } catch {
-    tableOk = false;
-  }
-
-  if (!tableOk) {
-    try {
-      await ensureSiteBlogStorage(client);
-    } catch {
-      return fallbackRows;
+  if (token) {
+    const viaApi = await fetchAdminBlogPostsViaApi(token).catch(() => [] as SiteBlogPost[]);
+    if (viaApi.length) {
+      setSiteBlogTableAvailableKnown(true);
+      return sortBlogPosts(viaApi);
     }
-    if (!(await siteBlogTableAvailable(client))) return fallbackRows;
+    const viaRest = await fetchAdminBlogPostsViaDirectRest(token).catch(() => [] as SiteBlogPost[]);
+    if (viaRest.length) {
+      setSiteBlogTableAvailableKnown(true);
+      return sortBlogPosts(viaRest);
+    }
   }
 
   try {
-    const rdsRows = await fetchRdsAdminBlogPosts(client);
-    return mergeBlogPostsById(fallbackRows, rdsRows);
+    const rdsRows = await queryAdminBlogPostsSinglePage(client);
+    if (rdsRows.length) {
+      return sortBlogPosts(rdsRows);
+    }
   } catch (err) {
-    if (isSiteBlogTableMissing(err)) {
-      resetSiteBlogStorageCache();
-      return fallbackRows;
+    if (!isSiteBlogTableMissing(err)) {
+      console.warn("[fetchAdminBlogPosts] RDS list failed:", err);
     }
-    throw err;
   }
+
+  try {
+    const fallbackRows = sortBlogPosts((await fetchFallbackAdminBlogPosts(client)).map(mapCoverUrl));
+    if (fallbackRows.length) return fallbackRows;
+  } catch {
+    /* ignore slow/unavailable S3 JSON */
+  }
+
+  return [];
 }
 
 function resolvePublishFields(input: SiteBlogPostInput): {

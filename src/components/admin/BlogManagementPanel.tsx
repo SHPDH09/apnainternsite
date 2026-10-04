@@ -32,6 +32,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -47,7 +48,6 @@ import {
   blogStatusLabel,
   createBlogPost,
   deleteBlogPost,
-  ensureSiteBlogStorage,
   estimateReadMinutes,
   fetchAdminBlogPosts,
   fetchAdminBlogPostById,
@@ -189,16 +189,6 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
   useEffect(() => {
     void reload();
   }, [reload]);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        await ensureSiteBlogStorage(client);
-      } catch (err) {
-        console.warn("[BlogManagementPanel] blog storage ensure:", err);
-      }
-    })();
-  }, [client]);
 
   const stats = useMemo(() => {
     const published = rows.filter((r) => r.status === "published").length;
@@ -554,6 +544,9 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
         <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editor.id ? "Edit post" : "New blog / vlog post"}</DialogTitle>
+            <DialogDescription className="sr-only">
+              Create or edit blog and vlog content, cover image, and publish settings.
+            </DialogDescription>
           </DialogHeader>
 
           <Tabs value={editorTab} onValueChange={(v) => setEditorTab(v as typeof editorTab)}>
