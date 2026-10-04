@@ -38,3 +38,6 @@ meta-mail.json
 .env*
 api/.bundled/
 supabase/.temp/
+
+# Generated at vercel-build for Vercel rds-portal RDS bootstrap (source: aws/scripts/*.sql)
+aws/server/sql/
