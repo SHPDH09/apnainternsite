@@ -13,6 +13,8 @@ api/**
 !api/auth/forgot-password.ts
 !api/rds-portal.ts
 !api/auth-portal.ts
+!api/admin-blog-posts.ts
+!api/admin-blog-leads.ts
 !api/db-ping.ts
 !api/.bundled/**
 # Do not whitelist api/lib/** — each api/*.ts becomes a serverless function (Hobby max 12).
