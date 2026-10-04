@@ -16,6 +16,11 @@ import {
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentAttendanceMarkRpc } from "./attendance-bootstrap";
 import { ensureCertificateIssueRpc } from "./certificate-bootstrap";
+import {
+  ensureClassLinkRpc,
+  isClassLinkRpc,
+  isClassLinkRpcMissingError,
+} from "./class-link-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import {
   ensureProjectReportSchema,
@@ -774,6 +779,8 @@ export async function restRpc(req: Request, res: Response) {
           /function public\.admin_bulk_issue_certificates does not exist/i.test(msg) ||
           /could not find the function/i.test(msg) ||
           /operator does not exist.*uuid.*text/i.test(msg));
+      const shouldBootstrapClassLink =
+        isClassLinkRpc(name) && isClassLinkRpcMissingError(firstErr);
 
       if (
         !shouldBootstrapRegistration &&
@@ -782,7 +789,8 @@ export async function restRpc(req: Request, res: Response) {
         !shouldBootstrapSalary &&
         !shouldBootstrapUniqueness &&
         !shouldBootstrapStudentAttendance &&
-        !shouldBootstrapCertificates
+        !shouldBootstrapCertificates &&
+        !shouldBootstrapClassLink
       ) {
         throw firstErr;
       }
@@ -814,6 +822,10 @@ export async function restRpc(req: Request, res: Response) {
       if (shouldBootstrapCertificates) {
         console.warn("[rest/rpc] admin_bulk_issue_certificates failed, applying bootstrap and retrying:", msg);
         await ensureCertificateIssueRpc();
+      }
+      if (shouldBootstrapClassLink) {
+        console.warn("[rest/rpc] class link RPC failed, applying bootstrap and retrying:", msg);
+        await ensureClassLinkRpc();
       }
       const data = await invokeRpc();
       res.json(data);

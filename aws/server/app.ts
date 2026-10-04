@@ -41,6 +41,7 @@ import { ensureAllCmsTables } from "./cms-bootstrap";
 import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
 import { ensureStudentAttendanceMarkRpc } from "./attendance-bootstrap";
 import { ensureCertificateIssueRpc } from "./certificate-bootstrap";
+import { ensureClassLinkRpc } from "./class-link-bootstrap";
 import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import { ensureProjectReportSchema } from "./project-report-bootstrap";
 import { ensureStaffAttendanceOfficesSchema } from "./staff-attendance-offices-bootstrap";
@@ -196,6 +197,14 @@ async function buildApp(): Promise<Express> {
       }
     } catch (err) {
       console.warn("[certificate-bootstrap] startup ensure failed:", err);
+    }
+    try {
+      const classLink = await ensureClassLinkRpc();
+      if (classLink.applied) {
+        console.log("[class-link-bootstrap] applied live class admin RPCs");
+      }
+    } catch (err) {
+      console.warn("[class-link-bootstrap] startup ensure failed:", err);
     }
     try {
       const upload = await ensureStudentDataUploadSchema();

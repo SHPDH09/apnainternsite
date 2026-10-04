@@ -198,6 +198,9 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     auth: "admin",
   },
   admin_bulk_issue_certificates: { args: ["p_rows"], auth: "auth" },
+  admin_insert_class_link: { args: ["p_row"], auth: "auth" },
+  admin_update_class_link: { args: ["p_id", "p_row"], auth: "auth" },
+  admin_insert_class_link_minimal: { args: ["p_row"], auth: "auth" },
   admin_list_registration_leads: {
     args: ["p_limit", "p_offset", "p_search", "p_university", "p_college"],
     auth: "admin",

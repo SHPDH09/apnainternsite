@@ -9,6 +9,11 @@ import {
   isMissingSystemSettingsError,
 } from "../aws/server/system-settings-bootstrap.js";
 import {
+  ensureClassLinkRpc,
+  isClassLinkRpc,
+  isClassLinkRpcMissingError,
+} from "../aws/server/class-link-bootstrap.js";
+import {
   buildWhere,
   parseOrder,
   parseSelect,
@@ -318,6 +323,21 @@ async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: str
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (isClassLinkRpc(name) && isClassLinkRpcMissingError(err)) {
+      try {
+        await ensureClassLinkRpc();
+        const data = await callRpcLite(name, def.args, rpcBody(req), jwtClaims);
+        res.status(200).json(data);
+        return true;
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        res.status(400).json({
+          message: retryMsg,
+          code: (retryErr as { code?: string }).code,
+        });
+        return true;
+      }
+    }
     if (/does not exist/i.test(msg)) {
       return false;
     }
