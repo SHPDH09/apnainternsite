@@ -3667,7 +3667,7 @@ Apna Intern Team`;
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="hero" className="bg-green-100 text-green-700 hover:bg-green-200 border-none px-4 py-1.5 font-bold">
-                        Count: {filteredPayments.length}
+                        Count: {paymentsTotalCount}
                       </Badge>
                     </div>
                   </div>

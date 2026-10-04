@@ -52,29 +52,80 @@ export function paymentDashboardSinceIso(): string {
 }
 
 /** Slim rows for dashboard charts (bounded lookback, not full table scan). */
+function normalizeAmountPaise(row: Record<string, unknown>): Record<string, unknown> {
+  const raw = row.amount_paise ?? row.amount ?? 0;
+  return { ...row, amount_paise: Number(raw) || 0 };
+}
+
 export async function fetchPaymentDashboardSample(
   client: SupabaseClient
 ): Promise<{ success: Record<string, unknown>[]; cancelled: Record<string, unknown>[] }> {
   const since = paymentDashboardSinceIso();
-  const [success, cancelled] = await Promise.all([
-    fetchAllSupabaseRows(client, "payment_success", {
+  let success: Record<string, unknown>[] = [];
+  let cancelled: Record<string, unknown>[] = [];
+
+  try {
+    success = await fetchAllSupabaseRows(client, "payment_success", {
       select: "created_at,amount_paise,status",
       orderBy: "created_at",
       ascending: false,
       pageSize: 250,
       maxRows: 8_000,
       modify: (q) => q.gte("created_at", since),
-    }),
-    fetchAllSupabaseRows(client, "payment_cancelled", {
-      select: "created_at,amount_paise",
+    });
+  } catch (err) {
+    console.warn("[paymentsAdmin] payment_success dashboard sample:", err);
+    try {
+      success = await fetchAllSupabaseRows(client, "payment_success", {
+        select: "created_at,amount,status",
+        orderBy: "created_at",
+        ascending: false,
+        pageSize: 250,
+        maxRows: 8_000,
+        modify: (q) => q.gte("created_at", since),
+      });
+    } catch {
+      success = [];
+    }
+  }
+
+  try {
+    cancelled = await fetchCancelledDashboardSample(client, since);
+  } catch (err) {
+    console.warn("[paymentsAdmin] payment_cancelled dashboard sample:", err);
+    cancelled = [];
+  }
+
+  return {
+    success: success.map(normalizeAmountPaise),
+    cancelled: cancelled.map(normalizeAmountPaise),
+  };
+}
+
+/** RDS `payment_cancelled` uses `amount` (BIGINT), not `amount_paise`. */
+async function fetchCancelledDashboardSample(
+  client: SupabaseClient,
+  since: string
+): Promise<Record<string, unknown>[]> {
+  try {
+    return await fetchAllSupabaseRows(client, "payment_cancelled", {
+      select: "created_at,amount",
       orderBy: "created_at",
       ascending: false,
       pageSize: 250,
       maxRows: 4_000,
       modify: (q) => q.gte("created_at", since),
-    }),
-  ]);
-  return { success, cancelled };
+    });
+  } catch {
+    return fetchAllSupabaseRows(client, "payment_cancelled", {
+      select: "created_at",
+      orderBy: "created_at",
+      ascending: false,
+      pageSize: 250,
+      maxRows: 4_000,
+      modify: (q) => q.gte("created_at", since),
+    });
+  }
 }
 
 export async function fetchPaymentSuccessPage(
