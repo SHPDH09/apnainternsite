@@ -16,25 +16,11 @@ import {
 } from "@/components/ui/table";
 import { adminCardClass } from "@/components/admin/ui/adminStyles";
 import { AdminListPagination } from "@/components/admin/ui/AdminListPagination";
-import {
-  fetchAllSupabaseRows,
-  fetchSupabaseTablePage,
-} from "@/lib/fetchAllSupabaseRows";
+import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
+import { fetchAdminBlogLeadsPage, type AdminBlogLeadRow } from "@/lib/blogLeadsAdmin";
 import { formatBlogDate } from "@/lib/siteBlogApi";
 
 const BLOG_LEADS_PAGE_SIZE = 20;
-
-export type SiteBlogLead = {
-  id: string;
-  post_id?: string | null;
-  post_slug?: string | null;
-  post_title?: string | null;
-  full_name: string;
-  email: string;
-  phone: string;
-  college_name?: string | null;
-  created_at?: string | null;
-};
 
 type Props = {
   client: SupabaseClient;
@@ -46,7 +32,7 @@ function csvEscape(value: string): string {
 }
 
 export function BlogLeadsPanel({ client }: Props) {
-  const [rows, setRows] = useState<SiteBlogLead[]>([]);
+  const [rows, setRows] = useState<AdminBlogLeadRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [phoneSearch, setPhoneSearch] = useState("");
@@ -55,39 +41,17 @@ export function BlogLeadsPanel({ client }: Props) {
   const [dateTo, setDateTo] = useState("");
   const [leadsPage, setLeadsPage] = useState(0);
 
-  const applyLeadFilters = useCallback(
-    (q: { gte: (c: string, v: string) => typeof q; lte: (c: string, v: string) => typeof q; ilike: (c: string, v: string) => typeof q; or: (f: string) => typeof q }) => {
-      let query = q;
-      const phoneQ = phoneSearch.replace(/\D/g, "");
-      const textQ = textSearch.trim();
-      if (dateFrom) query = query.gte("created_at", `${dateFrom}T00:00:00`);
-      if (dateTo) query = query.lte("created_at", `${dateTo}T23:59:59.999`);
-      if (phoneQ) query = query.ilike("phone", `%${phoneQ}%`);
-      if (textQ) {
-        const s = textQ.replace(/"/g, '\\"');
-        query = query.or(
-          `full_name.ilike.%${s}%,email.ilike.%${s}%,college_name.ilike.%${s}%,post_title.ilike.%${s}%,post_slug.ilike.%${s}%`
-        );
-      }
-      return query;
-    },
-    [phoneSearch, textSearch, dateFrom, dateTo]
-  );
-
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const { rows: pageRows, total } = await fetchSupabaseTablePage<SiteBlogLead>(
-        client,
-        "site_blog_leads",
-        {
-          page: leadsPage,
-          pageSize: BLOG_LEADS_PAGE_SIZE,
-          orderBy: "created_at",
-          ascending: false,
-          modify: (q) => applyLeadFilters(q as Parameters<typeof applyLeadFilters>[0]) as typeof q,
-        }
-      );
+      const { rows: pageRows, total } = await fetchAdminBlogLeadsPage(client, {
+        page: leadsPage,
+        pageSize: BLOG_LEADS_PAGE_SIZE,
+        phoneSearch,
+        textSearch,
+        dateFrom,
+        dateTo,
+      });
       setRows(pageRows);
       setTotalCount(total);
     } catch (err) {
@@ -97,7 +61,7 @@ export function BlogLeadsPanel({ client }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [client, leadsPage, applyLeadFilters]);
+  }, [client, leadsPage, phoneSearch, textSearch, dateFrom, dateTo]);
 
   useEffect(() => {
     setLeadsPage(0);
@@ -111,42 +75,40 @@ export function BlogLeadsPanel({ client }: Props) {
     return () => clearTimeout(timer);
   }, [reload, leadsPage, phoneSearch, textSearch, dateFrom, dateTo]);
 
-  const safeLeadsPage = leadsPage;
-
   const downloadCsv = async () => {
     const toastId = toast.loading("Preparing CSV…");
     try {
-      const all = await fetchAllSupabaseRows<SiteBlogLead>(client, "site_blog_leads", {
+      const all = await fetchAllSupabaseRows<AdminBlogLeadRow>(client, "site_blog_leads", {
+        select: "id,post_id,post_slug,post_title,full_name,email,phone,college_name,created_at",
         orderBy: "created_at",
         ascending: false,
         pageSize: 250,
         maxRows: 15_000,
-        modify: (q) => buildFilters(q as unknown as ReturnType<typeof client.from>) as typeof q,
       });
-    const header = ["Date", "Name", "Email", "Phone", "College", "Post title", "Post slug"];
-    const lines = [
-      header.join(","),
-      ...all.map((r) =>
-        [
-          r.created_at ? new Date(r.created_at).toISOString() : "",
-          r.full_name,
-          r.email,
-          r.phone,
-          r.college_name || "",
-          r.post_title || "",
-          r.post_slug || "",
-        ]
-          .map((c) => csvEscape(String(c)))
-          .join(",")
-      ),
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `blog-leads-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const header = ["Date", "Name", "Email", "Phone", "College", "Post title", "Post slug"];
+      const lines = [
+        header.join(","),
+        ...all.map((r) =>
+          [
+            r.created_at ? new Date(r.created_at).toISOString() : "",
+            r.full_name,
+            r.email,
+            r.phone,
+            r.college_name || "",
+            r.post_title || "",
+            r.post_slug || "",
+          ]
+            .map((c) => csvEscape(String(c)))
+            .join(",")
+        ),
+      ];
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `blog-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
       toast.success(`Exported ${all.length} leads`, { id: toastId });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Export failed", { id: toastId });
@@ -188,12 +150,18 @@ export function BlogLeadsPanel({ client }: Props) {
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
           </div>
-          <Button type="button" variant="outline" className="shrink-0" onClick={() => void downloadCsv()} disabled={!totalCount}>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => void downloadCsv()}
+            disabled={!totalCount}
+          >
             <Download className="mr-2 size-4" /> Download CSV
           </Button>
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          {totalCount} leads match filters (server-paginated).
+          {totalCount} blog reader leads (server-paginated).
         </p>
       </div>
 
@@ -202,7 +170,7 @@ export function BlogLeadsPanel({ client }: Props) {
           <Loader2 className="size-8 animate-spin text-[#5AA3E6]" />
         </div>
       ) : totalCount === 0 ? (
-        <p className="py-12 text-center text-sm text-slate-500">No blog leads match your filters.</p>
+        <p className="py-12 text-center text-sm text-slate-500">No blog leads yet.</p>
       ) : (
         <ScrollArea className={adminCardClass + " max-h-[560px]"}>
           <Table>
@@ -242,7 +210,7 @@ export function BlogLeadsPanel({ client }: Props) {
       )}
       {!loading && totalCount > 0 ? (
         <AdminListPagination
-          page={safeLeadsPage}
+          page={leadsPage}
           pageSize={BLOG_LEADS_PAGE_SIZE}
           total={totalCount}
           onPageChange={setLeadsPage}

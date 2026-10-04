@@ -50,6 +50,7 @@ import {
   ensureSiteBlogStorage,
   estimateReadMinutes,
   fetchAdminBlogPosts,
+  fetchAdminBlogPostById,
   formatBlogDate,
   formatSiteBlogError,
   isBlogPostPublic,
@@ -241,6 +242,14 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
     setEditor(rowToEditor(row));
     setEditorTab("write");
     setEditorOpen(true);
+    void (async () => {
+      try {
+        const full = await fetchAdminBlogPostById(client, row.id);
+        if (full) setEditor(rowToEditor(full));
+      } catch (err) {
+        console.warn("[BlogManagementPanel] load full post:", err);
+      }
+    })();
   };
 
   const insertAtCursor = (snippet: string) => {
