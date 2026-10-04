@@ -19,6 +19,11 @@ import {
   isPublicCertificateVerifyRpc,
 } from "../aws/server/certificate-bootstrap.js";
 import {
+  ensureAdminRegistrationRpc,
+  isRegistrationRpc,
+  isRegistrationRpcMismatchError,
+} from "../aws/server/registration-bootstrap.js";
+import {
   buildWhere,
   parseOrder,
   parseSelect,
@@ -329,10 +334,12 @@ async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: str
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (
+      (isRegistrationRpc(name) && isRegistrationRpcMismatchError(err)) ||
       (isClassLinkRpc(name) && isClassLinkRpcMissingError(err)) ||
       (isPublicCertificateVerifyRpc(name) && isPublicCertificateVerifyMissingError(err))
     ) {
       try {
+        if (isRegistrationRpc(name)) await ensureAdminRegistrationRpc();
         if (isClassLinkRpc(name)) await ensureClassLinkRpc();
         if (isPublicCertificateVerifyRpc(name)) await ensureCertificateIssueRpc();
         const data = await callRpcLite(name, def.args, rpcBody(req), jwtClaims);
