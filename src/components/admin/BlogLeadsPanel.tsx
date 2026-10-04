@@ -97,7 +97,7 @@ export function BlogLeadsPanel({ client }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [client, leadsPage, buildFilters]);
+  }, [client, leadsPage, applyLeadFilters]);
 
   useEffect(() => {
     setLeadsPage(0);
