@@ -4,6 +4,10 @@ import type { PoolClient } from "pg";
 import { getRpcDef } from "../aws/server/rpc-registry.js";
 import { handleVercelAuthLite } from "../aws/server/vercel-auth-lite.js";
 import { getVercelLitePool } from "../aws/server/vercel-lite-pool.js";
+import {
+  ensureSystemSettingsSchema,
+  isMissingSystemSettingsError,
+} from "../aws/server/system-settings-bootstrap.js";
 
 function portalPathFromRequest(req: VercelRequest): string {
   const segment = String(req.query.segment || "").trim();
@@ -391,15 +395,34 @@ async function tryRestLite(req: VercelRequest, res: VercelResponse, pathOnly: st
   sql += order;
   sql += ` LIMIT ${limit} OFFSET ${offset}`;
 
+  const runSelect = () => getVercelLitePool().query(sql, params);
+
   try {
-    const { rows } = await getVercelLitePool().query(sql, params);
+    let result = await runSelect();
     if (req.method === "HEAD") {
       res.status(200).end();
       return true;
     }
-    res.status(200).json(rows);
+    res.status(200).json(result.rows);
     return true;
   } catch (err) {
+    if (table === "system_settings" && isMissingSystemSettingsError(err)) {
+      try {
+        await ensureSystemSettingsSchema();
+        const retry = await runSelect();
+        if (req.method === "HEAD") {
+          res.status(200).end();
+          return true;
+        }
+        res.status(200).json(retry.rows);
+        return true;
+      } catch (retryErr) {
+        res.status(400).json({
+          message: retryErr instanceof Error ? retryErr.message : String(retryErr),
+        });
+        return true;
+      }
+    }
     res.status(400).json({
       message: err instanceof Error ? err.message : String(err),
     });

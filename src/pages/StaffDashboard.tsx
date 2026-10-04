@@ -284,7 +284,6 @@ const StaffDashboard = () => {
   const [cancelledPayments, setCancelledPayments] = useState<any[]>([]);
   const [registrationDraftLeads, setRegistrationDraftLeads] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [classesList, setClassesList] = useState<any[]>([]);
   const [domains, setDomains] = useState<any[]>([]);
   const [unis, setUnis] = useState<any[]>([]);
   const [colleges, setColleges] = useState<any[]>([]);

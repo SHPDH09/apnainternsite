@@ -41,6 +41,7 @@ import { ensureStudentDataUploadSchema } from "./student-data-upload-bootstrap";
 import { ensureProjectReportSchema } from "./project-report-bootstrap";
 import { ensureStaffAttendanceOfficesSchema } from "./staff-attendance-offices-bootstrap";
 import { ensureStaffSalarySchema } from "./staff-salary-bootstrap";
+import { ensureSystemSettingsSchema } from "./system-settings-bootstrap";
 import {
   authLogout,
   authSettings,
@@ -163,6 +164,8 @@ async function buildApp(): Promise<Express> {
     try {
       await ensureAllCmsTables();
       console.log("[cms-bootstrap] site CMS tables ready");
+      await ensureSystemSettingsSchema();
+      console.log("[system-settings-bootstrap] system_settings ready");
     } catch (err) {
       console.warn("[cms-bootstrap] startup ensure failed:", err);
     }

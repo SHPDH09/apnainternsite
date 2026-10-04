@@ -733,7 +733,7 @@ const SuperAdmin = () => {
       setDepartments(de.data || []);
       setCerts(ce.data || []);
       setDomains(dm.data || []);
-      setClassesList(cl.data || []);
+      setClassesList(Array.isArray(cl) ? cl : cl.data || []);
       setSystemSettings(ss.data || []);
       setAdminPermissions(ap.data || []);
       setPaymentConfig(pc.data || { id: 1, razorpay_key_id: '', razorpay_key_secret: '', amount_paise: 9900, is_active: false });

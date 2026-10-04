@@ -36,6 +36,10 @@ import {
   isValidateStudentUniquenessMissingError,
   isValidateStudentUniquenessRpc,
 } from "./student-uniqueness-bootstrap";
+import {
+  ensureSystemSettingsSchema,
+  isSystemSettingsTable,
+} from "./system-settings-bootstrap";
 import { isTsRpc, runTsRpc } from "./ts-rpc-handlers";
 
 function jwtFromRequest(req: Request) {
@@ -97,6 +101,10 @@ async function withCmsRetry<T>(table: string, run: () => Promise<T>): Promise<T>
       }
       if (table === "learning_materials") {
         await ensureLearningMaterialsSchema();
+        return await run();
+      }
+      if (isSystemSettingsTable(table)) {
+        await ensureSystemSettingsSchema();
         return await run();
       }
     }
