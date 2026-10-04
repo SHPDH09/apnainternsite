@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getPool, query } from "./db.js";
+import { REGISTRATION_BOOTSTRAP_SQL_BY_BASENAME } from "./registration-bootstrap-sql.js";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -35,7 +36,8 @@ export function isRegistrationRpcMismatchError(err: unknown): boolean {
     /btrim\(uuid\)/i.test(msg) ||
     /column "id" is of type uuid but expression is of type text/i.test(msg) ||
     /could not find the function/i.test(msg) ||
-    /function public\.admin_create_minimal_student_registration does not exist/i.test(msg)
+    /function public\.admin_create_minimal_student_registration does not exist/i.test(msg) ||
+    /Registration bootstrap SQL missing/i.test(msg)
   );
 }
 
@@ -46,18 +48,34 @@ function resolveSqlPath(rel: string): string {
   return path.join(root, rel);
 }
 
-async function runSqlFile(rel: string): Promise<void> {
+function loadSqlText(rel: string): string {
+  const embedded = REGISTRATION_BOOTSTRAP_SQL_BY_BASENAME[path.basename(rel)];
+  if (embedded) return embedded;
   const fp = resolveSqlPath(rel);
-  if (!fs.existsSync(fp)) {
-    throw new Error(`Registration bootstrap SQL missing: ${rel} (looked at ${fp})`);
-  }
-  const sql = fs.readFileSync(fp, "utf8");
+  if (fs.existsSync(fp)) return fs.readFileSync(fp, "utf8");
+  throw new Error(`Registration bootstrap SQL missing: ${rel} (looked at ${fp})`);
+}
+
+async function runSqlFile(rel: string): Promise<void> {
+  const sql = loadSqlText(rel);
   const client = await getPool().connect();
   try {
     await client.query(sql);
   } finally {
     client.release();
   }
+}
+
+async function registrationRpcExists(): Promise<boolean> {
+  const { rows } = await query<{ ok: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public'
+         AND p.proname = 'admin_create_minimal_student_registration'
+     ) AS ok`
+  );
+  return Boolean(rows[0]?.ok);
 }
 
 async function studentsIdColumnType(): Promise<string> {
@@ -116,13 +134,16 @@ export async function ensureAdminRegistrationRpc(): Promise<{ ok: true; applied:
     return { ok: true, applied: false };
   }
 
-  for (const rel of PREREQ_SQL) {
-    try {
-      await runSqlFile(rel);
-    } catch (err) {
-      const msg = String((err as { message?: string })?.message || err);
-      if (!/already exists|duplicate key|does not exist|cannot drop/i.test(msg)) {
-        console.warn(`[registration-bootstrap] prerequisite ${rel} warn:`, msg.slice(0, 160));
+  const fnExists = await registrationRpcExists();
+  if (!fnExists) {
+    for (const rel of PREREQ_SQL) {
+      try {
+        await runSqlFile(rel);
+      } catch (err) {
+        const msg = String((err as { message?: string })?.message || err);
+        if (!/already exists|duplicate key|does not exist|cannot drop/i.test(msg)) {
+          console.warn(`[registration-bootstrap] prerequisite ${rel} warn:`, msg.slice(0, 160));
+        }
       }
     }
   }
