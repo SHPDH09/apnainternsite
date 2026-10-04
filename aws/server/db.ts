@@ -6,6 +6,7 @@ import { Pool, type QueryResultRow } from "pg";
 import { getRdsIamAuthToken, rdsIamAuthEnabled } from "./rds-iam-pg.js";
 import {
   hyderabadDatabaseUrl,
+  isAwsRdsDatabaseUrl,
   isHyderabadDatabaseUrl,
   isStaleRdsDatabaseUrl,
 } from "./hyderabad-rds-url.js";
@@ -16,24 +17,27 @@ export function isSupabaseDatabaseUrl(url: string): boolean {
   return /(\.supabase\.co|pooler\.supabase\.com)/i.test(url);
 }
 
-/** Vercel/Lambda: ignore stale Mumbai URLs; use Hyderabad password auth. */
+/** Vercel/Lambda: honor explicit DATABASE_URL (Supabase pooler or AWS RDS). */
 export function resolveDatabaseUrl(): string {
   const fromEnv = process.env.DATABASE_URL?.trim();
   if (fromEnv && isSupabaseDatabaseUrl(fromEnv) && !isStaleRdsDatabaseUrl(fromEnv)) {
     return fromEnv;
   }
+  if (fromEnv && isAwsRdsDatabaseUrl(fromEnv) && !isStaleRdsDatabaseUrl(fromEnv)) {
+    return fromEnv;
+  }
 
-  const preferHyderabadOnStaleUrl =
+  const preferHyderabadFallback =
     process.env.VERCEL || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-  if (preferHyderabadOnStaleUrl) {
+  if (preferHyderabadFallback) {
     const vercelDb = process.env.DATABASE_URL?.trim();
     if (vercelDb && isSupabaseDatabaseUrl(vercelDb)) {
       return vercelDb;
     }
     if (!vercelDb) {
       throw new Error(
-        "DATABASE_URL is not set on Vercel. Configure Supabase pooler URL in project env."
+        "DATABASE_URL is not set on Vercel. Set Supabase pooler URL or AWS RDS DATABASE_URL in project env."
       );
     }
     const canonical = process.env.RDS_CANONICAL_DATABASE_URL?.trim();

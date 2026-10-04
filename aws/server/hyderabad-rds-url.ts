@@ -11,7 +11,12 @@ export function hyderabadDatabaseUrl(): string {
     process.env.AWS_RDS_PASSWORD?.trim() ||
     process.env.RDS_PASSWORD?.trim() ||
     process.env.PGPASSWORD?.trim() ||
-    "Raunak12583";
+    "";
+  if (!pass) {
+    throw new Error(
+      "AWS_RDS_PASSWORD (or DATABASE_URL) is required to connect to Hyderabad RDS"
+    );
+  }
   const db = process.env.AWS_RDS_DATABASE?.trim() || "ezyintern";
   const encUser = encodeURIComponent(user);
   const encPass = encodeURIComponent(pass);
@@ -25,11 +30,15 @@ export function isHyderabadDatabaseUrl(url: string): boolean {
   );
 }
 
+/** Legacy password-less URLs (postgresql://ezyintern@host) — not valid for serverless. */
 export function isStaleRdsDatabaseUrl(url: string): boolean {
-  if (isHyderabadDatabaseUrl(url) && !/\/\/ezyintern@/i.test(url)) return false;
-  return (
-    /\/\/ezyintern@/i.test(url) ||
-    /ap-south-1\.rds\.amazonaws\.com/i.test(url) ||
-    /ezyintern-staging-db/i.test(url)
-  );
+  return /\/\/ezyintern@/i.test(url);
+}
+
+export function isAwsRdsDatabaseUrl(url: string): boolean {
+  return /rds\.amazonaws\.com/i.test(url);
+}
+
+export function isMumbaiStagingRdsDatabaseUrl(url: string): boolean {
+  return /ezyintern-staging-db\.c5makww6eq8y\.ap-south-1\.rds\.amazonaws\.com/i.test(url);
 }

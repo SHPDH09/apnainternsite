@@ -61,6 +61,9 @@ function poolerDatabaseUrl(password) {
 
 function resolveDatabaseUrl(fileVals) {
   const direct = process.env.DATABASE_URL?.trim() || fileVals.DATABASE_URL?.trim();
+  if (direct && /rds\.amazonaws\.com/i.test(direct)) {
+    return direct;
+  }
   if (direct && /\.supabase\.com|pooler\.supabase/i.test(direct)) {
     return direct;
   }
@@ -112,8 +115,11 @@ const jwtSecret =
   "apnaintern-vercel-jwt-" + PROJECT_ID.slice(0, 8);
 
 /** @type {Record<string, string>} */
+const STAGING_RDS_HOST =
+  "ezyintern-staging-db.c5makww6eq8y.ap-south-1.rds.amazonaws.com";
+
 const vars = {
-  // ── Postgres (Vercel serverless → Supabase pooler) ──
+  // ── Postgres (Vercel serverless → Supabase pooler or AWS RDS) ──
   DATABASE_URL: dbUrl,
   RDS_IAM_AUTH: "false",
   RDS_RPC_OPEN: "true",
@@ -144,6 +150,15 @@ const vars = {
   S3_BUCKET_LEARNING_MATERIALS:
     pick("S3_BUCKET_LEARNING_MATERIALS") || "ezyintern-staging-learning-materials",
 };
+
+if (/ezyintern-staging-db/i.test(dbUrl) || pick("AWS_RDS_HOST") === STAGING_RDS_HOST) {
+  vars.AWS_RDS_HOST = pick("AWS_RDS_HOST") || STAGING_RDS_HOST;
+  vars.AWS_RDS_USER = pick("AWS_RDS_USER") || "ezyintern";
+  vars.AWS_RDS_DATABASE = pick("AWS_RDS_DATABASE") || "ezyintern";
+  vars.AWS_RDS_PORT = pick("AWS_RDS_PORT") || "5432";
+  const rdsPass = pick("AWS_RDS_PASSWORD", "RDS_PASSWORD");
+  if (rdsPass) vars.AWS_RDS_PASSWORD = rdsPass;
+}
 
 const optionalKeys = [
   "AWS_ACCESS_KEY_ID",
