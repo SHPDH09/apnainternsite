@@ -15,11 +15,20 @@ async function incrementView(postId: string): Promise<number> {
   const { rows } = await blogEngagementQuery<{ view_count: string }>(
     `UPDATE public.site_blog_posts
      SET view_count = view_count + 1
-     WHERE id = $1::uuid AND is_active = true
+     WHERE id = $1::uuid
+       AND is_active = true
+       AND (
+         status IS NULL
+         OR btrim(coalesce(status, '')) = ''
+         OR lower(btrim(status)) IN ('published', 'scheduled')
+       )
      RETURNING view_count`,
     [postId]
   );
-  return Number(rows[0]?.view_count ?? 0);
+  if (rows[0]?.view_count != null) {
+    return Number(rows[0].view_count);
+  }
+  return fetchViewCount(postId);
 }
 
 async function fetchViewCount(postId: string): Promise<number> {

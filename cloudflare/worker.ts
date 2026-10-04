@@ -161,53 +161,9 @@ async function tryHandleOtpSendMail(request: Request, env: Env): Promise<Respons
   });
 }
 
-/** RDS may lack view_count; strip from PostgREST select and default counts in JSON. */
-function rewriteSiteBlogPostsRestRequest(request: Request): { request: Request; addViewCount: boolean } {
-  const url = new URL(request.url);
-  const path = upstreamPath(url.pathname);
-  if (path !== "/rest/v1/site_blog_posts" || request.method !== "GET") {
-    return { request, addViewCount: false };
-  }
-  const select = url.searchParams.get("select");
-  if (!select || !/\bview_count\b/i.test(select)) {
-    return { request, addViewCount: false };
-  }
-  const stripped = select
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part && !/^view_count$/i.test(part))
-    .join(",");
-  if (stripped === select) return { request, addViewCount: false };
-  const next = new URL(url.toString());
-  next.searchParams.set("select", stripped || "id");
-  return { request: new Request(next.toString(), request), addViewCount: true };
-}
-
-async function attachDefaultBlogViewCounts(response: Response): Promise<Response> {
-  if (!response.ok) return response;
-  const contentType = response.headers.get("content-type") || "";
-  if (!contentType.includes("application/json")) return response;
-  try {
-    const data = (await response.json()) as unknown;
-    if (Array.isArray(data)) {
-      const body = data.map((row) =>
-        row && typeof row === "object"
-          ? { ...(row as Record<string, unknown>), view_count: (row as { view_count?: number }).view_count ?? 0 }
-          : row
-      );
-      return Response.json(body, { status: response.status, headers: response.headers });
-    }
-    if (data && typeof data === "object") {
-      const row = data as Record<string, unknown>;
-      return Response.json(
-        { ...row, view_count: row.view_count ?? 0 },
-        { status: response.status, headers: response.headers }
-      );
-    }
-  } catch {
-    return response;
-  }
-  return response;
+/** Pass blog list GET through unchanged so RDS `view_count` is returned (Lambda REST strips column only on 42703). */
+function rewriteSiteBlogPostsRestRequest(request: Request): Request {
+  return request;
 }
 
 async function proxyToLambda(request: Request, env: Env): Promise<Response> {
@@ -252,10 +208,7 @@ export default {
       if (otpDeliverResponse) return otpDeliverResponse;
       const otpResponse = await tryHandleOtpSendMail(request, env);
       if (otpResponse) return otpResponse;
-      const blogRest = rewriteSiteBlogPostsRestRequest(request);
-      const upstream = await proxyToLambda(blogRest.request, env);
-      if (blogRest.addViewCount) return attachDefaultBlogViewCounts(upstream);
-      return upstream;
+      return proxyToLambda(rewriteSiteBlogPostsRestRequest(request), env);
     }
 
     return env.ASSETS.fetch(request);

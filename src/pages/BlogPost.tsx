@@ -10,6 +10,7 @@ import {
   hydrateBlogReaderUnlockFromServer,
   isBlogReaderUnlockedOnDevice,
   blogViewRecordedThisSession,
+  fetchBlogPostViewCount,
   incrementBlogPostView,
   markBlogViewRecorded,
 } from "@/lib/siteBlogEngagement";
@@ -68,11 +69,13 @@ export default function BlogPost() {
     let cancelled = false;
     void (async () => {
       if (!blogViewRecordedThisSession(post.id)) {
-        const next = await incrementBlogPostView(post.id);
-        if (!cancelled && next > 0) {
-          setViewCount(next);
-          markBlogViewRecorded(post.id);
-        }
+        markBlogViewRecorded(post.id);
+        let next = await incrementBlogPostView(post.id);
+        if (next <= 0) next = await fetchBlogPostViewCount(post.id);
+        if (!cancelled && next > 0) setViewCount(next);
+      } else if (!cancelled) {
+        const current = await fetchBlogPostViewCount(post.id);
+        if (current > 0) setViewCount(current);
       }
     })();
     return () => {
