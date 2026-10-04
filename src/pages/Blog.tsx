@@ -4,7 +4,6 @@ import { Calendar, Clock, Eye, Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { BlogCoverImage } from "@/components/blog/BlogCoverImage";
 import { BlogReaderShell } from "@/components/blog/BlogReaderShell";
-import { fetchBlogPostViewCount } from "@/lib/siteBlogEngagement";
 import {
   estimateReadMinutes,
   fetchPublicBlogPosts,
@@ -21,22 +20,11 @@ export default function Blog() {
     let cancelled = false;
     void (async () => {
       try {
-        const rows = await fetchPublicBlogPosts(supabase).catch(() => [] as SiteBlogPost[]);
+        const rows = await fetchPublicBlogPosts(supabase, { limit: 60 }).catch(
+          () => [] as SiteBlogPost[]
+        );
         if (cancelled) return;
         setPosts(rows);
-        if (rows.length > 0) {
-          const counts = await Promise.all(
-            rows.map(async (post) => {
-              const view_count = await fetchBlogPostViewCount(post.id);
-              return { id: post.id, view_count };
-            })
-          );
-          if (cancelled) return;
-          const byId = new Map(counts.map((c) => [c.id, c.view_count]));
-          setPosts((prev) =>
-            prev.map((p) => ({ ...p, view_count: byId.get(p.id) ?? p.view_count ?? 0 }))
-          );
-        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -112,7 +100,7 @@ export default function Blog() {
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <Clock className="size-3" />
-                      {estimateReadMinutes(post.content ?? post.excerpt)} min
+                      {estimateReadMinutes(post.excerpt || "")} min
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <Eye className="size-3" />

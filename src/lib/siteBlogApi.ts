@@ -200,7 +200,14 @@ export type SiteBlogPostInput = {
 
 /** Listing cards — omit full body to keep /rest GET reliable on slow networks. */
 const BLOG_SELECT_LIST_PUBLIC =
-  "id, title, slug, excerpt, cover_image_url, cover_image_path, author_name, post_type, status, published_at, scheduled_at, meta_title, meta_description, tags, is_active, is_featured, sort_order, created_by, created_at, updated_at";
+  "id, title, slug, excerpt, cover_image_url, cover_image_path, author_name, post_type, status, published_at, scheduled_at, meta_title, meta_description, tags, is_active, is_featured, sort_order, view_count, created_by, created_at, updated_at";
+
+const PUBLIC_BLOG_LIST_CACHE_MS = 90_000;
+const PUBLIC_BLOG_SLUG_CACHE_MS = 120_000;
+const PUBLIC_BLOG_DEFAULT_LIMIT = 100;
+
+let publicBlogListCache: { key: string; at: number; rows: SiteBlogPost[] } | null = null;
+const publicBlogSlugCache = new Map<string, { at: number; post: SiteBlogPost | null }>();
 
 const BLOG_SELECT_LEGACY =
   `${BLOG_SELECT_LIST_PUBLIC}, content`;
@@ -390,52 +397,46 @@ function applyPublicBlogListOpts(
 
 /** Reliable public read when supabase-js select fails (e.g. missing view_count on RDS). */
 async function fetchPublicBlogPostsViaDirectRest(
-  opts?: { featuredOnly?: boolean; postType?: BlogPostType }
+  opts?: { featuredOnly?: boolean; postType?: BlogPostType; limit?: number }
 ): Promise<SiteBlogPost[]> {
   if (typeof window === "undefined") return [];
   const base = resolveSupabaseUrl().replace(/\/$/, "");
   if (!base) return [];
 
-  const buildParams = (cacheBust: boolean) => {
-    const params = new URLSearchParams({
-      select: BLOG_SELECT_LIST_PUBLIC,
-      is_active: "eq.true",
-      status: "in.(published,scheduled)",
-    });
-    if (opts?.featuredOnly) params.set("is_featured", "eq.true");
-    if (opts?.postType) params.set("post_type", `eq.${opts.postType}`);
-    if (cacheBust) params.set("_", String(Date.now()));
-    return params;
-  };
+  const limit = Math.max(1, Math.min(opts?.limit ?? PUBLIC_BLOG_DEFAULT_LIMIT, 200));
+  const params = new URLSearchParams({
+    select: BLOG_SELECT_LIST_PUBLIC,
+    is_active: "eq.true",
+    status: "in.(published,scheduled)",
+    order: "is_featured.desc,sort_order.asc,published_at.desc",
+    limit: String(limit),
+  });
+  if (opts?.featuredOnly) params.set("is_featured", "eq.true");
+  if (opts?.postType) params.set("post_type", `eq.${opts.postType}`);
 
   const key = resolveSupabaseAnonKey();
-  const parseRows = async (res: Response): Promise<SiteBlogPost[]> => {
-    if (res.status === 304) return [];
+
+  const fetchOnce = async (select: string) => {
+    const p = new URLSearchParams(params);
+    p.set("select", select);
+    return fetch(`${base}/rest/v1/site_blog_posts?${p.toString()}`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+  };
+
+  try {
+    let res = await fetchOnce(BLOG_SELECT_LIST_PUBLIC);
+    if (!res.ok && /view_count|42703/i.test(await res.clone().text())) {
+      res = await fetchOnce(BLOG_SELECT_LIST_PUBLIC.replace(", view_count", ""));
+    }
     if (!res.ok) return [];
     const data = (await res.json()) as SiteBlogPost[] | { message?: string };
     if (!Array.isArray(data)) return [];
     return sortBlogPosts(
-      data.map((row) => mapCoverUrl({ ...row, view_count: row.view_count ?? 0 }))
-    ).filter((post) => isBlogPostPublic(post));
-  };
-
-  const headers = {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    "Cache-Control": "no-cache",
-    Pragma: "no-cache",
-  };
-
-  try {
-    for (const cacheBust of [false, true]) {
-      const res = await fetch(`${base}/rest/v1/site_blog_posts?${buildParams(cacheBust).toString()}`, {
-        cache: "no-store",
-        headers,
-      });
-      const rows = await parseRows(res);
-      if (rows.length > 0) return rows;
-    }
-    return [];
+      data
+        .map((row) => mapPublicBlogListPost({ ...row, view_count: row.view_count ?? 0 }))
+        .filter((post) => isBlogPostPublic(post))
+    );
   } catch {
     return [];
   }
@@ -487,39 +488,35 @@ export async function fetchPublicBlogPosts(
   client: SupabaseClient,
   opts?: { featuredOnly?: boolean; limit?: number; postType?: BlogPostType }
 ): Promise<SiteBlogPost[]> {
-  try {
-    resetSiteBlogStorageCache();
+  const cacheKey = JSON.stringify(opts ?? {});
+  const cached = publicBlogListCache;
+  if (
+    cached &&
+    cached.key === cacheKey &&
+    Date.now() - cached.at < PUBLIC_BLOG_LIST_CACHE_MS
+  ) {
+    return applyPublicBlogListOpts(cached.rows, opts);
+  }
 
+  try {
     const directRows = await fetchPublicBlogPostsViaDirectRest(opts);
     if (directRows.length > 0) {
-      const fallbackRows = await loadPublicBlogFallbackRows(client);
-      const rds = await queryPublicBlogPostsFromRds(client, opts);
-      const rdsRows = rds && "rows" in rds ? rds.rows : [];
-      return applyPublicBlogListOpts(
-        mergeBlogPostsById(directRows, rdsRows, fallbackRows),
-        opts
-      );
+      publicBlogListCache = { key: cacheKey, at: Date.now(), rows: directRows };
+      return applyPublicBlogListOpts(directRows, opts);
     }
 
-    const fallbackRows = await loadPublicBlogFallbackRows(client);
     const rds = await queryPublicBlogPostsFromRds(client, opts);
-    if (rds && "rows" in rds) {
-      return applyPublicBlogListOpts(
-        mergeBlogPostsById(fallbackRows, rds.rows),
-        opts
-      );
+    if (rds && "rows" in rds && rds.rows.length > 0) {
+      publicBlogListCache = { key: cacheKey, at: Date.now(), rows: rds.rows };
+      return applyPublicBlogListOpts(rds.rows, opts);
     }
 
     if (rds && "missingTable" in rds) {
+      const fallbackRows = await loadPublicBlogFallbackRows(client);
       return applyPublicBlogListOpts(fallbackRows, opts);
     }
 
-    resetSiteBlogStorageCache();
-    const retryDirect = await fetchPublicBlogPostsViaDirectRest(opts);
-    if (retryDirect.length > 0) {
-      return applyPublicBlogListOpts(retryDirect, opts);
-    }
-
+    const fallbackRows = await loadPublicBlogFallbackRows(client);
     return applyPublicBlogListOpts(fallbackRows, opts);
   } catch (err) {
     console.warn("[fetchPublicBlogPosts]", err);
@@ -576,10 +573,16 @@ export async function fetchPublicBlogPostBySlug(
   const normalized = slug.trim().toLowerCase();
   if (!normalized) return null;
 
-  resetSiteBlogStorageCache();
+  const hit = publicBlogSlugCache.get(normalized);
+  if (hit && Date.now() - hit.at < PUBLIC_BLOG_SLUG_CACHE_MS) {
+    return hit.post;
+  }
 
   const directPost = await fetchPublicBlogPostBySlugViaDirectRest(normalized);
-  if (directPost) return directPost;
+  if (directPost) {
+    publicBlogSlugCache.set(normalized, { at: Date.now(), post: directPost });
+    return directPost;
+  }
 
   const { data, error } = await runBlogSelectQuery(client, (columns) =>
     client.from("site_blog_posts").select(columns).eq("is_active", true).eq("slug", normalized).maybeSingle()
@@ -588,33 +591,17 @@ export async function fetchPublicBlogPostBySlug(
   if (!error && data) {
     setSiteBlogTableAvailableKnown(true);
     const post = mapPublicBlogPost(data as SiteBlogPost);
-    if (isBlogPostPublic(post)) return post;
+    if (isBlogPostPublic(post)) {
+      publicBlogSlugCache.set(normalized, { at: Date.now(), post });
+      return post;
+    }
   } else if (error && isSiteBlogTableMissing(error)) {
     setSiteBlogTableAvailableKnown(false);
   }
 
   const fromFallback = await findPublicBlogPostInFallback(client, normalized);
-  if (fromFallback) return fromFallback;
-
-  if (!error && !data) return null;
-
-  if (error && !isSiteBlogTableMissing(error)) {
-    resetSiteBlogStorageCache();
-    const { data: retryData, error: retryErr } = await runBlogSelectQuery(client, (columns) =>
-      client
-        .from("site_blog_posts")
-        .select(columns)
-        .eq("is_active", true)
-        .eq("slug", normalized)
-        .maybeSingle()
-    );
-    if (!retryErr && retryData) {
-      const post = mapPublicBlogPost(retryData as SiteBlogPost);
-      if (isBlogPostPublic(post)) return post;
-    }
-  }
-
-  return null;
+  publicBlogSlugCache.set(normalized, { at: Date.now(), post: fromFallback });
+  return fromFallback;
 }
 
 async function locateBlogPost(
