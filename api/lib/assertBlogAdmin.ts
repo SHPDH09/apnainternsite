@@ -9,6 +9,15 @@ export async function assertBlogAdmin(userId: string): Promise<boolean> {
     [userId]
   );
   if (roleRows.length) return true;
+
+  const { rows: staffRows } = await query<{ ok: number }>(
+    `SELECT 1 AS ok FROM public.user_roles
+     WHERE user_id = $1::uuid AND role::text = 'staff'
+     LIMIT 1`,
+    [userId]
+  );
+  if (staffRows.length) return true;
+
   try {
     const { rows } = await query<{ ok: number }>(
       `SELECT 1 AS ok FROM public.admin_permissions

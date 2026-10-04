@@ -173,6 +173,7 @@ const App = () => (
               </ProtectedRoute>
             }
           />
+          <Route path="/staff" element={<Navigate to="/staff-dashboard" replace />} />
           <Route
             path="/staff-dashboard"
             element={

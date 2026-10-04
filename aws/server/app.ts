@@ -20,6 +20,8 @@ import rpcByName from "../../api/rpc-call";
 import dataSelect from "../../api/data-select";
 import bootstrapGrantAdmin from "../../api/bootstrap-grant-admin";
 import ensureBlogCms from "../../api/ensure-blog-cms";
+import adminBlogPosts from "../../api/admin-blog-posts";
+import adminBlogLeads from "../../api/admin-blog-leads";
 import publicBlogMedia from "../../api/public/blog-media";
 import ensureDashboardServiceKeys from "../../api/ensure-dashboard-service-keys";
 import ensureProjectReportTemplates from "../../api/ensure-project-report-templates";
@@ -286,6 +288,8 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/admin-register", handler: adminRegister },
     { method: "post", path: "/api/bootstrap-grant-admin", handler: bootstrapGrantAdmin },
     { method: "post", path: "/api/ensure-blog-cms", handler: ensureBlogCms },
+    { method: "get", path: "/api/admin-blog-posts", handler: adminBlogPosts },
+    { method: "get", path: "/api/admin-blog-leads", handler: adminBlogLeads },
     { method: "post", path: "/api/ensure-dashboard-service-keys", handler: ensureDashboardServiceKeys },
     { method: "post", path: "/api/ensure-project-report-templates", handler: ensureProjectReportTemplates },
     { method: "post", path: "/api/project-report-docx-to-pdf", handler: projectReportDocxToPdf },
