@@ -62,7 +62,7 @@
     },
     {
       "source": "/storage/(.*)",
-      "destination": "/api/rds-portal?segment=storage&path=$1"
+      "destination": "/api/vercel-storage?path=$1"
     },
     {
       "source": "/((?!api/|assets/|rest/|auth/|storage/|realtime/|functions/).*)",
