@@ -16,8 +16,11 @@ import {
 } from "@/components/ui/table";
 import { adminCardClass } from "@/components/admin/ui/adminStyles";
 import { AdminListPagination } from "@/components/admin/ui/AdminListPagination";
-import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
-import { fetchAdminBlogLeadsPage, type AdminBlogLeadRow } from "@/lib/blogLeadsAdmin";
+import {
+  fetchAdminBlogLeadsPage,
+  fetchAllAdminBlogLeads,
+  type AdminBlogLeadRow,
+} from "@/lib/blogLeadsAdmin";
 import { formatBlogDate } from "@/lib/siteBlogApi";
 
 const BLOG_LEADS_PAGE_SIZE = 20;
@@ -78,12 +81,11 @@ export function BlogLeadsPanel({ client }: Props) {
   const downloadCsv = async () => {
     const toastId = toast.loading("Preparing CSV…");
     try {
-      const all = await fetchAllSupabaseRows<AdminBlogLeadRow>(client, "site_blog_leads", {
-        select: "id,post_id,post_slug,post_title,full_name,email,phone,college_name,created_at",
-        orderBy: "created_at",
-        ascending: false,
-        pageSize: 250,
-        maxRows: 15_000,
+      const all = await fetchAllAdminBlogLeads(client, {
+        phoneSearch,
+        textSearch,
+        dateFrom,
+        dateTo,
       });
       const header = ["Date", "Name", "Email", "Phone", "College", "Post title", "Post slug"];
       const lines = [

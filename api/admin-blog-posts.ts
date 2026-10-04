@@ -5,6 +5,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { query } from "../aws/server/db.js";
 import { verifyBearerSession } from "./lib/verifyBearerSession.js";
+import { assertBlogAdmin } from "./lib/assertBlogAdmin.js";
 
 const LIST_COLUMNS =
   "id, title, slug, excerpt, cover_image_url, cover_image_path, author_name, post_type, status, published_at, scheduled_at, meta_title, meta_description, tags, is_active, is_featured, sort_order, created_by, created_at, updated_at";
@@ -16,27 +17,6 @@ function bearer(req: VercelRequest): string | null {
   const raw = Array.isArray(h) ? h[0] : h;
   const m = raw ? String(raw).match(/^Bearer\s+(.+)$/i) : null;
   return m?.[1]?.trim() || null;
-}
-
-async function assertBlogAdmin(userId: string): Promise<boolean> {
-  const { rows: roleRows } = await query<{ ok: number }>(
-    `SELECT 1 AS ok FROM public.user_roles
-     WHERE user_id = $1::uuid AND role::text IN ('admin', 'super_admin')
-     LIMIT 1`,
-    [userId]
-  );
-  if (roleRows.length) return true;
-  try {
-    const { rows } = await query<{ ok: number }>(
-      `SELECT 1 AS ok FROM public.admin_permissions
-       WHERE user_id = $1::uuid AND COALESCE(can_manage_blog, false) = true
-       LIMIT 1`,
-      [userId]
-    );
-    return rows.length > 0;
-  } catch {
-    return false;
-  }
 }
 
 function isMissingViewCount(err: unknown): boolean {
