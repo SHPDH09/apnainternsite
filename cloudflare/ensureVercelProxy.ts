@@ -15,6 +15,11 @@ const VERCEL_PUBLIC_GET_API_PATHS = new Set(["/api/public/blog-media"]);
 /** Blog views/leads — RDS on Vercel (not Lambda). */
 const VERCEL_BLOG_POST_API_PATHS = new Set(["/api/blog-interaction"]);
 
+/** Razorpay + order lookup — Vercel serverless (DATABASE_URL), not API Gateway Lambda. */
+function isVercelPaymentApi(path: string): boolean {
+  return path.startsWith("/api/payment/") || path === "/api/razorpay-recovery";
+}
+
 function upstreamPath(pathname: string): string {
   const stage = "/staging";
   if (pathname === stage || pathname.startsWith(`${stage}/`)) {
@@ -36,6 +41,9 @@ export async function tryProxyEnsureApiToVercel(
     return proxyRequestToVercel(request, env);
   }
   if (VERCEL_BLOG_POST_API_PATHS.has(path) && request.method === "POST") {
+    return proxyRequestToVercel(request, env);
+  }
+  if (isVercelPaymentApi(path)) {
     return proxyRequestToVercel(request, env);
   }
   return null;

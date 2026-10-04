@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AdminContentCard, AdminPageHeader } from "@/components/admin/ui";
 import { apiUrl } from "@/lib/siteApi";
+import { readJsonResponse } from "@/lib/readJsonResponse";
 
 type LookupResult = {
   source: "order" | "razorpay";
@@ -30,12 +31,12 @@ export function CheckPaymentPanel() {
     try {
       if (q.startsWith("order_") || q.startsWith("order")) {
         const res = await fetch(apiUrl(`/api/payment/status?orderId=${encodeURIComponent(q)}`));
-        const data = (await res.json()) as {
+        const data = await readJsonResponse<{
           success?: boolean;
           status?: string;
           paymentId?: string;
           message?: string;
-        };
+        }>(res);
         if (!res.ok || !data.success) {
           throw new Error(data.message || "Order not found");
         }
@@ -52,11 +53,11 @@ export function CheckPaymentPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "fetch_razorpay_payment", query: q }),
       });
-      const data = (await res.json()) as {
+      const data = await readJsonResponse<{
         success?: boolean;
         payment?: Record<string, unknown>;
         error?: string;
-      };
+      }>(res);
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Payment lookup failed");
       }
