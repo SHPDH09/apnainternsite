@@ -64,6 +64,11 @@ import { FeesManagementPanel } from "@/components/admin/FeesManagementPanel";
 import { PopupManagementPanel } from "@/components/admin/PopupManagementPanel";
 import { BulkUploadStudentBadge } from "@/components/BulkUploadStudentBadge";
 import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
+import { fetchRegistrationLeadsPage } from "@/lib/registrationLeadsAdmin";
+import {
+  fetchPaymentDashboardSample,
+  fetchRecentCancelledForLeads,
+} from "@/lib/paymentsAdmin";
 import {
   ATTENDANCE_ELIGIBILITY_MIN_PERCENT,
   LNMU_BULK_ATTENDANCE_END,
@@ -660,20 +665,13 @@ const SuperAdmin = () => {
         .filter(r => r.role === 'admin' || r.role === 'super_admin')
         .map(r => r.user_id);
 
-      const [paymentSuccessRows, cancelledPaymentRows, regDraftRows] = await Promise.all([
-        fetchAllSupabaseRows(supabase, "payment_success", {
-          orderBy: "created_at",
-          ascending: false,
-        }),
-        fetchAllSupabaseRows(supabase, "payment_cancelled", {
-          orderBy: "created_at",
-          ascending: false,
-        }),
-        fetchAllSupabaseRows(supabase, "registration_leads", {
-          orderBy: "updated_at",
-          ascending: false,
-        }),
+      const [paymentSample, cancelledPaymentRows, regDraftPage] = await Promise.all([
+        fetchPaymentDashboardSample(supabase),
+        fetchRecentCancelledForLeads(supabase),
+        fetchRegistrationLeadsPage(supabase, { page: 0, pageSize: 100 }),
       ]);
+      const paymentSuccessRows = paymentSample.success;
+      const regDraftRows = regDraftPage.rows;
 
       const [p, uniRows, cRows, de, ce, dm, cl, ss, ap, pc, notifications, visitStats, ss_res] =
         await Promise.all([
@@ -686,6 +684,8 @@ const SuperAdmin = () => {
         fetchAllSupabaseRows(supabase, "classes", {
           orderBy: "scheduled_at",
           ascending: true,
+          pageSize: 250,
+          maxRows: 4_000,
         }).catch((err) => {
           console.warn("[super-admin] classes:", err);
           return [] as Record<string, unknown>[];

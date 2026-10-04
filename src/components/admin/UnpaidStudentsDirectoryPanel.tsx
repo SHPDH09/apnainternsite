@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Loader2, Mail, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -12,8 +12,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { AdminListPagination } from "@/components/admin/ui/AdminListPagination";
 import { AdminPageHeader, AdminTableShell } from "@/components/admin/ui";
-import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
+import { fetchAllSupabaseRows, fetchSupabaseTablePage } from "@/lib/fetchAllSupabaseRows";
 
 type UnpaidRow = {
   id: string;
@@ -27,50 +28,85 @@ type UnpaidRow = {
   source: "student" | "lead";
 };
 
+const PAGE_SIZE = 25;
+
 type Props = {
   client: SupabaseClient;
 };
 
 export function UnpaidStudentsDirectoryPanel({ client }: Props) {
   const [rows, setRows] = useState<UnpaidRow[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const paidKeysRef = useRef<{ userIds: Set<string>; emails: Set<string> } | null>(null);
+
+  const ensurePaidKeys = useCallback(async () => {
+    if (paidKeysRef.current) return paidKeysRef.current;
+    const payments = await fetchAllSupabaseRows<{ user_id?: string; email?: string }>(
+      client,
+      "payment_success",
+      {
+        select: "user_id,email",
+        orderBy: "created_at",
+        ascending: false,
+        pageSize: 500,
+        maxRows: 40_000,
+      }
+    );
+    const userIds = new Set(
+      payments.map((p) => String(p.user_id || "")).filter(Boolean)
+    );
+    const emails = new Set(
+      payments
+        .map((p) => String(p.email || "").trim().toLowerCase())
+        .filter(Boolean)
+    );
+    paidKeysRef.current = { userIds, emails };
+    return paidKeysRef.current;
+  }, [client]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [students, payments, leads] = await Promise.all([
-        fetchAllSupabaseRows(client, "students", {
-          select: "id,full_name,email,contact_number,university_name,college_name,status,created_at",
-        }),
-        fetchAllSupabaseRows(client, "payment_success", {
-          select: "user_id,email",
-        }),
-        fetchAllSupabaseRows(client, "registration_leads", {
-          select: "id,full_name,email,phone,university_name,college_name,created_at,cart_stage",
-        }).catch(() => []),
-      ]);
+      const paid = await ensurePaidKeys();
+      const searchQ = search.trim();
+      const { rows: studentPage, total: studentTotal } = await fetchSupabaseTablePage<
+        Record<string, unknown>
+      >(client, "students", {
+        page,
+        pageSize: PAGE_SIZE,
+        orderBy: "created_at",
+        ascending: false,
+        select:
+          "id,full_name,email,contact_number,university_name,college_name,status,created_at",
+        modify: (q) => {
+          let query = q;
+          if (searchQ) {
+            const s = searchQ.replace(/"/g, '\\"');
+            query = query.or(
+              `full_name.ilike.%${s}%,email.ilike.%${s}%,college_name.ilike.%${s}%`
+            );
+          }
+          return query;
+        },
+      });
 
-      const paidUserIds = new Set(
-        (payments || []).map((p: { user_id?: string }) => p.user_id).filter(Boolean),
-      );
-      const paidEmails = new Set(
-        (payments || [])
-          .map((p: { email?: string }) => String(p.email || "").trim().toLowerCase())
-          .filter(Boolean),
-      );
-
-      const unpaidStudents: UnpaidRow[] = (students || [])
-        .filter((s: Record<string, unknown>) => {
+      const unpaidStudents: UnpaidRow[] = studentPage
+        .filter((s) => {
           const id = String(s.id || "");
           const email = String(s.email || "").trim().toLowerCase();
+          if (paid.userIds.has(id)) return false;
+          if (email && paid.emails.has(email)) return false;
           const status = String(s.status || "").toLowerCase();
-          if (paidUserIds.has(id)) return false;
-          if (email && paidEmails.has(email)) return false;
-          return status.includes("pending") || status.includes("unpaid") || !paidUserIds.has(id);
+          return (
+            status.includes("pending") ||
+            status.includes("unpaid") ||
+            !paid.userIds.has(id)
+          );
         })
-        .slice(0, 500)
-        .map((s: Record<string, unknown>) => ({
+        .map((s) => ({
           id: String(s.id),
           full_name: (s.full_name as string) || null,
           email: (s.email as string) || null,
@@ -82,13 +118,35 @@ export function UnpaidStudentsDirectoryPanel({ client }: Props) {
           source: "student" as const,
         }));
 
-      const unpaidLeads: UnpaidRow[] = (leads || [])
-        .filter((l: Record<string, unknown>) => {
+      const { rows: leadPage, total: leadTotal } = await fetchSupabaseTablePage<
+        Record<string, unknown>
+      >(client, "registration_leads", {
+        page,
+        pageSize: PAGE_SIZE,
+        orderBy: "updated_at",
+        ascending: false,
+        select:
+          "id,full_name,email,phone,university_name,college_name,created_at,cart_stage",
+        modify: (q) => {
+          let query = q;
+          if (searchQ) {
+            const s = searchQ.replace(/"/g, '\\"');
+            query = query.or(
+              `full_name.ilike.%${s}%,email.ilike.%${s}%,college_name.ilike.%${s}%`
+            );
+          }
+          return query;
+        },
+      });
+
+      const unpaidLeads: UnpaidRow[] = leadPage
+        .filter((l) => {
           const stage = String(l.cart_stage || "").toLowerCase();
+          const email = String(l.email || "").trim().toLowerCase();
+          if (email && paid.emails.has(email)) return false;
           return !stage.includes("converted") && !stage.includes("paid");
         })
-        .slice(0, 200)
-        .map((l: Record<string, unknown>) => ({
+        .map((l) => ({
           id: String(l.id),
           full_name: (l.full_name as string) || null,
           email: (l.email as string) || null,
@@ -101,26 +159,26 @@ export function UnpaidStudentsDirectoryPanel({ client }: Props) {
         }));
 
       setRows([...unpaidStudents, ...unpaidLeads]);
+      setTotalCount(studentTotal + leadTotal);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load unpaid records";
       toast.error(msg);
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [client, ensurePaidKeys, page, search]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    setPage(0);
+  }, [search]);
 
-  const filtered = rows.filter((r) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return [r.full_name, r.email, r.contact_number, r.college_name, r.university_name]
-      .join(" ")
-      .toLowerCase()
-      .includes(q);
-  });
+  useEffect(() => {
+    const delay = search.trim() ? 300 : 0;
+    const timer = setTimeout(() => {
+      void load();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [load, page, search]);
 
   return (
     <div className="space-y-6">
@@ -143,11 +201,11 @@ export function UnpaidStudentsDirectoryPanel({ client }: Props) {
       ) : (
         <AdminTableShell
           title="Pending fee collection"
-          description={`${filtered.length} record(s)`}
+          description={`${rows.length} on this page · ~${totalCount} indexed rows`}
           searchValue={search}
           onSearchChange={setSearch}
           searchPlaceholder="Search by name, email, or college…"
-          empty={filtered.length === 0}
+          empty={rows.length === 0}
           emptyMessage="No unpaid students or leads found."
         >
           <Table>
@@ -161,7 +219,7 @@ export function UnpaidStudentsDirectoryPanel({ client }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.slice(0, 100).map((r) => (
+              {rows.map((r) => (
                 <TableRow key={`${r.source}-${r.id}`}>
                   <TableCell className="font-medium">{r.full_name || "—"}</TableCell>
                   <TableCell>
@@ -184,6 +242,12 @@ export function UnpaidStudentsDirectoryPanel({ client }: Props) {
               ))}
             </TableBody>
           </Table>
+          <AdminListPagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={totalCount}
+            onPageChange={setPage}
+          />
         </AdminTableShell>
       )}
 

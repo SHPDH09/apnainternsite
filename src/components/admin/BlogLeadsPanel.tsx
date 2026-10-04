@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Download, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -16,7 +16,10 @@ import {
 } from "@/components/ui/table";
 import { adminCardClass } from "@/components/admin/ui/adminStyles";
 import { AdminListPagination } from "@/components/admin/ui/AdminListPagination";
-import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
+import {
+  fetchAllSupabaseRows,
+  fetchSupabaseTablePage,
+} from "@/lib/fetchAllSupabaseRows";
 import { formatBlogDate } from "@/lib/siteBlogApi";
 
 const BLOG_LEADS_PAGE_SIZE = 20;
@@ -44,6 +47,7 @@ function csvEscape(value: string): string {
 
 export function BlogLeadsPanel({ client }: Props) {
   const [rows, setRows] = useState<SiteBlogLead[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [phoneSearch, setPhoneSearch] = useState("");
   const [textSearch, setTextSearch] = useState("");
@@ -51,68 +55,78 @@ export function BlogLeadsPanel({ client }: Props) {
   const [dateTo, setDateTo] = useState("");
   const [leadsPage, setLeadsPage] = useState(0);
 
+  const applyLeadFilters = useCallback(
+    (q: { gte: (c: string, v: string) => typeof q; lte: (c: string, v: string) => typeof q; ilike: (c: string, v: string) => typeof q; or: (f: string) => typeof q }) => {
+      let query = q;
+      const phoneQ = phoneSearch.replace(/\D/g, "");
+      const textQ = textSearch.trim();
+      if (dateFrom) query = query.gte("created_at", `${dateFrom}T00:00:00`);
+      if (dateTo) query = query.lte("created_at", `${dateTo}T23:59:59.999`);
+      if (phoneQ) query = query.ilike("phone", `%${phoneQ}%`);
+      if (textQ) {
+        const s = textQ.replace(/"/g, '\\"');
+        query = query.or(
+          `full_name.ilike.%${s}%,email.ilike.%${s}%,college_name.ilike.%${s}%,post_title.ilike.%${s}%,post_slug.ilike.%${s}%`
+        );
+      }
+      return query;
+    },
+    [phoneSearch, textSearch, dateFrom, dateTo]
+  );
+
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchAllSupabaseRows(client, "site_blog_leads", {
-        order: { column: "created_at", ascending: false },
-      });
-      setRows((data || []) as SiteBlogLead[]);
+      const { rows: pageRows, total } = await fetchSupabaseTablePage<SiteBlogLead>(
+        client,
+        "site_blog_leads",
+        {
+          page: leadsPage,
+          pageSize: BLOG_LEADS_PAGE_SIZE,
+          orderBy: "created_at",
+          ascending: false,
+          modify: (q) => applyLeadFilters(q as Parameters<typeof applyLeadFilters>[0]) as typeof q,
+        }
+      );
+      setRows(pageRows);
+      setTotalCount(total);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not load blog leads.");
       setRows([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
-  }, [client]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  const filtered = useMemo(() => {
-    const phoneQ = phoneSearch.replace(/\D/g, "");
-    const textQ = textSearch.trim().toLowerCase();
-    const fromTs = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
-    const toTs = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
-
-    return rows.filter((r) => {
-      if (phoneQ) {
-        const p = String(r.phone || "").replace(/\D/g, "");
-        if (!p.includes(phoneQ)) return false;
-      }
-      if (textQ) {
-        const blob = [r.full_name, r.email, r.college_name, r.post_title, r.post_slug]
-          .map((x) => String(x || "").toLowerCase())
-          .join(" ");
-        if (!blob.includes(textQ)) return false;
-      }
-      if (fromTs || toTs) {
-        const ts = r.created_at ? new Date(r.created_at).getTime() : NaN;
-        if (Number.isNaN(ts)) return false;
-        if (fromTs != null && ts < fromTs) return false;
-        if (toTs != null && ts > toTs) return false;
-      }
-      return true;
-    });
-  }, [rows, phoneSearch, textSearch, dateFrom, dateTo]);
+  }, [client, leadsPage, buildFilters]);
 
   useEffect(() => {
     setLeadsPage(0);
   }, [phoneSearch, textSearch, dateFrom, dateTo]);
 
-  const leadsPageCount = Math.max(1, Math.ceil(filtered.length / BLOG_LEADS_PAGE_SIZE));
-  const safeLeadsPage = Math.min(leadsPage, leadsPageCount - 1);
-  const pagedLeads = filtered.slice(
-    safeLeadsPage * BLOG_LEADS_PAGE_SIZE,
-    (safeLeadsPage + 1) * BLOG_LEADS_PAGE_SIZE
-  );
+  useEffect(() => {
+    const delay = textSearch.trim() || phoneSearch.trim() ? 300 : 0;
+    const timer = setTimeout(() => {
+      void reload();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [reload, leadsPage, phoneSearch, textSearch, dateFrom, dateTo]);
 
-  const downloadCsv = () => {
+  const safeLeadsPage = leadsPage;
+
+  const downloadCsv = async () => {
+    const toastId = toast.loading("Preparing CSV…");
+    try {
+      const all = await fetchAllSupabaseRows<SiteBlogLead>(client, "site_blog_leads", {
+        orderBy: "created_at",
+        ascending: false,
+        pageSize: 250,
+        maxRows: 15_000,
+        modify: (q) => buildFilters(q as unknown as ReturnType<typeof client.from>) as typeof q,
+      });
     const header = ["Date", "Name", "Email", "Phone", "College", "Post title", "Post slug"];
     const lines = [
       header.join(","),
-      ...filtered.map((r) =>
+      ...all.map((r) =>
         [
           r.created_at ? new Date(r.created_at).toISOString() : "",
           r.full_name,
@@ -133,6 +147,10 @@ export function BlogLeadsPanel({ client }: Props) {
     a.download = `blog-leads-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+      toast.success(`Exported ${all.length} leads`, { id: toastId });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed", { id: toastId });
+    }
   };
 
   return (
@@ -170,12 +188,12 @@ export function BlogLeadsPanel({ client }: Props) {
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
           </div>
-          <Button type="button" variant="outline" className="shrink-0" onClick={downloadCsv} disabled={!filtered.length}>
+          <Button type="button" variant="outline" className="shrink-0" onClick={() => void downloadCsv()} disabled={!totalCount}>
             <Download className="mr-2 size-4" /> Download CSV
           </Button>
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          {filtered.length} of {rows.length} leads match filters (paginated below).
+          {totalCount} leads match filters (server-paginated).
         </p>
       </div>
 
@@ -183,7 +201,7 @@ export function BlogLeadsPanel({ client }: Props) {
         <div className="flex justify-center py-16">
           <Loader2 className="size-8 animate-spin text-[#5AA3E6]" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : totalCount === 0 ? (
         <p className="py-12 text-center text-sm text-slate-500">No blog leads match your filters.</p>
       ) : (
         <ScrollArea className={adminCardClass + " max-h-[560px]"}>
@@ -198,7 +216,7 @@ export function BlogLeadsPanel({ client }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pagedLeads.map((r) => (
+              {rows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="whitespace-nowrap text-xs text-slate-600">
                     {formatBlogDate(r.created_at) || "—"}
@@ -222,11 +240,11 @@ export function BlogLeadsPanel({ client }: Props) {
           </Table>
         </ScrollArea>
       )}
-      {!loading && filtered.length > 0 ? (
+      {!loading && totalCount > 0 ? (
         <AdminListPagination
           page={safeLeadsPage}
           pageSize={BLOG_LEADS_PAGE_SIZE}
-          total={filtered.length}
+          total={totalCount}
           onPageChange={setLeadsPage}
           label="Leads"
         />

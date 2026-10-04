@@ -518,6 +518,8 @@ export const CollegeRostersPanel = () => {
         select: "id,reference_number,full_name,raw_data,claimed_user_id,claimed_at,created_at",
         orderBy: "created_at",
         ascending: false,
+        pageSize: 250,
+        maxRows: 5_000,
         modify: (q) => q.eq("college_id", row.college_id),
       });
       setDetailRows(data as RosterRow[]);

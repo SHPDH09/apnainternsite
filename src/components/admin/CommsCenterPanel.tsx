@@ -22,7 +22,7 @@ import { MultiSelectCheckboxGroup } from "@/components/admin/MultiSelectCheckbox
 import { InternshipModeFilterSelect } from "@/components/admin/InternshipModeFilterSelect";
 import { fetchAllCollegesCatalog } from "@/lib/institutionCatalog";
 import { fetchAdminStudentsLight } from "@/lib/adminStudentDirectory";
-import { fetchAllSupabaseRows } from "@/lib/fetchAllSupabaseRows";
+import { fetchRecentCancelledForLeads } from "@/lib/paymentsAdmin";
 import {
   filterCommsRecipients,
   searchCommsRecipients,
@@ -102,10 +102,7 @@ export function CommsCenterPanel({ isActive = true }: Props) {
 
       let cancelledRows: Record<string, unknown>[] = [];
       try {
-        cancelledRows = await fetchAllSupabaseRows(supabase, "payment_cancelled", {
-          orderBy: "created_at",
-          ascending: false,
-        });
+        cancelledRows = await fetchRecentCancelledForLeads(supabase);
       } catch {
         cancelledRows = [];
       }

@@ -125,6 +125,12 @@ import {
 } from "@/lib/adminBulkComms";
 import { buildLeadHuntRows } from "@/lib/leadHunt";
 import { fetchRegistrationLeadsPage } from "@/lib/registrationLeadsAdmin";
+import {
+  fetchPaymentDashboardSample,
+  fetchPaymentSuccessPage,
+  fetchRecentCancelledForLeads,
+  fetchRecentFailedForLeads,
+} from "@/lib/paymentsAdmin";
 import { StudentEditFormFields } from "@/components/StudentEditFormFields";
 import type { StudentEditFormVariant } from "@/components/StudentEditFormFields";
 import {
@@ -281,6 +287,9 @@ export default function Admin() {
   const [domains, setDomains] = useState<any[]>([]);
   const [classesList, setClassesList] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [paymentsTotalCount, setPaymentsTotalCount] = useState(0);
+  const [dashboardPaymentRows, setDashboardPaymentRows] = useState<any[]>([]);
+  const [dashboardCancelledRows, setDashboardCancelledRows] = useState<any[]>([]);
   const [failedPayments, setFailedPayments] = useState<any[]>([]);
   const [cancelledPayments, setCancelledPayments] = useState<any[]>([]);
   const [visitorCount, setVisitorCount] = useState(0);
@@ -889,6 +898,8 @@ export default function Admin() {
   const adminDataLoadedRef = useRef({
     core: false,
     payments: false,
+    paymentsDashboard: false,
+    leadsExtras: false,
     leads: false,
     attendance: false,
     commsStudents: false,
@@ -1437,55 +1448,94 @@ export default function Admin() {
     return true;
   }, [navigate, safeQuery]);
 
-  /** Payment history for dashboard + transactions + lead stats. */
+  /** Dashboard revenue charts — bounded sample, not full payment table. */
+  const loadPaymentsDashboardData = useCallback(async (opts?: { force?: boolean }) => {
+    if (adminDataLoadedRef.current.paymentsDashboard && !opts?.force) return;
+    setIsPaymentsLoading(true);
+    try {
+      const { success, cancelled } = await fetchPaymentDashboardSample(supabase);
+      setDashboardPaymentRows(
+        success.filter((p: any) => p.status === "success" || !p.status)
+      );
+      setDashboardCancelledRows(cancelled);
+      adminDataLoadedRef.current.paymentsDashboard = true;
+    } catch (err: any) {
+      console.warn("Payment dashboard sample:", err);
+    } finally {
+      setIsPaymentsLoading(false);
+    }
+  }, []);
+
+  /** Payments tab — one server page at a time. */
+  const loadPaymentsListPage = useCallback(async () => {
+    setIsPaymentsLoading(true);
+    try {
+      const { rows, total } = await fetchPaymentSuccessPage(
+        supabase,
+        payPage,
+        payPageSize,
+        {
+          search: paySearchTerm,
+          college: payCollegeFilter,
+          startDate: payStartDate,
+          endDate: payEndDate,
+          status: "success",
+        }
+      );
+      setPayments(rows);
+      setPaymentsTotalCount(total);
+      adminDataLoadedRef.current.payments = true;
+    } catch (err: any) {
+      console.warn("Error fetching payment_success page:", err);
+      toast.error("Failed to load payments: " + (err?.message || String(err)));
+    } finally {
+      setIsPaymentsLoading(false);
+    }
+  }, [
+    payPage,
+    payPageSize,
+    paySearchTerm,
+    payCollegeFilter,
+    payStartDate,
+    payEndDate,
+  ]);
+
+  /** Recent cancelled/failed rows for Leads Hub (bounded prefetch). */
+  const loadLeadsPaymentExtras = useCallback(async (opts?: { force?: boolean }) => {
+    if (adminDataLoadedRef.current.leadsExtras && !opts?.force) return;
+    try {
+      const [cancelled, failed] = await Promise.all([
+        fetchRecentCancelledForLeads(supabase),
+        fetchRecentFailedForLeads(supabase),
+      ]);
+      cancelledPaymentsRef.current = cancelled;
+      setCancelledPayments(cancelled);
+      setFailedPayments(failed);
+      syncLeadsCommsFromCancelled(cancelled);
+      adminDataLoadedRef.current.leadsExtras = true;
+    } catch (err: any) {
+      console.warn("Leads payment extras:", err);
+    }
+  }, []);
+
   const loadPaymentsData = useCallback(
     async (opts?: { force?: boolean }) => {
-      if (adminDataLoadedRef.current.payments && !opts?.force) return;
       if (paymentsLoadInFlightRef.current) return paymentsLoadInFlightRef.current;
-
       const task = (async () => {
-        setIsPaymentsLoading(true);
-        try {
-          let pcRows: any[] = [];
-          let paymentSuccessRows: any[] = [];
-
-          const [cancelled, success] = await Promise.all([
-            fetchAllSupabaseRows(supabase, "payment_cancelled", {
-              orderBy: "created_at",
-              ascending: false,
-            }).catch((err: any) => {
-              console.warn("Error fetching payment_cancelled:", err);
-              return [] as any[];
-            }),
-            fetchAllSupabaseRows(supabase, "payment_success", {
-              orderBy: "created_at",
-              ascending: false,
-            }).catch((err: any) => {
-              console.warn("Error fetching payment_success:", err);
-              return [] as any[];
-            }),
-          ]);
-
-          pcRows = cancelled;
-          paymentSuccessRows = success;
-
-          const allUnified = paymentSuccessRows;
-          setPayments(allUnified.filter((p: any) => p.status === "success" || !p.status));
-          setFailedPayments(allUnified.filter((p: any) => p.status === "failed"));
-          cancelledPaymentsRef.current = pcRows;
-          setCancelledPayments(pcRows);
-          syncLeadsCommsFromCancelled(pcRows);
-          adminDataLoadedRef.current.payments = true;
-        } finally {
-          setIsPaymentsLoading(false);
-          paymentsLoadInFlightRef.current = null;
+        await loadPaymentsDashboardData(opts);
+        if (activeTab === "payments") {
+          await loadPaymentsListPage();
         }
       })();
-
       paymentsLoadInFlightRef.current = task;
+      try {
+        await task;
+      } finally {
+        paymentsLoadInFlightRef.current = null;
+      }
       return task;
     },
-    []
+    [activeTab, loadPaymentsDashboardData, loadPaymentsListPage]
   );
 
   /** Registration draft leads for Leads Hub — server-paginated for AWS speed. */
@@ -1525,12 +1575,8 @@ export default function Admin() {
   const loadEnrolledEmailsOnly = useCallback(async () => {
     if (enrolledEmailsRef.current.size > 0) return;
     try {
-      const rows = await fetchAllSupabaseRows<{ email?: string }>(supabase, "students", {
-        select: "email",
-        orderBy: "created_at",
-        ascending: false,
-      });
-      applyEnrolledEmails(rows.map((r) => r.email));
+      const rows = await fetchAdminStudentsLight(supabase);
+      applyEnrolledEmails(rows.map((r) => String(r.email || "")));
       if (cancelledPaymentsRef.current.length > 0) {
         syncLeadsCommsFromCancelled(cancelledPaymentsRef.current);
       }
@@ -1682,11 +1728,15 @@ export default function Admin() {
               fetchAllSupabaseRows(supabase, "classes", {
                 orderBy: "scheduled_at",
                 ascending: true,
+                pageSize: 250,
+                maxRows: 4_000,
               }),
             () =>
               fetchAllSupabaseRows(supabase, "assignments", {
                 orderBy: "created_at",
                 ascending: false,
+                pageSize: 250,
+                maxRows: 4_000,
               }),
           ],
           1
@@ -1785,8 +1835,11 @@ export default function Admin() {
       if (!ok) return;
 
       const tasks: Promise<void>[] = [];
-      if (adminDataLoadedRef.current.payments) {
+      if (adminDataLoadedRef.current.payments || adminDataLoadedRef.current.paymentsDashboard) {
         tasks.push(loadPaymentsData({ force: true }));
+      }
+      if (adminDataLoadedRef.current.leadsExtras) {
+        tasks.push(loadLeadsPaymentExtras({ force: true }));
       }
       if (adminDataLoadedRef.current.leads) {
         tasks.push(loadRegistrationLeadsData({ force: true }));
@@ -2111,18 +2164,18 @@ export default function Admin() {
   useEffect(() => {
     if (!allowed) return;
 
-    if (
-      activeTab === "dashboard" ||
-      activeTab === "payments" ||
-      activeTab === "check-payment" ||
-      activeTab === "unpaid-students"
-    ) {
-      void loadPaymentsData();
+    if (activeTab === "dashboard" || activeTab === "check-payment" || activeTab === "unpaid-students") {
+      void loadPaymentsDashboardData();
+      return;
+    }
+    if (activeTab === "payments") {
+      void loadPaymentsDashboardData();
+      void loadPaymentsListPage();
       return;
     }
     if (activeTab === "leads") {
       void (async () => {
-        await loadPaymentsData();
+        await loadLeadsPaymentExtras();
         if (!adminDataLoadedRef.current.commsStudents) {
           await loadEnrolledEmailsOnly();
         }
@@ -2142,7 +2195,7 @@ export default function Admin() {
     }
     if (activeTab === "comms") {
       void (async () => {
-        await loadPaymentsData();
+        await loadLeadsPaymentExtras();
         await loadCommsStudentsData();
       })();
       return;
@@ -2153,7 +2206,9 @@ export default function Admin() {
   }, [
     allowed,
     activeTab,
-    loadPaymentsData,
+    loadPaymentsDashboardData,
+    loadPaymentsListPage,
+    loadLeadsPaymentExtras,
     loadRegistrationLeadsData,
     loadEnrolledEmailsOnly,
     loadAttendanceTabData,
@@ -3174,64 +3229,31 @@ Apna Intern Team`;
     await executeTransferLead(lead, password);
   };
 
-  // Payment Filtering Logic
-  const filteredPayments = payments.filter(pay => {
-    // Date filter
-    if (payStartDate) {
-      const payDate = new Date(pay.created_at);
-      const start = new Date(payStartDate);
-      start.setHours(0, 0, 0, 0);
-      if (payDate < start) return false;
-    }
-    if (payEndDate) {
-      const payDate = new Date(pay.created_at);
-      const end = new Date(payEndDate);
-      end.setHours(23, 59, 59, 999);
-      if (payDate > end) return false;
-    }
-    
-    // Search filter
-    if (paySearchTerm) {
-      const s = paySearchTerm.toLowerCase();
-      const student = students.find(
-        (st) => st.email?.toLowerCase() === pay.email?.toLowerCase()
-      );
-      if (
-        !pay.full_name?.toLowerCase().includes(s) &&
-        !pay.email?.toLowerCase().includes(s) &&
-        !pay.payment_id?.toLowerCase().includes(s) &&
-        !pay.college_name?.toLowerCase().includes(s) &&
-        !student?.contact_number?.toLowerCase().includes(s)
-      ) {
-        return false;
-      }
-    }
-
-    // College filter — prefer payment row, then loaded directory page
-    if (payCollegeFilter !== "all") {
-      const college =
-        pay.college_name ||
-        students.find((s) => s.email?.toLowerCase() === pay.email?.toLowerCase())?.college_name;
-      if (college !== payCollegeFilter) return false;
-    }
-    
-    return true;
-  });
-
-  const payPageCount = Math.max(1, Math.ceil(filteredPayments.length / payPageSize));
+  const payPageCount = Math.max(1, Math.ceil(paymentsTotalCount / payPageSize));
   const paySafePage = Math.min(payPage, payPageCount - 1);
-  const paginatedPayments = useMemo(
-    () =>
-      filteredPayments.slice(
-        paySafePage * payPageSize,
-        (paySafePage + 1) * payPageSize
-      ),
-    [filteredPayments, paySafePage, payPageSize]
-  );
+  const paginatedPayments = payments;
 
   useEffect(() => {
     setPayPage(0);
   }, [payStartDate, payEndDate, payCollegeFilter, paySearchTerm]);
+
+  useEffect(() => {
+    if (!allowed || activeTab !== "payments") return;
+    const delay = paySearchTerm.trim() ? 300 : 0;
+    const timer = setTimeout(() => {
+      void loadPaymentsListPage();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [
+    allowed,
+    activeTab,
+    payPage,
+    paySearchTerm,
+    payCollegeFilter,
+    payStartDate,
+    payEndDate,
+    loadPaymentsListPage,
+  ]);
 
   const handleUpdateAdminPassword = async () => {
     setProcessing(true);
@@ -3342,8 +3364,8 @@ Apna Intern Team`;
               <>
               <TabsContent value="dashboard" className="mt-0">
                 <AdminDashboardPanel
-                  payments={payments}
-                  cancelledPayments={cancelledPayments}
+                  payments={dashboardPaymentRows}
+                  cancelledPayments={dashboardCancelledRows}
                   studentTotalCount={studentTotalCount}
                   visitorCount={visitorCount}
                   uniqueVisitorCount={uniqueVisitorCount}
@@ -3732,8 +3754,8 @@ Apna Intern Team`;
                   </ScrollArea>
                   <div className="p-4 bg-muted/10 border-t flex flex-col md:flex-row items-center justify-between gap-4 mt-0 rounded-b-xl">
                     <div className="text-xs text-muted-foreground font-medium">
-                      Showing {filteredPayments.length === 0 ? 0 : paySafePage * payPageSize + 1} to{" "}
-                      {Math.min(filteredPayments.length, (paySafePage + 1) * payPageSize)} of {filteredPayments.length}{" "}
+                      Showing {paymentsTotalCount === 0 ? 0 : paySafePage * payPageSize + 1} to{" "}
+                      {Math.min(paymentsTotalCount, (paySafePage + 1) * payPageSize)} of {paymentsTotalCount}{" "}
                       transactions
                     </div>
                     <div className="flex items-center gap-2">

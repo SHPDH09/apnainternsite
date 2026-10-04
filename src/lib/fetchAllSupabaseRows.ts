@@ -153,6 +153,40 @@ export async function fetchAllSupabaseRpcRows<T extends Row = Row>(
   );
 }
 
+/** Offset page with exact total (for admin tables; max 200 rows per page). */
+export async function fetchSupabaseTablePage<T extends Row = Row>(
+  supabase: SupabaseClient,
+  table: string,
+  options: FetchAllSupabaseRowsOptions & { page: number; pageSize: number }
+): Promise<{ rows: T[]; total: number }> {
+  const pageSize = Math.max(1, Math.min(options.pageSize, 200));
+  const page = Math.max(0, options.page);
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+  const select = options.select ?? "*";
+  const orderBy = options.orderBy ?? "created_at";
+  const ascending = options.ascending ?? false;
+  const tieBreaker = options.tieBreaker ?? "id";
+  const modify = options.modify;
+
+  let query = (supabase.from(table) as unknown as Query)
+    .select(select, { count: "exact" })
+    .order(orderBy, { ascending })
+    .range(from, to);
+  if (tieBreaker && tieBreaker !== orderBy) {
+    query = query.order(tieBreaker, { ascending });
+  }
+  if (modify) query = modify(query);
+
+  const { data, error, count } = await withSupabaseRetry(`table page ${table}`, async () => {
+    const res = await query;
+    if (res.error) throw res.error;
+    return res;
+  });
+
+  return { rows: (data || []) as T[], total: count ?? 0 };
+}
+
 /** Exact row count for a table (ignores PostgREST default 1000-row page cap). */
 export async function fetchSupabaseExactCount(
   supabase: SupabaseClient,
