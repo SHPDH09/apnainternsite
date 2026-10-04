@@ -19,6 +19,26 @@ const TEXT_ID_MARKER = "WHERE s.id = v_uid::text";
 /** Marker in uuid-id admin registration function (script 21). */
 const UUID_ID_MARKER = "apna_admin_reg_uuid_v21";
 
+const REGISTRATION_RPC_NAME = "admin_create_minimal_student_registration";
+
+export function isRegistrationRpc(name: string): boolean {
+  return name === REGISTRATION_RPC_NAME;
+}
+
+/** True when Add Registration failed because the wrong SQL variant is installed (or RPC is missing). */
+export function isRegistrationRpcMismatchError(err: unknown): boolean {
+  const code = String((err as { code?: string })?.code || "");
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    code === "42883" ||
+    code === "42804" ||
+    /btrim\(uuid\)/i.test(msg) ||
+    /column "id" is of type uuid but expression is of type text/i.test(msg) ||
+    /could not find the function/i.test(msg) ||
+    /function public\.admin_create_minimal_student_registration does not exist/i.test(msg)
+  );
+}
+
 function resolveSqlPath(rel: string): string {
   const bundled = path.join(moduleDir, "sql", path.basename(rel));
   if (fs.existsSync(bundled)) return bundled;

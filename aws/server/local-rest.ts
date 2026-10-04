@@ -13,7 +13,11 @@ import {
   ensurePartnerApplicationsTables,
   isPartnerApplicationsTable,
 } from "./partner-applications-bootstrap";
-import { ensureAdminRegistrationRpc } from "./registration-bootstrap";
+import {
+  ensureAdminRegistrationRpc,
+  isRegistrationRpc,
+  isRegistrationRpcMismatchError,
+} from "./registration-bootstrap";
 import { ensureStudentAttendanceMarkRpc } from "./attendance-bootstrap";
 import {
   ensureCertificateIssueRpc,
@@ -744,16 +748,9 @@ export async function restRpc(req: Request, res: Response) {
     } catch (firstErr) {
       const code = String((firstErr as { code?: string })?.code || "");
       const msg = String((firstErr as { message?: string })?.message || firstErr || "");
-      const isRegistrationRpc = name === "admin_create_minimal_student_registration";
       const isUploadRpc = name.startsWith("admin_student_data_upload_");
       const shouldBootstrapRegistration =
-        isRegistrationRpc &&
-        (code === "42883" ||
-          code === "42804" ||
-          /btrim\(uuid\)/i.test(msg) ||
-          /column "id" is of type uuid but expression is of type text/i.test(msg) ||
-          /could not find the function/i.test(msg) ||
-          /function public\.admin_create_minimal_student_registration does not exist/i.test(msg));
+        isRegistrationRpc(name) && isRegistrationRpcMismatchError(firstErr);
       const shouldBootstrapUpload =
         isUploadRpc &&
         (code === "42804" ||
