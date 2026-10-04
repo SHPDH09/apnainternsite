@@ -92,6 +92,7 @@ import {
   fetchAllCollegesCatalog,
   fetchUniversitiesCatalog,
 } from "@/lib/institutionCatalog";
+import { fetchSystemSettingsResilient } from "@/lib/systemSettingsResilience";
 import { displayCollegeName } from "@/lib/collegeDisplay";
 import {
   setLoginPasswordViaRpc,
@@ -689,7 +690,7 @@ const SuperAdmin = () => {
           console.warn("[super-admin] classes:", err);
           return [] as Record<string, unknown>[];
         }),
-        supabase.from("system_settings").select("*"),
+        fetchSystemSettingsResilient(supabase),
         supabase.from("admin_permissions").select("*"),
         (async () => {
           const { fetchAdminPaymentConfig } = await import("@/lib/paymentConfigAdmin");
@@ -734,7 +735,7 @@ const SuperAdmin = () => {
       setCerts(ce.data || []);
       setDomains(dm.data || []);
       setClassesList(Array.isArray(cl) ? cl : cl.data || []);
-      setSystemSettings(ss.data || []);
+      setSystemSettings(Array.isArray(ss) ? ss : ss?.data || []);
       setAdminPermissions(ap.data || []);
       setPaymentConfig(pc.data || { id: 1, razorpay_key_id: '', razorpay_key_secret: '', amount_paise: 9900, is_active: false });
       
@@ -1566,6 +1567,7 @@ const SuperAdmin = () => {
   };
 
   const toggleSystemSetting = async (key: string, current: boolean) => {
+    await fetchSystemSettingsResilient(supabase);
     const { error } = await supabase.from("system_settings").update({ is_enabled: !current }).eq("key", key);
     if (error) {
       toast.error("Update failed");

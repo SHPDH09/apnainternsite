@@ -36,6 +36,7 @@ import { OfferLetter } from "@/components/OfferLetter";
 import { IssuedCertificateDocument } from "@/components/IssuedCertificateDocument";
 import { downloadOfferLetterPdf } from "@/lib/offerLetterPdf";
 import { fetchAllCollegesCatalog, fetchUniversitiesCatalog } from "@/lib/institutionCatalog";
+import { fetchSystemSettingsResilient } from "@/lib/systemSettingsResilience";
 import {
   certificateDisplayFromRecord,
   resolveUniversityRollNo,
@@ -260,7 +261,7 @@ const Dashboard = () => {
         }),
         fetchRolesForUser(supabase, session.user.id),
         supabase.from("certificates").select("*").eq("user_id", uid).maybeSingle(),
-        supabase.from("system_settings").select("*"),
+        fetchSystemSettingsResilient(supabase),
         fetchStudentNotifications(supabase, uid).catch(() => []),
         fetchUnreadNotificationCount(supabase).catch(() => 0),
         fetchStudentAssignments(supabase).catch(() => []),
@@ -295,7 +296,7 @@ const Dashboard = () => {
       void warmStudentUniquenessValidation();
       setCert(c.data);
       setPayment(pay.data);
-      setSystemSettings(ss.data || []);
+      setSystemSettings(Array.isArray(ss) ? ss : []);
       setNotifications(Array.isArray(n) ? n : n?.data || []);
       setUnreadNotifCount(typeof unreadN === "number" ? unreadN : Number(unreadN ?? 0));
 

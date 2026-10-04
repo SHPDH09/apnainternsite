@@ -96,6 +96,7 @@ import {
   fetchUniversitiesCatalog,
 } from "@/lib/institutionCatalog";
 import { runInBatches } from "@/lib/supabaseQueryResilience";
+import { fetchSystemSettingsResilient } from "@/lib/systemSettingsResilience";
 import { adminUpsertStudentProfile } from "@/lib/adminProfileUpsert";
 import { saveStudentDirectoryUpdate } from "@/lib/saveStudentDirectoryRow";
 import { assertSendMailOk, getSendMailApiUrl } from "@/lib/sendMailApi";
@@ -1357,7 +1358,10 @@ export default function Admin() {
           const rows = await fetchInternshipDomainsResilient(supabase);
           return { data: rows, error: null };
         },
-        () => safeQuery(supabase.from("system_settings").select("*"), "system_settings"),
+        async () => ({
+          data: await fetchSystemSettingsResilient(supabase),
+          error: null,
+        }),
         () =>
           safeQuery(
             supabase

@@ -23,11 +23,10 @@ export function isMissingSystemSettingsError(err: unknown): boolean {
   );
 }
 
-/** Platform-wide service toggles (admin + student dashboard). */
-export async function ensureSystemSettingsSchema(): Promise<{ ok: true }> {
-  if (bootstrapped) return { ok: true };
+type SqlRunner = (text: string, params?: unknown[]) => Promise<unknown>;
 
-  await query(`
+async function runBootstrap(run: SqlRunner): Promise<{ ok: true }> {
+  await run(`
     CREATE TABLE IF NOT EXISTS public.system_settings (
       key text PRIMARY KEY,
       is_enabled boolean NOT NULL DEFAULT true,
@@ -38,7 +37,7 @@ export async function ensureSystemSettingsSchema(): Promise<{ ok: true }> {
   `);
 
   for (const row of DEFAULT_ROWS) {
-    await query(
+    await run(
       `
       INSERT INTO public.system_settings (key, is_enabled)
       VALUES ($1, $2)
@@ -49,7 +48,7 @@ export async function ensureSystemSettingsSchema(): Promise<{ ok: true }> {
   }
 
   try {
-    await query(`
+    await run(`
       ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS "Public read system_settings" ON public.system_settings;
       CREATE POLICY "Public read system_settings"
@@ -68,14 +67,29 @@ export async function ensureSystemSettingsSchema(): Promise<{ ok: true }> {
         );
     `);
   } catch {
-    await query(`ALTER TABLE public.system_settings DISABLE ROW LEVEL SECURITY`);
+    await run(`ALTER TABLE public.system_settings DISABLE ROW LEVEL SECURITY`);
   }
 
-  await query(`
+  await run(`
     GRANT SELECT ON public.system_settings TO anon, authenticated;
     GRANT SELECT, INSERT, UPDATE, DELETE ON public.system_settings TO authenticated;
   `);
 
+  return { ok: true };
+}
+
+/** Platform-wide service toggles (admin + student dashboard). */
+export async function ensureSystemSettingsSchema(): Promise<{ ok: true }> {
+  if (bootstrapped) return { ok: true };
+  await runBootstrap((text, params) => query(text, params));
+  bootstrapped = true;
+  return { ok: true };
+}
+
+/** Same bootstrap using the Vercel lite pool (rds-portal cold start). */
+export async function ensureSystemSettingsSchemaVercel(): Promise<{ ok: true }> {
+  const { vercelLiteQuery } = await import("./vercel-lite-pool.js");
+  await runBootstrap((text, params) => vercelLiteQuery(text, params));
   bootstrapped = true;
   return { ok: true };
 }

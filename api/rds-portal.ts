@@ -5,7 +5,7 @@ import { getRpcDef } from "../aws/server/rpc-registry.js";
 import { handleVercelAuthLite } from "../aws/server/vercel-auth-lite.js";
 import { getVercelLitePool } from "../aws/server/vercel-lite-pool.js";
 import {
-  ensureSystemSettingsSchema,
+  ensureSystemSettingsSchemaVercel,
   isMissingSystemSettingsError,
 } from "../aws/server/system-settings-bootstrap.js";
 
@@ -36,6 +36,7 @@ const TS_RPC = new Set([
   "admin_ensure_partner_applications",
   "admin_ensure_project_report_templates",
   "student_ensure_uniqueness_schema",
+  "admin_ensure_system_settings",
 ]);
 
 /** Granted to anon in Postgres; supabase-js often sends Bearer local-anon-key until refresh completes. */
@@ -248,6 +249,27 @@ async function callRpcLite(
   }
 }
 
+async function tryTsEnsureRpcLite(
+  req: VercelRequest,
+  res: VercelResponse,
+  pathOnly: string
+): Promise<boolean> {
+  if (req.method !== "POST") return false;
+  const m = pathOnly.match(/^\/rest\/v1\/rpc\/([a-z_][a-z0-9_]*)$/i);
+  if (!m) return false;
+  if (m[1] !== "admin_ensure_system_settings") return false;
+  try {
+    const result = await ensureSystemSettingsSchemaVercel();
+    res.status(200).json(result);
+    return true;
+  } catch (err) {
+    res.status(400).json({
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return true;
+  }
+}
+
 async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: string): Promise<boolean> {
   if (req.method !== "POST") return false;
   const m = pathOnly.match(/^\/rest\/v1\/rpc\/([a-z_][a-z0-9_]*)$/i);
@@ -408,7 +430,7 @@ async function tryRestLite(req: VercelRequest, res: VercelResponse, pathOnly: st
   } catch (err) {
     if (table === "system_settings" && isMissingSystemSettingsError(err)) {
       try {
-        await ensureSystemSettingsSchema();
+        await ensureSystemSettingsSchemaVercel();
         const retry = await runSelect();
         if (req.method === "HEAD") {
           res.status(200).end();
@@ -463,6 +485,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   if (pathOnly.startsWith("/rest/")) {
+    const tsEnsureHandled = await tryTsEnsureRpcLite(req, res, pathOnly);
+    if (tsEnsureHandled) return;
     const rpcHandled = await tryRpcLite(req, res, pathOnly);
     if (rpcHandled) return;
     const handled = await tryRestLite(req, res, pathOnly);
