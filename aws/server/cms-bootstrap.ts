@@ -9,6 +9,38 @@ export function isCmsTable(table: string): boolean {
   return CMS_TABLE_SET.has(table);
 }
 
+export function isSiteVisitsTable(table: string): boolean {
+  return table === "site_visits";
+}
+
+async function bootstrapSiteVisits(): Promise<void> {
+  await runSql(`
+    CREATE TABLE IF NOT EXISTS public.site_visits (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      visitor_id text NOT NULL,
+      page_path text,
+      referrer text,
+      user_agent text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_site_visits_created_at
+      ON public.site_visits (created_at DESC);
+    ALTER TABLE public.site_visits ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS "Anyone can insert site visits" ON public.site_visits;
+    CREATE POLICY "Anyone can insert site visits"
+      ON public.site_visits FOR INSERT TO anon, authenticated
+      WITH CHECK (true);
+    GRANT INSERT ON public.site_visits TO anon, authenticated;
+    GRANT SELECT ON public.site_visits TO authenticated;
+  `);
+}
+
+export async function ensureSiteVisitsTable(): Promise<void> {
+  if (BOOTSTRAPPED.has("site_visits")) return;
+  await bootstrapSiteVisits();
+  BOOTSTRAPPED.add("site_visits");
+}
+
 export function isMissingRelationError(err: unknown, table?: string): boolean {
   const msg = String((err as { message?: string })?.message || err || "");
   if (!/does not exist|relation .* does not exist|undefined_table/i.test(msg)) return false;

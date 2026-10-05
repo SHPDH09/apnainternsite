@@ -108,7 +108,46 @@ async function readUploadBody(req: IncomingMessage): Promise<{ buffer: Buffer; c
   return { buffer: Buffer.concat(chunks), contentType: ct };
 }
 
+function alternateObjectKeys(objectKey: string): string[] {
+  const keys = [objectKey.replace(/^\/+/, "")];
+  const base = keys[0];
+  if (base.includes("/")) {
+    const tail = base.split("/").pop();
+    if (tail && !keys.includes(tail)) keys.push(tail);
+  }
+  if (/^popups\//i.test(base)) {
+    const withoutPopupId = base.replace(/^popups\/[^/]+\//, "");
+    if (withoutPopupId && !keys.includes(withoutPopupId)) keys.push(withoutPopupId);
+    const popupsOnly = base.replace(/^popups\//, "");
+    if (popupsOnly && !keys.includes(popupsOnly)) keys.push(popupsOnly);
+  }
+  return keys;
+}
+
 async function streamS3Object(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s3Bucket: string,
+  objectKey: string
+): Promise<void> {
+  let lastErr: unknown;
+  for (const key of alternateObjectKeys(objectKey)) {
+    try {
+      await streamS3ObjectOnce(req, res, s3Bucket, key);
+      return;
+    } catch (err) {
+      lastErr = err;
+      const name = String((err as { name?: string })?.name || "");
+      const code = String((err as { Code?: string; code?: string })?.Code || (err as { code?: string })?.code || "");
+      if (name !== "NoSuchKey" && code !== "NoSuchKey" && code !== "NotFound") {
+        throw err;
+      }
+    }
+  }
+  throw lastErr ?? new Error("Object not found");
+}
+
+async function streamS3ObjectOnce(
   req: IncomingMessage,
   res: ServerResponse,
   s3Bucket: string,

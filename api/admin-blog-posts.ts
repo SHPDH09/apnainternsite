@@ -4,6 +4,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { query } from "../aws/server/db.js";
+import { ensureCmsTable, isMissingRelationError } from "../aws/server/cms-bootstrap.js";
 import { verifyBearerSession } from "./lib/verifyBearerSession.js";
 import { assertBlogAdmin } from "./lib/assertBlogAdmin.js";
 
@@ -25,39 +26,39 @@ function isMissingViewCount(err: unknown): boolean {
   return code === "42703" && /view_count/i.test(msg);
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "GET") {
-    return res.status(405).json({ ok: false, message: "Method not allowed" });
-  }
-
+async function serveAdminBlogPosts(
+  req: VercelRequest,
+  res: VercelResponse,
+  bootstrapAttempted = false
+): Promise<void> {
   const token = bearer(req);
   if (!token) {
-    return res.status(401).json({ ok: false, message: "Authorization Bearer token required" });
+    res.status(401).json({ ok: false, message: "Authorization Bearer token required" });
+    return;
   }
   const session = await verifyBearerSession(token);
   if (!session?.sub) {
-    return res.status(401).json({ ok: false, message: "Invalid or expired session" });
+    res.status(401).json({ ok: false, message: "Invalid or expired session" });
+    return;
   }
   if (!process.env.DATABASE_URL?.trim()) {
-    return res.status(503).json({ ok: false, message: "DATABASE_URL not configured" });
+    res.status(503).json({ ok: false, message: "DATABASE_URL not configured" });
+    return;
   }
 
   try {
     const allowed = await assertBlogAdmin(session.sub);
     if (!allowed) {
-      return res.status(403).json({ ok: false, message: "Blog admin access required" });
+      res.status(403).json({ ok: false, message: "Blog admin access required" });
+      return;
     }
 
     const id = String(req.query.id || "").trim();
     if (id) {
       const sql = `SELECT * FROM public.site_blog_posts WHERE id = $1::uuid LIMIT 1`;
       const { rows } = await query<Record<string, unknown>>(sql, [id]);
-      return res.status(200).json({ ok: true, data: rows[0] ?? null });
+      res.status(200).json({ ok: true, data: rows[0] ?? null });
+      return;
     }
 
     const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
@@ -74,18 +75,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       const rows = await runList(LIST_COLUMNS_WITH_VIEWS);
-      return res.status(200).json({ ok: true, data: rows });
+      res.status(200).json({ ok: true, data: rows });
+      return;
     } catch (err) {
       if (!isMissingViewCount(err)) throw err;
       const rows = await runList(LIST_COLUMNS);
-      return res.status(200).json({
+      res.status(200).json({
         ok: true,
         data: rows.map((row) => ({ ...row, view_count: 0 })),
       });
+      return;
     }
   } catch (err) {
+    if (!bootstrapAttempted && isMissingRelationError(err, "site_blog_posts")) {
+      try {
+        await ensureCmsTable("site_blog_posts");
+        await serveAdminBlogPosts(req, res, true);
+        return;
+      } catch (bootstrapErr) {
+        const message =
+          bootstrapErr instanceof Error ? bootstrapErr.message : String(bootstrapErr);
+        console.error("[admin-blog-posts] bootstrap:", message);
+        res.status(503).json({ ok: false, message: "Blog table could not be initialized" });
+        return;
+      }
+    }
     const message = err instanceof Error ? err.message : String(err);
     console.error("[admin-blog-posts]", message);
-    return res.status(500).json({ ok: false, message: "Could not load blog posts" });
+    res.status(500).json({ ok: false, message: "Could not load blog posts" });
   }
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "GET") {
+    return res.status(405).json({ ok: false, message: "Method not allowed" });
+  }
+
+  await serveAdminBlogPosts(req, res);
 }

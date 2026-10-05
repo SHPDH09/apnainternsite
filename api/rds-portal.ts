@@ -28,6 +28,14 @@ import {
   parseOrder,
   parseSelect,
 } from "../aws/server/vercel-lite-rest-filters.js";
+import {
+  ensureCmsTable,
+  ensureSiteVisitsTable,
+  isCmsTable,
+  isMissingRelationError,
+  isSiteVisitsTable,
+} from "../aws/server/cms-bootstrap.js";
+import { tryVercelLiteRestMutate } from "../aws/server/vercel-lite-rest-mutate.js";
 
 function portalPathFromRequest(req: VercelRequest): string {
   const segment = String(req.query.segment || "").trim();
@@ -376,7 +384,9 @@ async function tryRestLite(req: VercelRequest, res: VercelResponse, pathOnly: st
   }
 
   const cols = parseSelect(req.query.select);
-  const limit = Math.min(Math.max(Number(req.query.limit) || 1000, 1), 5000);
+  const defaultLimit = table === "site_blog_posts" ? 100 : 1000;
+  const maxLimit = table === "site_blog_posts" ? 500 : 5000;
+  const limit = Math.min(Math.max(Number(req.query.limit) || defaultLimit, 1), maxLimit);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
   const { sql: where, params } = buildWhere(req.query as Record<string, unknown>);
   const order = parseOrder(req.query.order);
@@ -400,6 +410,25 @@ async function tryRestLite(req: VercelRequest, res: VercelResponse, pathOnly: st
     if (table === "system_settings" && isMissingSystemSettingsError(err)) {
       try {
         await ensureSystemSettingsSchemaVercel();
+        const retry = await runSelect();
+        if (req.method === "HEAD") {
+          res.status(200).end();
+          return true;
+        }
+        res.status(200).json(retry.rows);
+        return true;
+      } catch (retryErr) {
+        res.status(400).json({
+          message: retryErr instanceof Error ? retryErr.message : String(retryErr),
+        });
+        return true;
+      }
+    }
+    if (isMissingRelationError(err, table)) {
+      try {
+        if (isCmsTable(table)) await ensureCmsTable(table);
+        else if (isSiteVisitsTable(table)) await ensureSiteVisitsTable();
+        else throw err;
         const retry = await runSelect();
         if (req.method === "HEAD") {
           res.status(200).end();
@@ -458,6 +487,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     if (tsEnsureHandled) return;
     const rpcHandled = await tryRpcLite(req, res, pathOnly);
     if (rpcHandled) return;
+    const jwtClaims = jwtFromRequest(req, false);
+    const mutateHandled = await tryVercelLiteRestMutate(req, res, pathOnly, jwtClaims);
+    if (mutateHandled) return;
     const handled = await tryRestLite(req, res, pathOnly);
     if (handled) return;
   }

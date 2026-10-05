@@ -15,6 +15,7 @@ api/**
 !api/auth-portal.ts
 !api/admin-blog-posts.ts
 !api/admin-blog-leads.ts
+!api/ensure-blog-cms.ts
 !api/db-ping.ts
 !api/.bundled/**
 # Do not whitelist api/lib/** — each api/*.ts becomes a serverless function (Hobby max 12).
