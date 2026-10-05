@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, randomUUID } from 'node:crypto';
+import { resolveS3Region, withS3RegionRetry } from '../aws/server/s3-region.js';
 
 /** Inline blog RDS + S3 — api/lib is not on disk in the send-mail Lambda bundle on Vercel. */
 const BLOG_ENGAGEMENT_BOOTSTRAP_SQL = `
@@ -47,7 +48,6 @@ CREATE INDEX IF NOT EXISTS idx_site_blog_media_post
   ON public.site_blog_media_assets (post_id);
 `;
 
-const BLOG_S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'ap-south-1';
 const BLOG_LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || 'ezyintern-staging-logos';
 const BLOG_IMAGE_VERCEL_MAX_BYTES = 3_300_000;
 const BLOG_MEDIA_UUID_RE =
@@ -179,7 +179,8 @@ function decodeBlogImageBase64(raw: string): Buffer {
 
 function publicBlogLogoUrl(objectKey: string): string {
   const key = objectKey.replace(/^\/+/, '');
-  return `https://${BLOG_LOGOS_BUCKET}.s3.${BLOG_S3_REGION}.amazonaws.com/${key
+  const region = resolveS3Region('logos');
+  return `https://${BLOG_LOGOS_BUCKET}.s3.${region}.amazonaws.com/${key
     .split('/')
     .map((p) => encodeURIComponent(p))
     .join('/')}`;
@@ -219,24 +220,31 @@ async function putBlogImageObject(
     throw new Error('Image upload is not configured on the server. Contact support.');
   }
   const { PutObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-  const s3 = new S3Client({
-    region: BLOG_S3_REGION,
-    credentials: { accessKeyId, secretAccessKey },
-  });
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: BLOG_LOGOS_BUCKET,
-      Key: objectKey,
-      Body: imageBuffer,
-      ContentType: contentType || 'application/octet-stream',
-    })
-  );
+  await withS3RegionRetry(async (region) => {
+    const s3 = new S3Client({
+      region,
+      credentials: { accessKeyId, secretAccessKey },
+    });
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: BLOG_LOGOS_BUCKET,
+        Key: objectKey,
+        Body: imageBuffer,
+        ContentType: contentType || 'application/octet-stream',
+      })
+    );
+  }, resolveS3Region('logos'));
 }
 
 function isS3AccessDenied(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   const name = err && typeof err === 'object' && 'name' in err ? String((err as { name?: string }).name) : '';
   return /access denied|accessdenied|403/i.test(msg) || name === 'AccessDenied';
+}
+
+function isS3RegionMismatch(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /location constraint is incompatible|IllegalLocationConstraint|specified endpoint/i.test(msg);
 }
 
 function resolvePublicSiteOrigin(): string {
@@ -294,6 +302,10 @@ async function uploadBlogImageToS3Inline(input: {
     await putBlogImageObject(keys.primary, input.imageBuffer, contentType);
     return { url: publicBlogLogoUrl(keys.primary), path: keys.primary };
   } catch (primaryErr) {
+    if (isS3RegionMismatch(primaryErr)) {
+      console.warn('[blog_upload_image] S3 region mismatch on primary key; trying RDS fallback');
+      return await uploadBlogImageToRdsInline(input);
+    }
     if (!isS3AccessDenied(primaryErr)) throw primaryErr;
     console.warn('[blog_upload_image] primary S3 key denied, trying staff-profiles flat prefix');
     try {

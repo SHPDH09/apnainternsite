@@ -1,4 +1,5 @@
-const S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || "ap-south-1";
+import { resolveS3Region, withS3RegionRetry } from "../../aws/server/s3-region.js";
+
 const LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || "ezyintern-staging-logos";
 /** Raw file size when sending base64 through Vercel (~4.5 MB request cap). */
 export const BLOG_IMAGE_VERCEL_MAX_BYTES = 3_300_000;
@@ -16,7 +17,8 @@ export function decodeImageBase64(raw: string): Buffer {
 
 function publicLogoObjectUrl(objectKey: string): string {
   const key = objectKey.replace(/^\/+/, "");
-  return `https://${LOGOS_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key
+  const region = resolveS3Region("logos");
+  return `https://${LOGOS_BUCKET}.s3.${region}.amazonaws.com/${key
     .split("/")
     .map((p) => encodeURIComponent(p))
     .join("/")}`;
@@ -68,20 +70,22 @@ export async function uploadBlogImageToS3(input: {
   }
 
   const { PutObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
-  const s3 = new S3Client({
-    region: S3_REGION,
-    credentials: { accessKeyId, secretAccessKey },
-  });
 
   const put = async (key: string) => {
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: LOGOS_BUCKET,
-        Key: key,
-        Body: input.imageBuffer,
-        ContentType: contentType,
-      })
-    );
+    await withS3RegionRetry(async (region) => {
+      const s3 = new S3Client({
+        region,
+        credentials: { accessKeyId, secretAccessKey },
+      });
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: LOGOS_BUCKET,
+          Key: key,
+          Body: input.imageBuffer,
+          ContentType: contentType,
+        })
+      );
+    }, resolveS3Region("logos"));
     return key;
   };
 

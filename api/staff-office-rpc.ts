@@ -6,8 +6,36 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { randomUUID } from "node:crypto";
 
-const S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || "ap-south-1";
 const LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || "ezyintern-staging-logos";
+
+/** Logos bucket region (Hyderabad RDS uses ap-south-2; SES/Lambda env may still say ap-south-1). */
+function resolveLogosS3Region(): string {
+  const scoped = process.env.S3_BUCKET_LOGOS_REGION?.trim();
+  if (scoped) return scoped;
+  const s3Only =
+    process.env.AWS_S3_REGION?.trim() ||
+    process.env.S3_REGION?.trim() ||
+    process.env.S3_DEFAULT_REGION?.trim() ||
+    "";
+  if (s3Only) return s3Only;
+  const db = String(process.env.DATABASE_URL || "").trim();
+  if (/ap-south-2|cpy4aaca6mfv/i.test(db)) return "ap-south-2";
+  return process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || "ap-south-1";
+}
+
+function isS3RegionMismatch(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  const name =
+    err && typeof err === "object" && "name" in err
+      ? String((err as { name?: string }).name)
+      : "";
+  return (
+    /location constraint is incompatible/i.test(msg) ||
+    /must be addressed using the specified endpoint/i.test(msg) ||
+    name === "IllegalLocationConstraintException" ||
+    name === "PermanentRedirect"
+  );
+}
 
 const STAFF_ATTENDANCE_RPCS: Record<string, string[]> = {
   admin_list_staff_attendance_offices: ["p_active_only"],
@@ -82,9 +110,9 @@ async function verifySession(token: string): Promise<{ sub: string; email?: stri
   }
 }
 
-function publicLogoUrl(objectKey: string): string {
+function publicLogoUrl(objectKey: string, region = resolveLogosS3Region()): string {
   const key = objectKey.replace(/^\/+/, "");
-  return `https://${LOGOS_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key
+  return `https://${LOGOS_BUCKET}.s3.${region}.amazonaws.com/${key
     .split("/")
     .map((p) => encodeURIComponent(p))
     .join("/")}`;
@@ -171,19 +199,31 @@ async function uploadStaffProfilePhoto(
   if (accessKeyId && secretAccessKey) {
     try {
       const { PutObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
-      const s3 = new S3Client({
-        region: S3_REGION,
-        credentials: { accessKeyId, secretAccessKey },
-      });
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: LOGOS_BUCKET,
-          Key: objectKey,
-          Body: imageBuffer,
-          ContentType: "image/jpeg",
-        })
-      );
-      return publicLogoUrl(objectKey);
+      const regions = [
+        ...new Set([resolveLogosS3Region(), "ap-south-2", "ap-south-1"].filter(Boolean)),
+      ];
+      let lastErr: unknown;
+      for (const region of regions) {
+        try {
+          const s3 = new S3Client({
+            region,
+            credentials: { accessKeyId, secretAccessKey },
+          });
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: LOGOS_BUCKET,
+              Key: objectKey,
+              Body: imageBuffer,
+              ContentType: "image/jpeg",
+            })
+          );
+          return publicLogoUrl(objectKey, region);
+        } catch (err) {
+          lastErr = err;
+          if (!isS3RegionMismatch(err)) throw err;
+        }
+      }
+      throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
     } catch (err) {
       if (!isS3AccessDenied(err)) throw err;
       console.warn("[staff-office-rpc] S3 face photo denied, using RDS fallback");

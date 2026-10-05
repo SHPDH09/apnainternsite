@@ -11,7 +11,9 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 
-const REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "ap-south-1";
+import { isS3RegionMismatchError, resolveS3Region, withS3RegionRetry } from "./s3-region.js";
+
+const REGION = resolveS3Region();
 
 const BUCKET_MAP: Record<string, string> = {
   "consent-forms": process.env.S3_BUCKET_CONSENT_FORMS || "ezyintern-staging-consent-forms",
@@ -22,17 +24,19 @@ const BUCKET_MAP: Record<string, string> = {
     process.env.S3_BUCKET_ASSIGNMENT_UPLOADS || "ezyintern-staging-learning-materials",
 };
 
-let s3: S3Client | null = null;
-
-function getS3(): S3Client {
-  if (!s3) {
-    s3 = new S3Client({ region: REGION });
-  }
-  return s3;
+function getS3(region = REGION): S3Client {
+  return new S3Client({ region });
 }
 
 function resolveS3Bucket(appBucket: string): string | null {
   return BUCKET_MAP[appBucket] || null;
+}
+
+function scopeForAppBucket(appBucket: string): "logos" | "consent" | "learning" | undefined {
+  if (appBucket === "logos") return "logos";
+  if (appBucket === "consent-forms") return "consent";
+  if (appBucket === "learning-materials" || appBucket === "assignment-uploads") return "learning";
+  return undefined;
 }
 
 function storageSubPath(url: string): string {
@@ -127,13 +131,14 @@ function alternateObjectKeys(objectKey: string): string[] {
 async function streamS3Object(
   req: IncomingMessage,
   res: ServerResponse,
+  appBucket: string,
   s3Bucket: string,
   objectKey: string
 ): Promise<void> {
   let lastErr: unknown;
   for (const key of alternateObjectKeys(objectKey)) {
     try {
-      await streamS3ObjectOnce(req, res, s3Bucket, key);
+      await streamS3ObjectOnce(req, res, appBucket, s3Bucket, key);
       return;
     } catch (err) {
       lastErr = err;
@@ -150,10 +155,14 @@ async function streamS3Object(
 async function streamS3ObjectOnce(
   req: IncomingMessage,
   res: ServerResponse,
+  appBucket: string,
   s3Bucket: string,
   objectKey: string
 ): Promise<void> {
-  const result = await getS3().send(new GetObjectCommand({ Bucket: s3Bucket, Key: objectKey }));
+  const result = await withS3RegionRetry(
+    (region) => getS3(region).send(new GetObjectCommand({ Bucket: s3Bucket, Key: objectKey })),
+    resolveS3Region(scopeForAppBucket(appBucket))
+  );
   const contentType = result.ContentType || "application/octet-stream";
   if (result.ContentLength != null) {
     res.setHeader("Content-Length", String(result.ContentLength));
@@ -208,7 +217,7 @@ export async function handleVercelStorageRequest(
         res.end(JSON.stringify({ error: "Bucket not found" }));
         return;
       }
-      await streamS3Object(req, res, s3Bucket, objectKey);
+      await streamS3Object(req, res, appBucket, s3Bucket, objectKey);
       return;
     }
 
@@ -226,7 +235,7 @@ export async function handleVercelStorageRequest(
         res.end(JSON.stringify({ error: "Bucket not found" }));
         return;
       }
-      await streamS3Object(req, res, s3Bucket, objectKey);
+      await streamS3Object(req, res, appBucket, s3Bucket, objectKey);
       return;
     }
 
@@ -254,16 +263,25 @@ export async function handleVercelStorageRequest(
         res.end(JSON.stringify({ error: "prefixes required" }));
         return;
       }
+      const scope = scopeForAppBucket(appBucket);
       if (prefixes.length === 1) {
-        await getS3().send(
-          new DeleteObjectCommand({ Bucket: s3Bucket, Key: prefixes[0].replace(/^\/+/, "") })
+        await withS3RegionRetry(
+          (region) =>
+            getS3(region).send(
+              new DeleteObjectCommand({ Bucket: s3Bucket, Key: prefixes[0].replace(/^\/+/, "") })
+            ),
+          resolveS3Region(scope)
         );
       } else {
-        await getS3().send(
-          new DeleteObjectsCommand({
-            Bucket: s3Bucket,
-            Delete: { Objects: prefixes.map((p) => ({ Key: p.replace(/^\/+/, "") })) },
-          })
+        await withS3RegionRetry(
+          (region) =>
+            getS3(region).send(
+              new DeleteObjectsCommand({
+                Bucket: s3Bucket,
+                Delete: { Objects: prefixes.map((p) => ({ Key: p.replace(/^\/+/, "") })) },
+              })
+            ),
+          resolveS3Region(scope)
         );
       }
       res.statusCode = 200;
@@ -287,13 +305,17 @@ export async function handleVercelStorageRequest(
         return;
       }
       const { buffer, contentType } = await readUploadBody(req);
-      await getS3().send(
-        new PutObjectCommand({
-          Bucket: s3Bucket,
-          Key: objectKey,
-          Body: buffer,
-          ContentType: contentType,
-        })
+      await withS3RegionRetry(
+        (region) =>
+          getS3(region).send(
+            new PutObjectCommand({
+              Bucket: s3Bucket,
+              Key: objectKey,
+              Body: buffer,
+              ContentType: contentType,
+            })
+          ),
+        resolveS3Region(scopeForAppBucket(appBucket))
       );
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
