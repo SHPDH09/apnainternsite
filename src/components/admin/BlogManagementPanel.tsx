@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { BlogCoverImage } from "@/components/blog/BlogCoverImage";
 import { BlogMarkdownContent } from "@/components/blog/BlogMarkdownContent";
 import {
   adminCardClass,
@@ -745,7 +746,7 @@ export function BlogManagementPanel({ client, currentUserId }: Props) {
               <div className="rounded-xl border border-dashed border-slate-200 p-4">
                 <Label>Cover image</Label>
                 {editor.cover_image_url ? (
-                  <img src={editor.cover_image_url} alt="" className="mt-2 max-h-40 rounded-lg object-cover" />
+                  <BlogCoverImage url={editor.cover_image_url} className="mt-2 max-h-40 rounded-lg object-cover" />
                 ) : null}
                 <div className="mt-2 flex gap-2">
                   <Button

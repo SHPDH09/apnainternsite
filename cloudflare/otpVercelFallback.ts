@@ -19,7 +19,11 @@ export async function proxyRequestToVercel(
   if (auth) headers.set("Authorization", auth);
   const contentType = request.headers.get("Content-Type");
   if (contentType) headers.set("Content-Type", contentType);
-  headers.set("Accept", "application/json");
+  const accept = request.headers.get("Accept");
+  if (accept) headers.set("Accept", accept);
+  else if (request.method !== "GET" && request.method !== "HEAD") {
+    headers.set("Accept", "application/json");
+  }
 
   const init: RequestInit = {
     method: request.method,

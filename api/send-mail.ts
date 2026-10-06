@@ -143,7 +143,22 @@ async function verifyBearerSessionInline(
       };
     }
   } catch {
-    /* Lambda auth fallback */
+    try {
+      const jwt = await import('jsonwebtoken');
+      const secret =
+        process.env.LOCAL_JWT_SECRET ||
+        process.env.JWT_SECRET ||
+        'ezyintern-local-dev-secret-change-me';
+      const payload = jwt.default.verify(trimmed, secret) as { sub?: string; email?: string };
+      if (payload?.sub) {
+        return {
+          sub: String(payload.sub),
+          email: payload.email ? String(payload.email) : undefined,
+        };
+      }
+    } catch {
+      /* Lambda auth fallback */
+    }
   }
   const lambdaAuth =
     process.env.LAMBDA_API_URL?.trim()?.replace(/\/$/, '') ||
@@ -298,27 +313,38 @@ async function uploadBlogImageToS3Inline(input: {
   const keys = blogImageObjectKeys(input);
   const contentType = input.contentType || 'application/octet-stream';
 
+  const tryRdsFallback = async (reason: string, err: unknown) => {
+    console.warn('[blog_upload_image]', reason, err instanceof Error ? err.message : String(err));
+    return uploadBlogImageToRdsInline(input);
+  };
+
   try {
     await putBlogImageObject(keys.primary, input.imageBuffer, contentType);
     return { url: publicBlogLogoUrl(keys.primary), path: keys.primary };
   } catch (primaryErr) {
-    if (isS3RegionMismatch(primaryErr)) {
-      console.warn('[blog_upload_image] S3 region mismatch on primary key; trying RDS fallback');
-      return await uploadBlogImageToRdsInline(input);
+    if (isS3RegionMismatch(primaryErr) || !isS3AccessDenied(primaryErr)) {
+      try {
+        return await tryRdsFallback('S3 primary failed; storing in RDS', primaryErr);
+      } catch (rdsErr) {
+        const msg = rdsErr instanceof Error ? rdsErr.message : String(rdsErr);
+        throw new Error(msg || 'Blog image upload failed');
+      }
     }
-    if (!isS3AccessDenied(primaryErr)) throw primaryErr;
     console.warn('[blog_upload_image] primary S3 key denied, trying staff-profiles flat prefix');
     try {
       await putBlogImageObject(keys.fallback, input.imageBuffer, contentType);
       return { url: publicBlogLogoUrl(keys.fallback), path: keys.fallback };
     } catch (fallbackErr) {
       if (!isS3AccessDenied(fallbackErr)) {
-        const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-        throw new Error(msg);
+        try {
+          return await tryRdsFallback('S3 fallback key failed; storing in RDS', fallbackErr);
+        } catch (rdsErr) {
+          const msg = rdsErr instanceof Error ? rdsErr.message : String(rdsErr);
+          throw new Error(msg || 'Blog image upload failed');
+        }
       }
-      console.warn('[blog_upload_image] S3 denied; storing image in RDS');
       try {
-        return await uploadBlogImageToRdsInline(input);
+        return await tryRdsFallback('S3 denied; storing image in RDS', fallbackErr);
       } catch (rdsErr) {
         const msg = rdsErr instanceof Error ? rdsErr.message : String(rdsErr);
         throw new Error(msg || 'Blog image upload failed');
@@ -1202,6 +1228,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const imageBase64 = String(body.image_base64 || '').trim();
         if (!postId) {
           return res.status(400).json({ ok: false, message: 'post_id required' });
+        }
+        if (!BLOG_MEDIA_UUID_RE.test(postId)) {
+          return res.status(400).json({
+            ok: false,
+            message: 'Save the post as draft first (valid post id required), then upload images.',
+          });
         }
         if (!imageBase64) {
           return res.status(400).json({ ok: false, message: 'image_base64 required' });
