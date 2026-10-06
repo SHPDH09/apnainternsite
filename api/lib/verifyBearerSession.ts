@@ -33,7 +33,21 @@ async function verifyLocalJwt(token: string): Promise<VerifiedBearerSession | nu
       email: payload.email ? String(payload.email) : undefined,
     };
   } catch {
-    return null;
+    try {
+      const jwt = await import("jsonwebtoken");
+      const secret =
+        process.env.LOCAL_JWT_SECRET ||
+        process.env.JWT_SECRET ||
+        "ezyintern-local-dev-secret-change-me";
+      const payload = jwt.default.verify(token, secret) as { sub?: string; email?: string };
+      if (!payload?.sub) return null;
+      return {
+        sub: String(payload.sub),
+        email: payload.email ? String(payload.email) : undefined,
+      };
+    } catch {
+      return null;
+    }
   }
 }
 

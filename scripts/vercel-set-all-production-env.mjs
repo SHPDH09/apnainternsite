@@ -151,6 +151,14 @@ const vars = {
     pick("S3_BUCKET_LEARNING_MATERIALS") || "ezyintern-staging-learning-materials",
 };
 
+// Hyderabad production: S3 buckets live in ap-south-2 while AWS_REGION often stays ap-south-1 (SES/Lambda).
+if (/ap-south-2|cpy4aaca6mfv/i.test(dbUrl)) {
+  vars.S3_BUCKET_LOGOS_REGION = pick("S3_BUCKET_LOGOS_REGION") || "ap-south-2";
+  vars.S3_BUCKET_CONSENT_FORMS_REGION = pick("S3_BUCKET_CONSENT_FORMS_REGION") || "ap-south-2";
+  vars.S3_BUCKET_LEARNING_MATERIALS_REGION =
+    pick("S3_BUCKET_LEARNING_MATERIALS_REGION") || "ap-south-2";
+}
+
 if (/ezyintern-staging-db/i.test(dbUrl) || pick("AWS_RDS_HOST") === STAGING_RDS_HOST) {
   vars.AWS_RDS_HOST = pick("AWS_RDS_HOST") || STAGING_RDS_HOST;
   vars.AWS_RDS_USER = pick("AWS_RDS_USER") || "ezyintern";

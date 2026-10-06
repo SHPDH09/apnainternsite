@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, randomUUID } from 'node:crypto';
+import { resolveS3Region, withS3RegionRetry } from '../aws/server/s3-region.js';
 
 /** Inline blog RDS + S3 — api/lib is not on disk in the send-mail Lambda bundle on Vercel. */
 const BLOG_ENGAGEMENT_BOOTSTRAP_SQL = `
@@ -47,7 +48,6 @@ CREATE INDEX IF NOT EXISTS idx_site_blog_media_post
   ON public.site_blog_media_assets (post_id);
 `;
 
-const BLOG_S3_REGION = process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'ap-south-1';
 const BLOG_LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || 'ezyintern-staging-logos';
 const BLOG_IMAGE_VERCEL_MAX_BYTES = 3_300_000;
 const BLOG_MEDIA_UUID_RE =
@@ -122,6 +122,76 @@ async function blogEngagementQuery<T extends Record<string, unknown> = Record<st
   return p.query<T>(text, params);
 }
 
+async function assertBlogAdminInline(userId: string): Promise<boolean> {
+  if (!/^[0-9a-f-]{36}$/i.test(String(userId || '').trim())) return false;
+  try {
+    const { rows: roleRows } = await blogEngagementQuery<{ role: string }>(
+      `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
+      [userId]
+    );
+    if (
+      roleRows.some(
+        (r) => r.role === 'admin' || r.role === 'super_admin' || r.role === 'staff'
+      )
+    ) {
+      return true;
+    }
+  } catch {
+    /* permissions fallback below */
+  }
+  try {
+    const { rows } = await blogEngagementQuery<{ ok: number }>(
+      `SELECT 1 AS ok FROM public.admin_permissions
+       WHERE user_id = $1::uuid AND COALESCE(can_manage_blog, false) = true
+       LIMIT 1`,
+      [userId]
+    );
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function buildBlogLeadListFilters(input: {
+  dateFrom?: string;
+  dateTo?: string;
+  phoneSearch?: string;
+  textSearch?: string;
+}): { where: string; params: unknown[] } {
+  const params: unknown[] = [];
+  const parts: string[] = [];
+  let idx = 1;
+
+  const dateFrom = String(input.dateFrom || '').trim();
+  const dateTo = String(input.dateTo || '').trim();
+  const phoneSearch = String(input.phoneSearch || '').replace(/\D/g, '');
+  const textSearch = String(input.textSearch || '').trim();
+
+  if (dateFrom) {
+    parts.push(`created_at >= $${idx++}::timestamptz`);
+    params.push(`${dateFrom}T00:00:00+00:00`);
+  }
+  if (dateTo) {
+    parts.push(`created_at <= $${idx++}::timestamptz`);
+    params.push(`${dateTo}T23:59:59.999+00:00`);
+  }
+  if (phoneSearch) {
+    parts.push(`regexp_replace(phone, '[^0-9]', '', 'g') LIKE $${idx++}`);
+    params.push(`%${phoneSearch}%`);
+  }
+  if (textSearch) {
+    const like = `%${textSearch.replace(/%/g, '\\%')}%`;
+    parts.push(
+      `(full_name ILIKE $${idx} OR email ILIKE $${idx} OR college_name ILIKE $${idx} OR post_title ILIKE $${idx} OR post_slug ILIKE $${idx})`
+    );
+    params.push(like);
+    idx += 1;
+  }
+
+  const where = parts.length ? ` WHERE ${parts.join(' AND ')}` : '';
+  return { where, params };
+}
+
 async function verifyBearerSessionInline(
   token: string
 ): Promise<{ sub: string; email?: string } | null> {
@@ -143,7 +213,22 @@ async function verifyBearerSessionInline(
       };
     }
   } catch {
-    /* Lambda auth fallback */
+    try {
+      const jwt = await import('jsonwebtoken');
+      const secret =
+        process.env.LOCAL_JWT_SECRET ||
+        process.env.JWT_SECRET ||
+        'ezyintern-local-dev-secret-change-me';
+      const payload = jwt.default.verify(trimmed, secret) as { sub?: string; email?: string };
+      if (payload?.sub) {
+        return {
+          sub: String(payload.sub),
+          email: payload.email ? String(payload.email) : undefined,
+        };
+      }
+    } catch {
+      /* Lambda auth fallback */
+    }
   }
   const lambdaAuth =
     process.env.LAMBDA_API_URL?.trim()?.replace(/\/$/, '') ||
@@ -179,7 +264,8 @@ function decodeBlogImageBase64(raw: string): Buffer {
 
 function publicBlogLogoUrl(objectKey: string): string {
   const key = objectKey.replace(/^\/+/, '');
-  return `https://${BLOG_LOGOS_BUCKET}.s3.${BLOG_S3_REGION}.amazonaws.com/${key
+  const region = resolveS3Region('logos');
+  return `https://${BLOG_LOGOS_BUCKET}.s3.${region}.amazonaws.com/${key
     .split('/')
     .map((p) => encodeURIComponent(p))
     .join('/')}`;
@@ -219,24 +305,31 @@ async function putBlogImageObject(
     throw new Error('Image upload is not configured on the server. Contact support.');
   }
   const { PutObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-  const s3 = new S3Client({
-    region: BLOG_S3_REGION,
-    credentials: { accessKeyId, secretAccessKey },
-  });
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: BLOG_LOGOS_BUCKET,
-      Key: objectKey,
-      Body: imageBuffer,
-      ContentType: contentType || 'application/octet-stream',
-    })
-  );
+  await withS3RegionRetry(async (region) => {
+    const s3 = new S3Client({
+      region,
+      credentials: { accessKeyId, secretAccessKey },
+    });
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: BLOG_LOGOS_BUCKET,
+        Key: objectKey,
+        Body: imageBuffer,
+        ContentType: contentType || 'application/octet-stream',
+      })
+    );
+  }, resolveS3Region('logos'));
 }
 
 function isS3AccessDenied(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   const name = err && typeof err === 'object' && 'name' in err ? String((err as { name?: string }).name) : '';
   return /access denied|accessdenied|403/i.test(msg) || name === 'AccessDenied';
+}
+
+function isS3RegionMismatch(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /location constraint is incompatible|IllegalLocationConstraint|specified endpoint/i.test(msg);
 }
 
 function resolvePublicSiteOrigin(): string {
@@ -290,23 +383,38 @@ async function uploadBlogImageToS3Inline(input: {
   const keys = blogImageObjectKeys(input);
   const contentType = input.contentType || 'application/octet-stream';
 
+  const tryRdsFallback = async (reason: string, err: unknown) => {
+    console.warn('[blog_upload_image]', reason, err instanceof Error ? err.message : String(err));
+    return uploadBlogImageToRdsInline(input);
+  };
+
   try {
     await putBlogImageObject(keys.primary, input.imageBuffer, contentType);
     return { url: publicBlogLogoUrl(keys.primary), path: keys.primary };
   } catch (primaryErr) {
-    if (!isS3AccessDenied(primaryErr)) throw primaryErr;
+    if (isS3RegionMismatch(primaryErr) || !isS3AccessDenied(primaryErr)) {
+      try {
+        return await tryRdsFallback('S3 primary failed; storing in RDS', primaryErr);
+      } catch (rdsErr) {
+        const msg = rdsErr instanceof Error ? rdsErr.message : String(rdsErr);
+        throw new Error(msg || 'Blog image upload failed');
+      }
+    }
     console.warn('[blog_upload_image] primary S3 key denied, trying staff-profiles flat prefix');
     try {
       await putBlogImageObject(keys.fallback, input.imageBuffer, contentType);
       return { url: publicBlogLogoUrl(keys.fallback), path: keys.fallback };
     } catch (fallbackErr) {
       if (!isS3AccessDenied(fallbackErr)) {
-        const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-        throw new Error(msg);
+        try {
+          return await tryRdsFallback('S3 fallback key failed; storing in RDS', fallbackErr);
+        } catch (rdsErr) {
+          const msg = rdsErr instanceof Error ? rdsErr.message : String(rdsErr);
+          throw new Error(msg || 'Blog image upload failed');
+        }
       }
-      console.warn('[blog_upload_image] S3 denied; storing image in RDS');
       try {
-        return await uploadBlogImageToRdsInline(input);
+        return await tryRdsFallback('S3 denied; storing image in RDS', fallbackErr);
       } catch (rdsErr) {
         const msg = rdsErr instanceof Error ? rdsErr.message : String(rdsErr);
         throw new Error(msg || 'Blog image upload failed');
@@ -1157,6 +1265,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    if (normalizedAction === 'blog_admin_list_leads') {
+      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
+      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) {
+        return res.status(401).json({ ok: false, message: 'Authorization Bearer token required' });
+      }
+      const session = await verifyBearerSessionInline(tokenMatch[1]);
+      if (!session?.sub) {
+        return res.status(401).json({ ok: false, message: 'Invalid or expired session' });
+      }
+      if (!process.env.DATABASE_URL?.trim()) {
+        return res.status(503).json({
+          ok: false,
+          message: 'DATABASE_URL is not configured on this deployment',
+        });
+      }
+      try {
+        const allowed = await assertBlogAdminInline(session.sub);
+        if (!allowed) {
+          return res.status(403).json({ ok: false, message: 'Blog admin access required' });
+        }
+
+        const page = Math.max(0, Number(body.page) || 0);
+        const pageSize = Math.min(Math.max(Number(body.pageSize) || 20, 1), 200);
+        const exportAll = String(body.export || body.exportAll || '') === '1' || body.exportAll === true;
+        const limit = exportAll ? Math.min(Number(body.limit) || 15_000, 15_000) : pageSize;
+        const offset = exportAll ? 0 : page * pageSize;
+
+        const { where, params } = buildBlogLeadListFilters({
+          dateFrom: String(body.dateFrom || ''),
+          dateTo: String(body.dateTo || ''),
+          phoneSearch: String(body.phoneSearch || ''),
+          textSearch: String(body.textSearch || ''),
+        });
+
+        const countSql = `SELECT count(*)::int AS c FROM public.site_blog_leads${where}`;
+        const countResult = await blogEngagementQuery<{ c: number }>(countSql, params);
+        const total = Number(countResult.rows[0]?.c ?? 0);
+
+        const listParams = [...params, limit, offset];
+        const listSql = `
+          SELECT id, post_id, post_slug, post_title, full_name, email, phone, college_name, created_at
+          FROM public.site_blog_leads
+          ${where}
+          ORDER BY created_at DESC NULLS LAST
+          LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+        `;
+        const listResult = await blogEngagementQuery<Record<string, unknown>>(listSql, listParams);
+        return res.status(200).json({ ok: true, data: listResult.rows, total });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail blog_admin_list_leads]', message);
+        return res.status(500).json({ ok: false, message: message || 'Could not load blog leads' });
+      }
+    }
+
     if (normalizedAction === 'blog_upload_image') {
       const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
       const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -1174,12 +1338,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       try {
-        const { rows: roleRows } = await blogEngagementQuery<{ role: string }>(
-          `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
-          [session.sub]
-        );
-        if (!roleRows.some((r) => r.role === 'admin' || r.role === 'super_admin')) {
-          return res.status(403).json({ ok: false, message: 'Admin privileges required.' });
+        const allowed = await assertBlogAdminInline(session.sub);
+        if (!allowed) {
+          return res.status(403).json({ ok: false, message: 'Blog admin access required' });
         }
 
         const postId = String(body.post_id || '').trim();
@@ -1190,6 +1351,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const imageBase64 = String(body.image_base64 || '').trim();
         if (!postId) {
           return res.status(400).json({ ok: false, message: 'post_id required' });
+        }
+        if (!BLOG_MEDIA_UUID_RE.test(postId)) {
+          return res.status(400).json({
+            ok: false,
+            message: 'Save the post as draft first (valid post id required), then upload images.',
+          });
         }
         if (!imageBase64) {
           return res.status(400).json({ ok: false, message: 'image_base64 required' });
