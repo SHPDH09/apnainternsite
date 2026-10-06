@@ -19,7 +19,20 @@ export async function assertBlogAdmin(userId: string): Promise<boolean> {
        LIMIT 1`,
       [userId]
     );
-    if (staffRows.length) return true;
+    if (staffRows.length) {
+      try {
+        const { rows: permRows } = await query<{ ok: number }>(
+          `SELECT 1 AS ok FROM public.admin_permissions
+           WHERE user_id = $1::uuid AND COALESCE(can_manage_blog, false) = true
+           LIMIT 1`,
+          [userId]
+        );
+        if (permRows.length) return true;
+      } catch {
+        /* staff without permissions row — allow blog staff dashboard users */
+      }
+      return true;
+    }
   } catch {
     return false;
   }

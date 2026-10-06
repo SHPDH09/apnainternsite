@@ -105,6 +105,7 @@ async function tryHandleVercelSendMailActions(
     "blog_upload_image",
     "blog_check_device",
     "blog_get_media",
+    "blog_admin_list_leads",
   ]);
   if (!vercelSendMailActions.has(action)) return null;
 

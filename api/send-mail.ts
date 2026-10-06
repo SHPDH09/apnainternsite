@@ -122,6 +122,76 @@ async function blogEngagementQuery<T extends Record<string, unknown> = Record<st
   return p.query<T>(text, params);
 }
 
+async function assertBlogAdminInline(userId: string): Promise<boolean> {
+  if (!/^[0-9a-f-]{36}$/i.test(String(userId || '').trim())) return false;
+  try {
+    const { rows: roleRows } = await blogEngagementQuery<{ role: string }>(
+      `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
+      [userId]
+    );
+    if (
+      roleRows.some(
+        (r) => r.role === 'admin' || r.role === 'super_admin' || r.role === 'staff'
+      )
+    ) {
+      return true;
+    }
+  } catch {
+    /* permissions fallback below */
+  }
+  try {
+    const { rows } = await blogEngagementQuery<{ ok: number }>(
+      `SELECT 1 AS ok FROM public.admin_permissions
+       WHERE user_id = $1::uuid AND COALESCE(can_manage_blog, false) = true
+       LIMIT 1`,
+      [userId]
+    );
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function buildBlogLeadListFilters(input: {
+  dateFrom?: string;
+  dateTo?: string;
+  phoneSearch?: string;
+  textSearch?: string;
+}): { where: string; params: unknown[] } {
+  const params: unknown[] = [];
+  const parts: string[] = [];
+  let idx = 1;
+
+  const dateFrom = String(input.dateFrom || '').trim();
+  const dateTo = String(input.dateTo || '').trim();
+  const phoneSearch = String(input.phoneSearch || '').replace(/\D/g, '');
+  const textSearch = String(input.textSearch || '').trim();
+
+  if (dateFrom) {
+    parts.push(`created_at >= $${idx++}::timestamptz`);
+    params.push(`${dateFrom}T00:00:00+00:00`);
+  }
+  if (dateTo) {
+    parts.push(`created_at <= $${idx++}::timestamptz`);
+    params.push(`${dateTo}T23:59:59.999+00:00`);
+  }
+  if (phoneSearch) {
+    parts.push(`regexp_replace(phone, '[^0-9]', '', 'g') LIKE $${idx++}`);
+    params.push(`%${phoneSearch}%`);
+  }
+  if (textSearch) {
+    const like = `%${textSearch.replace(/%/g, '\\%')}%`;
+    parts.push(
+      `(full_name ILIKE $${idx} OR email ILIKE $${idx} OR college_name ILIKE $${idx} OR post_title ILIKE $${idx} OR post_slug ILIKE $${idx})`
+    );
+    params.push(like);
+    idx += 1;
+  }
+
+  const where = parts.length ? ` WHERE ${parts.join(' AND ')}` : '';
+  return { where, params };
+}
+
 async function verifyBearerSessionInline(
   token: string
 ): Promise<{ sub: string; email?: string } | null> {
@@ -1195,6 +1265,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    if (normalizedAction === 'blog_admin_list_leads') {
+      const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
+      const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) {
+        return res.status(401).json({ ok: false, message: 'Authorization Bearer token required' });
+      }
+      const session = await verifyBearerSessionInline(tokenMatch[1]);
+      if (!session?.sub) {
+        return res.status(401).json({ ok: false, message: 'Invalid or expired session' });
+      }
+      if (!process.env.DATABASE_URL?.trim()) {
+        return res.status(503).json({
+          ok: false,
+          message: 'DATABASE_URL is not configured on this deployment',
+        });
+      }
+      try {
+        const allowed = await assertBlogAdminInline(session.sub);
+        if (!allowed) {
+          return res.status(403).json({ ok: false, message: 'Blog admin access required' });
+        }
+
+        const page = Math.max(0, Number(body.page) || 0);
+        const pageSize = Math.min(Math.max(Number(body.pageSize) || 20, 1), 200);
+        const exportAll = String(body.export || body.exportAll || '') === '1' || body.exportAll === true;
+        const limit = exportAll ? Math.min(Number(body.limit) || 15_000, 15_000) : pageSize;
+        const offset = exportAll ? 0 : page * pageSize;
+
+        const { where, params } = buildBlogLeadListFilters({
+          dateFrom: String(body.dateFrom || ''),
+          dateTo: String(body.dateTo || ''),
+          phoneSearch: String(body.phoneSearch || ''),
+          textSearch: String(body.textSearch || ''),
+        });
+
+        const countSql = `SELECT count(*)::int AS c FROM public.site_blog_leads${where}`;
+        const countResult = await blogEngagementQuery<{ c: number }>(countSql, params);
+        const total = Number(countResult.rows[0]?.c ?? 0);
+
+        const listParams = [...params, limit, offset];
+        const listSql = `
+          SELECT id, post_id, post_slug, post_title, full_name, email, phone, college_name, created_at
+          FROM public.site_blog_leads
+          ${where}
+          ORDER BY created_at DESC NULLS LAST
+          LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+        `;
+        const listResult = await blogEngagementQuery<Record<string, unknown>>(listSql, listParams);
+        return res.status(200).json({ ok: true, data: listResult.rows, total });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail blog_admin_list_leads]', message);
+        return res.status(500).json({ ok: false, message: message || 'Could not load blog leads' });
+      }
+    }
+
     if (normalizedAction === 'blog_upload_image') {
       const authHeader = String(req.headers.authorization || req.headers.Authorization || '').trim();
       const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -1212,12 +1338,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       try {
-        const { rows: roleRows } = await blogEngagementQuery<{ role: string }>(
-          `SELECT role::text AS role FROM public.user_roles WHERE user_id = $1::uuid`,
-          [session.sub]
-        );
-        if (!roleRows.some((r) => r.role === 'admin' || r.role === 'super_admin')) {
-          return res.status(403).json({ ok: false, message: 'Admin privileges required.' });
+        const allowed = await assertBlogAdminInline(session.sub);
+        if (!allowed) {
+          return res.status(403).json({ ok: false, message: 'Blog admin access required' });
         }
 
         const postId = String(body.post_id || '').trim();

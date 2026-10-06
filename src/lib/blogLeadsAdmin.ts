@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchSupabaseTablePage } from "@/lib/fetchAllSupabaseRows";
+import { apiUrl } from "@/lib/siteApi";
 
 function isBlogLeadsTableMissing(error: unknown): boolean {
   const msg =
@@ -43,7 +44,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
   }
 }
 
-function leadsQueryString(opts: {
+type LeadFetchOpts = {
   page: number;
   pageSize: number;
   phoneSearch?: string;
@@ -51,7 +52,69 @@ function leadsQueryString(opts: {
   dateFrom?: string;
   dateTo?: string;
   exportAll?: boolean;
-}): string {
+};
+
+function parseLeadsApiResponse(json: {
+  ok?: boolean;
+  data?: AdminBlogLeadRow[];
+  total?: number;
+  message?: string;
+  error?: string;
+}): { rows: AdminBlogLeadRow[]; total: number } {
+  if (!json?.ok || !Array.isArray(json.data)) {
+    const msg = String(json.message || json.error || "").trim();
+    throw new Error(msg || "Blog leads API returned an invalid response.");
+  }
+  return { rows: json.data, total: json.total ?? json.data.length };
+}
+
+/** Primary path — same Vercel RDS handler as public blog actions (Cloudflare always proxies). */
+async function fetchAdminBlogLeadsViaSendMail(
+  accessToken: string,
+  opts: LeadFetchOpts
+): Promise<{ rows: AdminBlogLeadRow[]; total: number }> {
+  const res = await fetchWithTimeout(
+    apiUrl("/api/send-mail"),
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "blog_admin_list_leads",
+        page: opts.page,
+        pageSize: opts.pageSize,
+        phoneSearch: opts.phoneSearch,
+        textSearch: opts.textSearch,
+        dateFrom: opts.dateFrom,
+        dateTo: opts.dateTo,
+        export: opts.exportAll ? "1" : undefined,
+        exportAll: opts.exportAll ? true : undefined,
+      }),
+    },
+    LEADS_API_TIMEOUT_MS
+  );
+  const json = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    data?: AdminBlogLeadRow[];
+    total?: number;
+    message?: string;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(String(json.message || json.error || `Blog leads failed (${res.status})`));
+  }
+  return parseLeadsApiResponse(json);
+}
+
+async function fetchAdminBlogLeadsViaGetApi(
+  accessToken: string,
+  opts: LeadFetchOpts
+): Promise<{ rows: AdminBlogLeadRow[]; total: number }> {
+  if (typeof window === "undefined") {
+    throw new Error("Blog leads load is only available in the browser.");
+  }
   const params = new URLSearchParams();
   params.set("page", String(opts.page));
   params.set("pageSize", String(opts.pageSize));
@@ -60,36 +123,35 @@ function leadsQueryString(opts: {
   if (opts.dateFrom) params.set("dateFrom", opts.dateFrom);
   if (opts.dateTo) params.set("dateTo", opts.dateTo);
   if (opts.exportAll) params.set("export", "1");
-  return params.toString();
-}
 
-async function fetchAdminBlogLeadsViaApi(
-  accessToken: string,
-  opts: {
-    page: number;
-    pageSize: number;
-    phoneSearch?: string;
-    textSearch?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    exportAll?: boolean;
-  }
-): Promise<{ rows: AdminBlogLeadRow[]; total: number } | null> {
-  if (typeof window === "undefined") return null;
   const origin = window.location.origin.replace(/\/$/, "");
-  const qs = leadsQueryString(opts);
-  const res = await fetchWithTimeout(`${origin}/api/admin-blog-leads?${qs}`, {
+  const res = await fetchWithTimeout(`${origin}/api/admin-blog-leads?${params.toString()}`, {
     method: "GET",
     headers: { Authorization: `Bearer ${accessToken}` },
   }, LEADS_API_TIMEOUT_MS);
-  if (!res.ok) return null;
-  const json = (await res.json().catch(() => null)) as {
+  const json = (await res.json().catch(() => ({}))) as {
     ok?: boolean;
     data?: AdminBlogLeadRow[];
     total?: number;
-  } | null;
-  if (!json?.ok || !Array.isArray(json.data)) return null;
-  return { rows: json.data, total: json.total ?? json.data.length };
+    message?: string;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(String(json.message || json.error || `Blog leads failed (${res.status})`));
+  }
+  return parseLeadsApiResponse(json);
+}
+
+async function fetchAdminBlogLeadsFromServer(
+  accessToken: string,
+  opts: LeadFetchOpts
+): Promise<{ rows: AdminBlogLeadRow[]; total: number }> {
+  try {
+    return await fetchAdminBlogLeadsViaSendMail(accessToken, opts);
+  } catch (sendMailErr) {
+    console.warn("[blogLeadsAdmin] send-mail leads load failed, trying GET API:", sendMailErr);
+    return fetchAdminBlogLeadsViaGetApi(accessToken, opts);
+  }
 }
 
 export async function fetchAdminBlogLeadsPage(
@@ -110,10 +172,12 @@ export async function fetchAdminBlogLeadsPage(
   const token = sessionData.session?.access_token?.trim();
   if (token) {
     try {
-      const viaApi = await fetchAdminBlogLeadsViaApi(token, { ...opts, page, pageSize });
-      if (viaApi) return viaApi;
+      return await fetchAdminBlogLeadsFromServer(token, { ...opts, page, pageSize });
     } catch (err) {
-      console.warn("[blogLeadsAdmin] API load failed:", err);
+      console.warn("[blogLeadsAdmin] server leads load failed:", err);
+      if (err instanceof Error && /sign in|authorization|privileges|session/i.test(err.message)) {
+        throw err;
+      }
     }
   }
 
@@ -162,15 +226,18 @@ export async function fetchAllAdminBlogLeads(
   const token = sessionData.session?.access_token?.trim();
   if (token) {
     try {
-      const viaApi = await fetchAdminBlogLeadsViaApi(token, {
+      const viaApi = await fetchAdminBlogLeadsFromServer(token, {
         page: 0,
         pageSize: 15_000,
         exportAll: true,
         ...filters,
       });
-      if (viaApi) return viaApi.rows;
-    } catch {
-      /* REST fallback below */
+      return viaApi.rows;
+    } catch (err) {
+      console.warn("[blogLeadsAdmin] export via API failed:", err);
+      if (err instanceof Error && /sign in|authorization|privileges|session/i.test(err.message)) {
+        throw err;
+      }
     }
   }
 
