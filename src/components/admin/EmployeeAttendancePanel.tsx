@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Clock, Edit2, Loader2, LogOut, Plus, Save, Trash2, X } from "lucide-react";
+import { CalendarDays, Clock, Download, Edit2, Loader2, LogOut, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import Papa from "papaparse";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,11 @@ import {
   type EmployeeAttendanceRow,
   type EmployeeAttendanceStatus,
 } from "@/lib/employeeAttendance";
+import {
+  downloadEmployeeAttendanceCsvTemplate,
+  importEmployeeAttendanceCsvRows,
+  type EmployeeAttendanceCsvRow,
+} from "@/lib/staffEmployeeAdminRpc";
 
 export type StaffEmployeeOption = {
   id: string;
@@ -110,6 +116,7 @@ export function EmployeeAttendancePanel({ employees, currentUserId, isActive = t
   // Edit modal
   const [editState, setEditState] = useState<EditState | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [importingCsv, setImportingCsv] = useState(false);
 
   const employeeName = useCallback(
     (id: string) => {
@@ -249,25 +256,19 @@ export function EmployeeAttendancePanel({ employees, currentUserId, isActive = t
       return;
     }
 
-    // Build audit snapshot of previous values
-    const previousValue: Record<string, unknown> = {
-      attendance_date: editState.row.attendance_date,
-      status: editState.row.status,
-      check_in_at: editState.row.check_in_at,
-      check_out_at: editState.row.check_out_at,
-      notes: editState.row.notes,
-    };
-
     setEditSaving(true);
     try {
-      await updateEmployeeAttendance(editState.row.id, {
+      if (editState.date !== editState.row.attendance_date) {
+        await deleteEmployeeAttendance(editState.row.id);
+      }
+      await upsertEmployeeAttendance({
+        employeeId: editState.row.employee_id,
         attendanceDate: editState.date,
         status: editState.status,
         notes: editState.notes,
+        markedBy: currentUserId,
         checkInAt: newCheckIn,
         checkOutAt: newCheckOut,
-        editedBy: currentUserId,
-        previousValue,
       });
       toast.success("Attendance updated successfully.");
       setEditState(null);
@@ -286,6 +287,50 @@ export function EmployeeAttendancePanel({ employees, currentUserId, isActive = t
     const co = combineDateAndTime(editState.date, editState.checkOut);
     return calcWorkingHours(ci, co);
   }, [editState]);
+
+  const handleCsvImport = (file: File) => {
+    setImportingCsv(true);
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          const rows: EmployeeAttendanceCsvRow[] = (results.data || [])
+            .map((row) => ({
+              employee_email: String(row.employee_email || row.email || "").trim(),
+              employee_id: String(row.employee_id || "").trim() || undefined,
+              attendance_date: String(row.attendance_date || row.date || "").trim(),
+              status: String(row.status || "present").trim(),
+              check_in: String(row.check_in || row.check_in_at || "").trim() || undefined,
+              check_out: String(row.check_out || row.check_out_at || "").trim() || undefined,
+              notes: String(row.notes || "").trim() || undefined,
+            }))
+            .filter((r) => r.attendance_date && (r.employee_email || r.employee_id));
+          if (!rows.length) {
+            toast.error("CSV has no valid rows. Use the download template.");
+            return;
+          }
+          const result = await importEmployeeAttendanceCsvRows(rows);
+          if (result.skipped > 0) {
+            toast.warning(
+              `Imported ${result.imported} row(s); ${result.skipped} skipped. Check CSV emails/dates.`
+            );
+          } else {
+            toast.success(`Imported ${result.imported} attendance row(s).`);
+          }
+          await load();
+        } catch (e: unknown) {
+          toast.error(e instanceof Error ? e.message : "CSV import failed");
+        } finally {
+          setImportingCsv(false);
+        }
+      },
+      error: (err) => {
+        toast.error(err.message || "Could not read CSV file");
+        setImportingCsv(false);
+      },
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -362,6 +407,45 @@ export function EmployeeAttendancePanel({ employees, currentUserId, isActive = t
         {!employees.length && (
           <p className="text-sm text-muted-foreground">No staff employees found in admin_staff.</p>
         )}
+      </Card>
+
+      <Card className="p-6 border-none shadow-elegant space-y-4">
+        <h3 className="font-bold text-slate-800 flex items-center gap-2">
+          <Upload className="size-4" /> Import attendance (CSV)
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Columns: <code className="text-xs">employee_email</code>,{" "}
+          <code className="text-xs">attendance_date</code> (YYYY-MM-DD),{" "}
+          <code className="text-xs">status</code> (present / absent / half_day / leave), optional{" "}
+          <code className="text-xs">check_in</code>, <code className="text-xs">check_out</code>,{" "}
+          <code className="text-xs">notes</code>.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" variant="outline" onClick={downloadEmployeeAttendanceCsvTemplate}>
+            <Download className="size-4 mr-2" /> Download format (CSV)
+          </Button>
+          <Button type="button" variant="secondary" disabled={importingCsv} asChild>
+            <label className="cursor-pointer">
+              {importingCsv ? (
+                <Loader2 className="size-4 animate-spin mr-2 inline" />
+              ) : (
+                <Upload className="size-4 mr-2 inline" />
+              )}
+              Upload CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                disabled={importingCsv}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) void handleCsvImport(file);
+                }}
+              />
+            </label>
+          </Button>
+        </div>
       </Card>
 
       {/* ── Attendance Records Table ── */}

@@ -1,4 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  deleteEmployeeAttendanceRpc,
+  isMissingRpc,
+  listEmployeeAttendanceRpc,
+  upsertEmployeeAttendanceRpc,
+} from "@/lib/staffEmployeeAdminRpc";
 
 export type EmployeeAttendanceStatus = "present" | "absent" | "half_day" | "leave" | "holiday" | "overtime";
 
@@ -80,20 +86,33 @@ export async function listEmployeeAttendance(opts?: {
   status?: EmployeeAttendanceStatus | "all";
   limit?: number;
 }): Promise<EmployeeAttendanceRow[]> {
-  let q = supabase
-    .from("employee_attendance")
-    .select("*")
-    .order("attendance_date", { ascending: false })
-    .limit(opts?.limit ?? 500);
+  return listEmployeeAttendanceWithRpcFallback(opts);
+}
 
-  if (opts?.employeeId) q = q.eq("employee_id", opts.employeeId);
-  if (opts?.fromDate) q = q.gte("attendance_date", opts.fromDate);
-  if (opts?.toDate) q = q.lte("attendance_date", opts.toDate);
-  if (opts?.status && opts.status !== "all") q = q.eq("status", opts.status);
-
-  const { data, error } = await q;
-  if (error) throw error;
-  return (data || []) as EmployeeAttendanceRow[];
+async function listEmployeeAttendanceWithRpcFallback(opts?: {
+  employeeId?: string;
+  fromDate?: string;
+  toDate?: string;
+  status?: EmployeeAttendanceStatus | "all";
+  limit?: number;
+}): Promise<EmployeeAttendanceRow[]> {
+  try {
+    return await listEmployeeAttendanceRpc(opts);
+  } catch (rpcErr) {
+    if (!isMissingRpc(rpcErr)) throw rpcErr;
+    let q = supabase
+      .from("employee_attendance")
+      .select("*")
+      .order("attendance_date", { ascending: false })
+      .limit(opts?.limit ?? 500);
+    if (opts?.employeeId) q = q.eq("employee_id", opts.employeeId);
+    if (opts?.fromDate) q = q.gte("attendance_date", opts.fromDate);
+    if (opts?.toDate) q = q.lte("attendance_date", opts.toDate);
+    if (opts?.status && opts.status !== "all") q = q.eq("status", opts.status);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data || []) as EmployeeAttendanceRow[];
+  }
 }
 
 export async function upsertEmployeeAttendance(input: {
@@ -105,6 +124,12 @@ export async function upsertEmployeeAttendance(input: {
   checkInAt?: string | null;
   checkOutAt?: string | null;
 }): Promise<EmployeeAttendanceRow> {
+  try {
+    return await upsertEmployeeAttendanceRpc(input);
+  } catch (rpcErr) {
+    if (!isMissingRpc(rpcErr)) throw rpcErr;
+  }
+
   const payload = {
     employee_id: input.employeeId,
     attendance_date: input.attendanceDate,
@@ -127,6 +152,12 @@ export async function upsertEmployeeAttendance(input: {
 }
 
 export async function deleteEmployeeAttendance(id: string): Promise<void> {
+  try {
+    await deleteEmployeeAttendanceRpc(id);
+    return;
+  } catch (rpcErr) {
+    if (!isMissingRpc(rpcErr)) throw rpcErr;
+  }
   const { error } = await supabase.from("employee_attendance").delete().eq("id", id);
   if (error) throw error;
 }
