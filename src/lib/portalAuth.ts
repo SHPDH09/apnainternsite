@@ -30,3 +30,21 @@ export async function fetchCybercafeExists(
     return Boolean(data?.id);
   });
 }
+
+export async function fetchCompanyPartnerExists(
+  client: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  return coalesce(`company:${userId}`, async () => {
+    const { data, error } = await client
+      .from("company_profiles")
+      .select("id, status")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error) {
+      if (/42P01|does not exist/i.test(error.message || "")) return false;
+      throw error;
+    }
+    return Boolean(data?.id);
+  });
+}

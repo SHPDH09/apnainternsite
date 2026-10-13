@@ -9,10 +9,14 @@ import {
   isAdminIntentionalLogout,
 } from '@/lib/adminAuthSession';
 import { isStudentPortalSessionActive } from '@/lib/studentAuthSession';
-import { fetchCybercafeExists, fetchRolesForUser } from '@/lib/portalAuth';
+import {
+  fetchCompanyPartnerExists,
+  fetchCybercafeExists,
+  fetchRolesForUser,
+} from '@/lib/portalAuth';
 import { isOwnerAdminEmail } from '@/lib/supabaseEnv';
 
-export type UserRole = 'super_admin' | 'admin' | 'staff' | 'student' | 'cybercafe' | 'college_admin' | 'referral_partner';
+export type UserRole = 'super_admin' | 'admin' | 'staff' | 'student' | 'cybercafe' | 'college_admin' | 'referral_partner' | 'company_partner';
 
 const ROLES_CACHE_PREFIX = 'ezyintern_cached_roles_';
 const AUTH_STEP_TIMEOUT_MS = 12_000;
@@ -119,18 +123,25 @@ export const useAuth = () => {
         if (cancelled) return;
 
         let cybercafe = false;
+        let companyPartner = false;
         try {
-          cybercafe = await withAuthStepTimeout('fetchCybercafeExists', () =>
-            fetchCybercafeExists(supabase, session.user.id)
+          [cybercafe, companyPartner] = await withAuthStepTimeout('portalProfiles', () =>
+            Promise.all([
+              fetchCybercafeExists(supabase, session.user.id),
+              fetchCompanyPartnerExists(supabase, session.user.id),
+            ])
           );
         } catch (err) {
-          console.warn('[useAuth] fetchCybercafeExists:', err);
+          console.warn('[useAuth] portal profile checks:', err);
         }
 
         if (cancelled) return;
 
         if (cybercafe && !rolesList.includes('cybercafe')) {
           rolesList.push('cybercafe');
+        }
+        if (companyPartner && !rolesList.includes('company_partner')) {
+          rolesList.push('company_partner');
         }
 
         if (rolesList.length === 0) {

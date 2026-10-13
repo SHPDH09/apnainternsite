@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
-import { Store, Share2, Ticket, ArrowRight } from "lucide-react";
+import { Store, Share2, Ticket, Building2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { COMPANY_REGISTER_PATH } from "@/lib/authRoutes";
 
 const cards = [
   {
@@ -24,6 +25,14 @@ const cards = [
     icon: Ticket,
     accent: "from-amber-500 to-orange-600",
   },
+  {
+    kind: "company",
+    title: "Company Partner",
+    desc: "Register your company, post jobs, and hire Apna Intern candidates after admin approval.",
+    icon: Building2,
+    accent: "from-violet-500 to-indigo-600",
+    href: COMPANY_REGISTER_PATH,
+  },
 ] as const;
 
 export function HomePartnerSection() {
@@ -36,8 +45,11 @@ export function HomePartnerSection() {
             Registration for Partners
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-slate-600">
-            Cyber cafes, referral promoters, and coupon partners can apply online. Your dashboard stays
-            locked until our admin team verifies your application.
+            Cyber cafes, referral promoters, coupon partners, and{" "}
+            <Link to={COMPANY_REGISTER_PATH} className="font-semibold text-primary hover:underline">
+              company hiring partners
+            </Link>{" "}
+            can apply online. Your dashboard stays locked until our admin team verifies your application.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" className="rounded-full font-black gap-2">
@@ -46,14 +58,21 @@ export function HomePartnerSection() {
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="rounded-full font-bold">
+              <Link to={COMPANY_REGISTER_PATH}>Company registration</Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="rounded-full font-bold">
               <Link to="/partner/dashboard">Check application status</Link>
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {cards.map((card) => {
             const Icon = card.icon;
+            const applyHref =
+              "href" in card && card.href
+                ? card.href
+                : `/partner/register?type=${card.kind}`;
             return (
               <div
                 key={card.kind}
@@ -67,7 +86,7 @@ export function HomePartnerSection() {
                 <h3 className="text-lg font-bold text-slate-900">{card.title}</h3>
                 <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-600">{card.desc}</p>
                 <Button asChild className="mt-6 w-full rounded-full font-black gap-2">
-                  <Link to={`/partner/register?type=${card.kind}`}>
+                  <Link to={applyHref}>
                     Apply now <ArrowRight className="size-4" />
                   </Link>
                 </Button>

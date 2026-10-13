@@ -50,6 +50,7 @@ import { HomeOutcomesSection } from "@/components/home/HomeOutcomesSection";
 import { HomeUniversitiesSection } from "@/components/home/HomeUniversitiesSection";
 import { HomeFaqSection } from "@/components/home/HomeFaqSection";
 import { HomePartnerSection } from "@/components/home/HomePartnerSection";
+import { HomeCompanyPartnersSection } from "@/components/home/HomeCompanyPartnersSection";
 import { HomeBlogSection } from "@/components/home/HomeBlogSection";
 import { HomeFinalCta } from "@/components/home/HomeFinalCta";
 import { HomeCoursesSections } from "@/components/courses/HomeCoursesSections";
@@ -479,6 +480,8 @@ const Index = () => {
       <HomeFaqSection faqs={faqs} />
 
       <HomePartnerSection />
+
+      <HomeCompanyPartnersSection />
 
       <HomeBlogSection posts={blogPosts} />
 

@@ -234,11 +234,20 @@ export function StaffManagementPanel({
   const toggleBlock = async (member: AdminStaffProfile) => {
     const next = !member.is_blocked;
     try {
-      const { error } = await supabase
-        .from("admin_staff")
-        .update({ is_blocked: next, updated_at: new Date().toISOString() })
-        .eq("id", member.id);
-      if (error) throw error;
+      const { setStaffBlockedRpc, isMissingRpc } = await import("@/lib/staffEmployeeAdminRpc");
+      try {
+        await setStaffBlockedRpc(member.id, next);
+      } catch (rpcErr) {
+        if (!isMissingRpc(rpcErr)) throw rpcErr;
+        const { data, error } = await supabase
+          .from("admin_staff")
+          .update({ is_blocked: next, updated_at: new Date().toISOString() })
+          .eq("id", member.id)
+          .select("id, is_blocked")
+          .maybeSingle();
+        if (error) throw error;
+        if (!data?.id) throw new Error("Staff row was not updated (permission or not found).");
+      }
       toast.success(next ? "Staff blocked" : "Staff unblocked");
       await onRefresh();
     } catch (e: any) {
