@@ -489,6 +489,10 @@ async function sendOtpEmail(email: string, otp: string, purpose: OtpPurpose): Pr
   );
 }
 
+export const config = {
+  maxDuration: 60,
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');

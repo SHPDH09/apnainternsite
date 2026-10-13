@@ -1011,7 +1011,6 @@ async function serveBlogMediaFromRds(res: VercelResponse, mediaId: string): Prom
 
 export const config = {
   maxDuration: 60,
-  memory: 1024,
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

@@ -162,6 +162,10 @@ async function handleWithRds(
   return res.status(400).json({ success: false, message: 'Invalid action' });
 }
 
+export const config = {
+  maxDuration: 60,
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');

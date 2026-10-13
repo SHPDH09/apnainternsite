@@ -13,6 +13,10 @@ function bearer(req: VercelRequest): string | null {
   return m?.[1]?.trim() || null;
 }
 
+export const config = {
+  maxDuration: 60,
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");

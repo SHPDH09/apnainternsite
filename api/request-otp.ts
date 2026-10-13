@@ -16,6 +16,10 @@ function readAction(req: VercelRequest): string {
   return '';
 }
 
+export const config = {
+  maxDuration: 60,
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (readAction(req) === 'reset_password') {
     return forgotPassword(req, res);
