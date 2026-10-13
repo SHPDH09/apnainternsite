@@ -40,6 +40,10 @@ import {
   isCompanyProfilesTable,
 } from "../aws/server/company-profiles-bootstrap.js";
 import { tryVercelLiteRestMutate } from "../aws/server/vercel-lite-rest-mutate.js";
+import {
+  ensureStaffBlockEmployeeAttendanceRpcs,
+  isStaffEmployeeAdminRpc,
+} from "../aws/server/staff-block-employee-bootstrap.js";
 
 function portalPathFromRequest(req: VercelRequest): string {
   const segment = String(req.query.segment || "").trim();
@@ -360,6 +364,21 @@ async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: str
       } catch (retryErr) {
         const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
         res.status(400).json({
+          message: retryMsg,
+          code: (retryErr as { code?: string }).code,
+        });
+        return true;
+      }
+    }
+    if (/does not exist/i.test(msg) && isStaffEmployeeAdminRpc(name)) {
+      try {
+        await ensureStaffBlockEmployeeAttendanceRpcs();
+        const data = await callRpcLite(name, def.args, rpcBody(req), jwtClaims);
+        res.status(200).json(data);
+        return true;
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        res.status(503).json({
           message: retryMsg,
           code: (retryErr as { code?: string }).code,
         });

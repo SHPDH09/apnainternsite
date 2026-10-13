@@ -56,6 +56,7 @@ const salaryBaseSql = readSql("aws/scripts/81-rds-staff-salary-account.sql");
 const salaryResolveSql = readSql("aws/scripts/96-rds-staff-salary-employee-resolve.sql");
 const salaryAdvancedSql = readSql("aws/scripts/86-rds-staff-salary-advanced.sql");
 const profileImageSql = readSql("aws/scripts/95-rds-staff-profile-image-user-id.sql");
+const staffBlockEmployeeSql = readSql("aws/scripts/66-rds-staff-block-employee-attendance-rpc.sql");
 
 const body = `/** Bundled staff office + salary SQL for Vercel (generated — run scripts/bundle-staff-office-sql-chunks.mjs). */
 ${emitChunks("STAFF_OFFICE_ENSURE_SCHEMA_CHUNKS", "staffOfficeEnsureSchemaSql", ensureSql)}
@@ -67,6 +68,7 @@ ${emitChunks("STAFF_SALARY_BASE_CHUNKS", "staffSalaryBaseSql", salaryBaseSql)}
 ${emitChunks("STAFF_SALARY_RESOLVE_CHUNKS", "staffSalaryResolveSql", salaryResolveSql)}
 ${emitChunks("STAFF_SALARY_ADVANCED_CHUNKS", "staffSalaryAdvancedSql", salaryAdvancedSql)}
 ${emitChunks("STAFF_PROFILE_IMAGE_RPC_CHUNKS", "staffProfileImageRpcSql", profileImageSql)}
+${emitChunks("STAFF_BLOCK_EMPLOYEE_RPC_CHUNKS", "staffBlockEmployeeAttendanceRpcSql", staffBlockEmployeeSql)}
 /** @deprecated Use ensure + call ensure() + admin RPCs instead of one-shot apply. */
 export function staffOfficeBootstrapSql(): string {
   return staffOfficeEnsureSchemaSql() + staffOfficeAdminRpcSql() + staffOfficeSelfAttendanceRpcSql() + staffFaceRegisterRpcSql() + staffHalfDayAttendanceSql();
@@ -95,6 +97,14 @@ export const STAFF_FACE_REGISTER_REQUIRED_RPCS = [
   "staff_register_face",
 ];
 export const STAFF_PROFILE_IMAGE_REQUIRED_RPCS = ["staff_update_profile_image"];
+export const STAFF_EMPLOYEE_ADMIN_REQUIRED_RPCS = [
+  "assert_may_manage_staff",
+  "admin_set_staff_blocked",
+  "admin_upsert_employee_attendance",
+  "admin_delete_employee_attendance",
+  "admin_list_employee_attendance",
+  "admin_import_employee_attendance_rows",
+];
 export const STAFF_SALARY_REQUIRED_RPCS = [
   "admin_list_staff_salary_holidays",
   "admin_upsert_staff_salary_holiday",
@@ -108,4 +118,12 @@ export const STAFF_SALARY_REQUIRED_RPCS = [
 `;
 
 fs.writeFileSync(out, body);
+
+const awsGen = path.join(root, "aws/server/staff-block-employee-rpc-sql.generated.ts");
+fs.writeFileSync(
+  awsGen,
+  `/** Auto-generated — run scripts/bundle-staff-office-sql-chunks.mjs */\nexport const STAFF_BLOCK_EMPLOYEE_ATTENDANCE_RPC_SQL = ${JSON.stringify(staffBlockEmployeeSql)};\n`
+);
+
 console.log("Wrote", out);
+console.log("Wrote", awsGen);
