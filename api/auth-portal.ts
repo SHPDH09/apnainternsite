@@ -13,6 +13,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 }
 
 export const config = {
-  maxDuration: 30,
+  maxDuration: 60,
   memory: 512,
 };

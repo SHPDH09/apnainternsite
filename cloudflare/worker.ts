@@ -106,6 +106,7 @@ async function tryHandleVercelSendMailActions(
     "blog_check_device",
     "blog_get_media",
     "blog_admin_list_leads",
+    "convert_project_report_docx",
   ]);
   if (!vercelSendMailActions.has(action)) return null;
 

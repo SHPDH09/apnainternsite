@@ -5,7 +5,41 @@
   "functions": {
     "api/rds-portal.ts": {
       "maxDuration": 60,
-      "includeFiles": "aws/server/sql/**"
+      "memory": 1024,
+      "includeFiles": "api/.bundled/**,aws/server/sql/**"
+    },
+    "api/send-mail.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/auth-portal.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/otp-deliver.ts": {
+      "maxDuration": 60
+    },
+    "api/request-otp.ts": {
+      "maxDuration": 60
+    },
+    "api/auth/forgot-password.ts": {
+      "maxDuration": 60
+    },
+    "api/admin-blog-posts.ts": {
+      "maxDuration": 60
+    },
+    "api/admin-blog-leads.ts": {
+      "maxDuration": 60
+    },
+    "api/ensure-blog-cms.ts": {
+      "maxDuration": 60
+    },
+    "api/vercel-storage.ts": {
+      "maxDuration": 120,
+      "memory": 1024
+    },
+    "api/db-ping.ts": {
+      "maxDuration": 30
     }
   },
   "env": {
