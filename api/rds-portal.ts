@@ -35,6 +35,10 @@ import {
   isMissingRelationError,
   isSiteVisitsTable,
 } from "../aws/server/cms-bootstrap.js";
+import {
+  ensureCompanyProfilesTable,
+  isCompanyProfilesTable,
+} from "../aws/server/company-profiles-bootstrap.js";
 import { tryVercelLiteRestMutate } from "../aws/server/vercel-lite-rest-mutate.js";
 
 function portalPathFromRequest(req: VercelRequest): string {
@@ -363,7 +367,11 @@ async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: str
       }
     }
     if (/does not exist/i.test(msg)) {
-      return false;
+      res.status(503).json({
+        message: `Database function public.${name} is not installed. Apply RDS SQL (npm run aws:rds:apply-all or owner setup) and retry.`,
+        code: (err as { code?: string }).code,
+      });
+      return true;
     }
     res.status(400).json({
       message: msg,
@@ -428,6 +436,7 @@ async function tryRestLite(req: VercelRequest, res: VercelResponse, pathOnly: st
       try {
         if (isCmsTable(table)) await ensureCmsTable(table);
         else if (isSiteVisitsTable(table)) await ensureSiteVisitsTable();
+        else if (isCompanyProfilesTable(table)) await ensureCompanyProfilesTable();
         else throw err;
         const retry = await runSelect();
         if (req.method === "HEAD") {
@@ -482,6 +491,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
+  if (
+    pathOnly.startsWith("/storage/") &&
+    (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS")
+  ) {
+    const { handleVercelStorageRequest } = await import("../aws/server/vercel-storage-request.js");
+    req.url = rewritten;
+    await handleVercelStorageRequest(req, res);
+    return;
+  }
+
   if (pathOnly.startsWith("/rest/")) {
     const tsEnsureHandled = await tryTsEnsureRpcLite(req, res, pathOnly);
     if (tsEnsureHandled) return;
@@ -492,6 +511,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     if (mutateHandled) return;
     const handled = await tryRestLite(req, res, pathOnly);
     if (handled) return;
+
+    const rpcPost = pathOnly.match(/^\/rest\/v1\/rpc\/([a-z_][a-z0-9_]*)$/i);
+    if (rpcPost && req.method === "POST") {
+      res.status(503).json({
+        message: `RPC ${rpcPost[1]} is not available on the lite REST handler. Apply RDS admin RPC SQL and retry.`,
+      });
+      return;
+    }
   }
 
   req.url = rewritten;

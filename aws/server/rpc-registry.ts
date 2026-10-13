@@ -164,6 +164,7 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     auth: "admin",
   },
   admin_set_staff_blocked: { args: ["p_staff_id", "p_is_blocked"], auth: "admin" },
+  admin_reset_staff_face: { args: ["p_employee_id"], auth: "admin" },
   admin_upsert_employee_attendance: {
     args: [
       "p_employee_id",

@@ -16,7 +16,9 @@ api/**
 !api/admin-blog-posts.ts
 !api/admin-blog-leads.ts
 !api/ensure-blog-cms.ts
-!api/db-ping.ts
+!api/ensure-staff-attendance-offices.ts
+!api/staff-office-rpc.ts
+!api/rds-apply-all.ts
 !api/.bundled/**
 # Do not whitelist api/lib/** — each api/*.ts becomes a serverless function (Hobby max 12).
 # Mail handlers bundle lib/* at build time via imports.
