@@ -71,10 +71,16 @@ export function parseSalaryBreakdown(
     return typeof v === "number" ? v : Number(v) || fallback;
   };
   const hasKey = (k: string) => Object.prototype.hasOwnProperty.call(raw, k);
-  const foodAllowance = hasKey("food_allowance") ? num("food_allowance") : num("special_allowance");
+  const foodAllowance = hasKey("food_allowance")
+    ? num("food_allowance")
+    : hasKey("special_allowance")
+      ? 0
+      : num("special_allowance");
   const accommodationAllowance = hasKey("accommodation_allowance")
     ? num("accommodation_allowance")
-    : num("other_allowances");
+    : hasKey("other_allowances")
+      ? 0
+      : num("other_allowances");
   return {
     basicSalary: num("basic_salary"),
     hra: num("hra"),

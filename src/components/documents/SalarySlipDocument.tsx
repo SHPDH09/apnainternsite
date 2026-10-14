@@ -71,6 +71,16 @@ export const SalarySlipDocument = forwardRef<HTMLDivElement, Props>(function Sal
   const deductionsTotal =
     bd.pfDeduction + bd.taxDeduction + bd.otherDeductions + slip.attendance_deduction;
 
+  const attendanceDeductionRows: [string, number][] = [
+    ["Absent (deduction)", bd.absentDeduction],
+    ["Unpaid leave (deduction)", bd.unpaidLeaveDeduction],
+    ["Half-day (deduction)", bd.halfDayDeduction],
+  ].filter(([, amount]) => amount > 0) as [string, number][];
+
+  if (attendanceDeductionRows.length === 0 && slip.attendance_deduction > 0) {
+    attendanceDeductionRows.push(["Attendance deduction", slip.attendance_deduction]);
+  }
+
   const paymentModeLabel =
     bd.paymentMode === "upi" ? "UPI" : bd.paymentMode === "cash" ? "Cash" : "Bank Transfer";
 
@@ -237,25 +247,26 @@ export const SalarySlipDocument = forwardRef<HTMLDivElement, Props>(function Sal
               </tr>
             </thead>
             <tbody>
-              {[
-                ["Basic salary", bd.basicSalary],
-                ["HRA", bd.hra],
-                bd.foodAllowance > 0 ? ["Food allowance", bd.foodAllowance] : null,
-                bd.accommodationAllowance > 0 ? ["Accommodation allowance", bd.accommodationAllowance] : null,
-                bd.specialAllowance > 0 ? ["Other special allowance", bd.specialAllowance] : null,
-                bd.otherAllowances > 0 ? ["Other allowances", bd.otherAllowances] : null,
-                bd.overtimeAmount > 0 ? [`Overtime (${bd.overtimeHours}h)`, bd.overtimeAmount] : null,
-              ]
-                .filter(Boolean)
-                .map((row) => {
-                  const [label, amount] = row as [string, number];
-                  return (
-                    <tr key={label}>
-                      <td style={{ ...cell, color: "#334155" }}>{label}</td>
-                      <td style={{ ...cell, textAlign: "right", fontWeight: 600 }}>{formatSalaryMoney(amount).replace("₹", "")}</td>
-                    </tr>
-                  );
-                })}
+              {(
+                [
+                  ["Basic salary", bd.basicSalary],
+                  ["HRA (house rent allowance)", bd.hra],
+                  ["Food allowance", bd.foodAllowance],
+                  ["Accommodation allowance", bd.accommodationAllowance],
+                  ["Special allowance", bd.specialAllowance],
+                  ["Other allowances", bd.otherAllowances],
+                  ...(bd.overtimeAmount > 0
+                    ? [[`Overtime (${bd.overtimeHours}h)`, bd.overtimeAmount] as [string, number]]
+                    : []),
+                ] as [string, number][]
+              ).map(([label, amount]) => (
+                <tr key={label}>
+                  <td style={{ ...cell, color: "#334155" }}>{label}</td>
+                  <td style={{ ...cell, textAlign: "right", fontWeight: 600 }}>
+                    {formatSalaryMoney(amount).replace("₹", "")}
+                  </td>
+                </tr>
+              ))}
               <tr>
                 <td style={{ ...cell, fontWeight: 700, color: NAVY, borderBottom: "none" }}>Gross earnings</td>
                 <td style={{ ...cell, textAlign: "right", fontWeight: 800, color: "#059669", borderBottom: "none" }}>
@@ -278,25 +289,25 @@ export const SalarySlipDocument = forwardRef<HTMLDivElement, Props>(function Sal
               </tr>
             </thead>
             <tbody>
-              {[
-                bd.pfDeduction > 0 ? ["PF", bd.pfDeduction] : null,
-                bd.taxDeduction > 0 ? ["Tax (TDS)", bd.taxDeduction] : null,
-                bd.otherDeductions > 0 ? ["Other deductions", bd.otherDeductions] : null,
-                slip.attendance_deduction > 0 ? ["Attendance deduction", slip.attendance_deduction] : null,
-                (slip.half_day_deduction || 0) > 0 ? ["Half-day deduction", slip.half_day_deduction] : null,
-              ]
-                .filter(Boolean)
-                .map((row) => {
-                  const [label, amount] = row as [string, number];
-                  return (
-                    <tr key={label}>
-                      <td style={{ ...cell, color: "#334155" }}>{label}</td>
-                      <td style={{ ...cell, textAlign: "right", fontWeight: 600, color: "#dc2626" }}>
-                        {formatSalaryMoney(amount).replace("₹", "")}
-                      </td>
-                    </tr>
-                  );
-                })}
+              {(
+                [
+                  ["PF", bd.pfDeduction],
+                  ["Tax (TDS)", bd.taxDeduction],
+                  ["Other deductions", bd.otherDeductions],
+                  ["Absent (deduction)", bd.absentDeduction],
+                  ["Unpaid leave (deduction)", bd.unpaidLeaveDeduction],
+                  ["Half-day (deduction)", bd.halfDayDeduction],
+                ] as [string, number][]
+              )
+                .filter(([, amount]) => amount > 0)
+                .map(([label, amount]) => (
+                  <tr key={label}>
+                    <td style={{ ...cell, color: "#334155" }}>{label}</td>
+                    <td style={{ ...cell, textAlign: "right", fontWeight: 600, color: "#dc2626" }}>
+                      {formatSalaryMoney(amount).replace("₹", "")}
+                    </td>
+                  </tr>
+                ))}
               {deductionsTotal <= 0 && (
                 <tr>
                   <td style={{ ...cell, color: "#94a3b8", fontStyle: "italic" }} colSpan={2}>
