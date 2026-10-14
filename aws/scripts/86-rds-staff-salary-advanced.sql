@@ -305,6 +305,10 @@ DECLARE
   v_leave_overflow numeric;
   v_canonical uuid;
   v_row_ids uuid[];
+  v_working_days numeric;
+  v_credit_days numeric;
+  v_explicit_absent numeric := 0;
+  v_implicit_absent numeric := 0;
 BEGIN
   PERFORM public._admin_assert_salary_access();
 
@@ -431,6 +435,45 @@ BEGIN
   v_leave_unpaid := v_leave_unpaid + v_leave_overflow;
   v_leave_paid := v_paid_used;
 
+  v_explicit_absent := coalesce(v_absent, 0);
+
+  -- Count approved half-day leave on days with no attendance row (deduction only; no full absent).
+  FOR v_leave_req IN
+    SELECT lr.from_date, lr.to_date
+    FROM public.staff_leave_requests lr
+    WHERE lr.staff_id = ANY(v_row_ids)
+      AND lr.status = 'approved'
+      AND lr.leave_type = 'half_day'
+      AND lr.to_date >= v_month
+      AND lr.from_date <= v_month_end
+  LOOP
+    v_d := greatest(v_leave_req.from_date, v_month);
+    WHILE v_d <= least(v_leave_req.to_date, v_month_end) LOOP
+      IF NOT EXISTS (
+        SELECT 1 FROM public.employee_attendance ea
+        WHERE ea.employee_id = ANY(v_row_ids) AND ea.attendance_date = v_d
+      ) THEN
+        v_half := v_half + 1;
+      END IF;
+      v_d := v_d + 1;
+    END LOOP;
+  END LOOP;
+
+  v_working_days := greatest(coalesce(v_setup.working_days_per_month, 26), 1);
+  v_credit_days :=
+    coalesce(v_present, 0)
+    + coalesce(v_half, 0) * 0.5
+    + coalesce(v_leave_paid, 0)
+    + coalesce(v_festival_paid, 0)
+    + coalesce(v_holiday_att, 0);
+
+  -- Missing attendance / no-show days vs policy working days (not only rows marked absent).
+  v_absent := greatest(
+    v_explicit_absent,
+    greatest(0, v_working_days - v_credit_days)
+  );
+  v_implicit_absent := greatest(0, v_absent - v_explicit_absent);
+
   v_gross :=
     coalesce(v_setup.basic_salary, 0)
     + coalesce(v_setup.hra, 0)
@@ -444,8 +487,7 @@ BEGIN
     + coalesce(v_setup.tax_deduction, 0)
     + coalesce(v_setup.other_deductions, 0);
 
-  -- Per-day / hourly rates always use calendar-month divisor (30), not working_days_per_month.
-  -- working_days_per_month (default 26) is kept for attendance / leave policy reference only.
+  -- Per-day rate: gross / 30 (payroll divisor). working_days_per_month drives absent-day counting above.
   v_per_day := CASE WHEN v_gross > 0 THEN v_gross / 30 ELSE 0 END;
 
   v_hourly := CASE
@@ -478,6 +520,9 @@ BEGIN
     'tax_deduction', v_setup.tax_deduction,
     'other_deductions', v_setup.other_deductions,
     'working_days_per_month', v_setup.working_days_per_month,
+    'working_days_credited', round(v_credit_days::numeric, 2),
+    'explicit_absent_days', v_explicit_absent,
+    'implicit_absent_days', v_implicit_absent,
     'salary_divisor_days', 30,
     'paid_leaves_per_month', v_setup.paid_leaves_per_month,
     'extra_paid_leave_grant', v_extra_grant,

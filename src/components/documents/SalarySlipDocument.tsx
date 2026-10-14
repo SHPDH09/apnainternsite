@@ -69,11 +69,7 @@ export const SalarySlipDocument = forwardRef<HTMLDivElement, Props>(function Sal
     bd.otherAllowances +
     bd.overtimeAmount;
   const deductionsTotal =
-    bd.pfDeduction +
-    bd.taxDeduction +
-    bd.otherDeductions +
-    slip.attendance_deduction +
-    (slip.half_day_deduction || 0);
+    bd.pfDeduction + bd.taxDeduction + bd.otherDeductions + slip.attendance_deduction;
 
   const paymentModeLabel =
     bd.paymentMode === "upi" ? "UPI" : bd.paymentMode === "cash" ? "Cash" : "Bank Transfer";

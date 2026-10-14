@@ -1173,6 +1173,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    if (normalizedAction === 'apply_staff_salary_sql') {
+      const applyCode =
+        process.env.RDS_APPLY_SECRET?.trim() ||
+        process.env.ADMIN_BOOTSTRAP_CODE?.trim() ||
+        'apnaintern-owner-setup-v1';
+      const code = String(body.code || '').trim();
+      if (code !== applyCode) {
+        return res.status(403).json({ ok: false, message: 'Invalid apply code' });
+      }
+      if (!process.env.DATABASE_URL?.trim()) {
+        return res.status(503).json({ ok: false, message: 'DATABASE_URL is not configured on this deployment' });
+      }
+      try {
+        const { applyStaffSalaryBootstrap } = await import('../aws/server/staff-office-apply.js');
+        const pool = await getBlogEngPool();
+        await applyStaffSalaryBootstrap(pool);
+        return res.status(200).json({ ok: true, action: 'apply_staff_salary_sql' });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[send-mail apply_staff_salary_sql]', message);
+        return res.status(500).json({ ok: false, message });
+      }
+    }
+
     if (
       normalizedAction === 'blog_increment_view' ||
       normalizedAction === 'blog_get_view' ||
