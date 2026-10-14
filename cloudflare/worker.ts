@@ -95,6 +95,7 @@ async function tryHandleVercelSendMailActions(
     .trim()
     .toLowerCase();
   const vercelSendMailActions = new Set([
+    "bulk_ungenerate_staff_salary",
     "ensure_blog_cms",
     "ensure_project_report_templates",
     "save_project_report_template",
