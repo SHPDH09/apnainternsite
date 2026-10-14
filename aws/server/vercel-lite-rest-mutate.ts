@@ -13,6 +13,11 @@ import {
 } from "./cms-bootstrap.js";
 import { buildWhere } from "./vercel-lite-rest-filters.js";
 import { getVercelLitePool } from "./vercel-lite-pool.js";
+import {
+  ensureStaffSalarySetupColumns,
+  isStaffSalarySetupTable,
+  resetStaffSalarySetupColumnCache,
+} from "./staff-salary-setup-bootstrap.js";
 
 const IDENT = /^[a-z_][a-z0-9_]*$/i;
 
@@ -31,7 +36,7 @@ function restTableFromPath(pathOnly: string): string | null {
 }
 
 export function isVercelLiteRestMutateTable(table: string): boolean {
-  return isCmsTable(table) || isSiteVisitsTable(table);
+  return isCmsTable(table) || isSiteVisitsTable(table) || isStaffSalarySetupTable(table);
 }
 
 async function applyJwtClaims(client: PoolClient, jwtClaims: VercelJwtClaims | null): Promise<void> {
@@ -50,6 +55,7 @@ async function applyJwtClaims(client: PoolClient, jwtClaims: VercelJwtClaims | n
 async function ensureBootstrapTable(table: string): Promise<void> {
   if (isCmsTable(table)) await ensureCmsTable(table);
   else if (isSiteVisitsTable(table)) await ensureSiteVisitsTable();
+  else if (isStaffSalarySetupTable(table)) await ensureStaffSalarySetupColumns();
 }
 
 async function withBootstrapRetry<T>(table: string, run: () => Promise<T>): Promise<T> {
@@ -58,6 +64,16 @@ async function withBootstrapRetry<T>(table: string, run: () => Promise<T>): Prom
   } catch (err) {
     if (isMissingRelationError(err, table) && isVercelLiteRestMutateTable(table)) {
       await ensureBootstrapTable(table);
+      return await run();
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    const code = String((err as { code?: string })?.code || "");
+    if (
+      isStaffSalarySetupTable(table) &&
+      (code === "42703" || /column .* does not exist/i.test(msg))
+    ) {
+      resetStaffSalarySetupColumnCache();
+      await ensureStaffSalarySetupColumns();
       return await run();
     }
     throw err;
@@ -72,6 +88,24 @@ function requestBody(req: VercelRequest): unknown {
 function preferReturn(req: VercelRequest): boolean {
   const p = String(req.headers.prefer || "");
   return /return=representation/i.test(p);
+}
+
+function upsertFromRequest(req: VercelRequest): {
+  upsert: boolean;
+  onConflict: string;
+  ignoreDuplicates: boolean;
+} {
+  const prefer = String(req.headers.prefer || "");
+  const onConflict = String(req.query.on_conflict || "").trim();
+  const upsert =
+    /resolution=merge-duplicates/i.test(prefer) ||
+    /resolution=ignore-duplicates/i.test(prefer) ||
+    Boolean(onConflict);
+  return {
+    upsert,
+    onConflict,
+    ignoreDuplicates: /resolution=ignore-duplicates/i.test(prefer),
+  };
 }
 
 function bindWriteValue(
@@ -145,6 +179,26 @@ async function handlePost(
   }
 
   let sql = `INSERT INTO public."${table}" (${cols.map((c) => `"${c}"`).join(",")}) VALUES ${valueSql.join(",")}`;
+  const { upsert, onConflict, ignoreDuplicates } = upsertFromRequest(req);
+  if (upsert && onConflict) {
+    const conflictCols = onConflict
+      .split(",")
+      .map((c) => c.trim())
+      .filter((c) => IDENT.test(c));
+    if (conflictCols.length) {
+      if (ignoreDuplicates) {
+        sql += ` ON CONFLICT (${conflictCols.map((c) => `"${c}"`).join(",")}) DO NOTHING`;
+      } else {
+        const updates = cols
+          .filter((c) => !conflictCols.includes(c))
+          .map((c) => `"${c}" = EXCLUDED."${c}"`)
+          .join(", ");
+        sql += ` ON CONFLICT (${conflictCols.map((c) => `"${c}"`).join(",")}) DO UPDATE SET ${
+          updates || `"${conflictCols[0]}" = EXCLUDED."${conflictCols[0]}"`
+        }`;
+      }
+    }
+  }
   if (preferReturn(req)) sql += ` RETURNING *`;
 
   const { rows } = await withBootstrapRetry(table, () => runQuery(jwtClaims, sql, values));
