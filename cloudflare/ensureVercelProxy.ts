@@ -8,7 +8,6 @@ const VERCEL_ENSURE_API_PATHS = new Set([
   "/api/ensure-blog-cms",
   "/api/staff-office-rpc",
   "/api/rds-apply-all",
-  "/api/staff-salary-bulk-ungenerate",
 ]);
 
 /** RDS-backed blog images — served on Vercel (DATABASE_URL), not Lambda until redeployed. */
