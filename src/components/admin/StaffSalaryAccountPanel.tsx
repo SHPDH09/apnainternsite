@@ -121,6 +121,8 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
     hra: "",
     special_allowance: "",
     other_allowances: "",
+    food_allowance: "",
+    accommodation_allowance: "",
     pf_deduction: "",
     tax_deduction: "",
     other_deductions: "",
@@ -213,6 +215,12 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
       hra: existing ? String(existing.hra) : "",
       special_allowance: existing ? String(existing.special_allowance) : "",
       other_allowances: existing ? String(existing.other_allowances) : "",
+      food_allowance: existing
+        ? String(existing.food_allowance ?? existing.special_allowance ?? 0)
+        : "",
+      accommodation_allowance: existing
+        ? String(existing.accommodation_allowance ?? existing.other_allowances ?? 0)
+        : "",
       pf_deduction: existing ? String(existing.pf_deduction) : "",
       tax_deduction: existing ? String(existing.tax_deduction) : "",
       other_deductions: existing ? String(existing.other_deductions) : "",
@@ -241,6 +249,8 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
         hra: Number(form.hra || 0),
         specialAllowance: Number(form.special_allowance || 0),
         otherAllowances: Number(form.other_allowances || 0),
+        foodAllowance: Number(form.food_allowance || 0),
+        accommodationAllowance: Number(form.accommodation_allowance || 0),
         pfDeduction: Number(form.pf_deduction || 0),
         taxDeduction: Number(form.tax_deduction || 0),
         otherDeductions: Number(form.other_deductions || 0),
@@ -321,6 +331,8 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
     hra: Number(form.hra || 0),
     special_allowance: Number(form.special_allowance || 0),
     other_allowances: Number(form.other_allowances || 0),
+    food_allowance: Number(form.food_allowance || 0),
+    accommodation_allowance: Number(form.accommodation_allowance || 0),
   });
 
   if (!isActive) return null;
@@ -833,7 +845,27 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Special allowance</Label>
+              <Label>Food allowance</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.food_allowance}
+                onChange={(e) => setForm((p) => ({ ...p, food_allowance: e.target.value }))}
+                placeholder="e.g. meal / canteen"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Accommodation allowance</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.accommodation_allowance}
+                onChange={(e) => setForm((p) => ({ ...p, accommodation_allowance: e.target.value }))}
+                placeholder="e.g. rent / lodging"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Other special allowance (optional)</Label>
               <Input
                 type="number"
                 min={0}
@@ -842,7 +874,7 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Other allowances</Label>
+              <Label>Other allowances (optional)</Label>
               <Input
                 type="number"
                 min={0}

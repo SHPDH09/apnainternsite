@@ -61,7 +61,13 @@ export const SalarySlipDocument = forwardRef<HTMLDivElement, Props>(function Sal
 ) {
   const bd = parseSalaryBreakdown(slip);
   const earningsTotal =
-    bd.basicSalary + bd.hra + bd.specialAllowance + bd.otherAllowances + bd.overtimeAmount;
+    bd.basicSalary +
+    bd.hra +
+    bd.foodAllowance +
+    bd.accommodationAllowance +
+    bd.specialAllowance +
+    bd.otherAllowances +
+    bd.overtimeAmount;
   const deductionsTotal =
     bd.pfDeduction +
     bd.taxDeduction +
@@ -238,8 +244,10 @@ export const SalarySlipDocument = forwardRef<HTMLDivElement, Props>(function Sal
               {[
                 ["Basic salary", bd.basicSalary],
                 ["HRA", bd.hra],
-                ["Special allowance", bd.specialAllowance],
-                ["Other allowances", bd.otherAllowances],
+                bd.foodAllowance > 0 ? ["Food allowance", bd.foodAllowance] : null,
+                bd.accommodationAllowance > 0 ? ["Accommodation allowance", bd.accommodationAllowance] : null,
+                bd.specialAllowance > 0 ? ["Other special allowance", bd.specialAllowance] : null,
+                bd.otherAllowances > 0 ? ["Other allowances", bd.otherAllowances] : null,
                 bd.overtimeAmount > 0 ? [`Overtime (${bd.overtimeHours}h)`, bd.overtimeAmount] : null,
               ]
                 .filter(Boolean)

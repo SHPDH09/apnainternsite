@@ -8,6 +8,19 @@ ALTER TABLE public.staff_salary_setup
   ADD COLUMN IF NOT EXISTS overtime_multiplier numeric NOT NULL DEFAULT 1.5
     CHECK (overtime_multiplier >= 1);
 
+ALTER TABLE public.staff_salary_setup
+  ADD COLUMN IF NOT EXISTS food_allowance numeric(12, 2) NOT NULL DEFAULT 0 CHECK (food_allowance >= 0),
+  ADD COLUMN IF NOT EXISTS accommodation_allowance numeric(12, 2) NOT NULL DEFAULT 0 CHECK (accommodation_allowance >= 0);
+
+UPDATE public.staff_salary_setup
+SET
+  food_allowance = CASE WHEN food_allowance = 0 THEN COALESCE(special_allowance, 0) ELSE food_allowance END,
+  accommodation_allowance = CASE
+    WHEN accommodation_allowance = 0 THEN COALESCE(other_allowances, 0)
+    ELSE accommodation_allowance
+  END
+WHERE food_allowance = 0 OR accommodation_allowance = 0;
+
 ALTER TABLE public.staff_salary_slips
   ADD COLUMN IF NOT EXISTS overtime_hours numeric NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS overtime_amount numeric NOT NULL DEFAULT 0,
@@ -421,6 +434,8 @@ BEGIN
   v_gross :=
     coalesce(v_setup.basic_salary, 0)
     + coalesce(v_setup.hra, 0)
+    + coalesce(v_setup.food_allowance, 0)
+    + coalesce(v_setup.accommodation_allowance, 0)
     + coalesce(v_setup.special_allowance, 0)
     + coalesce(v_setup.other_allowances, 0);
 
@@ -455,6 +470,8 @@ BEGIN
   v_breakdown := jsonb_build_object(
     'basic_salary', v_setup.basic_salary,
     'hra', v_setup.hra,
+    'food_allowance', v_setup.food_allowance,
+    'accommodation_allowance', v_setup.accommodation_allowance,
     'special_allowance', v_setup.special_allowance,
     'other_allowances', v_setup.other_allowances,
     'pf_deduction', v_setup.pf_deduction,

@@ -8,6 +8,8 @@ export type StaffSalarySetupRow = {
   hra: number;
   special_allowance: number;
   other_allowances: number;
+  food_allowance?: number;
+  accommodation_allowance?: number;
   pf_deduction: number;
   tax_deduction: number;
   other_deductions: number;
@@ -158,11 +160,18 @@ async function resolveMySalaryEmployeeIds(): Promise<string[]> {
 
 export function calcGrossFromSetup(setup: Pick<
   StaffSalarySetupRow,
-  "basic_salary" | "hra" | "special_allowance" | "other_allowances"
+  | "basic_salary"
+  | "hra"
+  | "special_allowance"
+  | "other_allowances"
+  | "food_allowance"
+  | "accommodation_allowance"
 >): number {
   return (
     Number(setup.basic_salary || 0) +
     Number(setup.hra || 0) +
+    Number(setup.food_allowance || 0) +
+    Number(setup.accommodation_allowance || 0) +
     Number(setup.special_allowance || 0) +
     Number(setup.other_allowances || 0)
   );
@@ -180,6 +189,8 @@ export async function upsertStaffSalarySetup(input: {
   hra: number;
   specialAllowance: number;
   otherAllowances: number;
+  foodAllowance: number;
+  accommodationAllowance: number;
   pfDeduction: number;
   taxDeduction: number;
   otherDeductions: number;
@@ -197,6 +208,8 @@ export async function upsertStaffSalarySetup(input: {
     hra: input.hra,
     special_allowance: input.specialAllowance,
     other_allowances: input.otherAllowances,
+    food_allowance: input.foodAllowance,
+    accommodation_allowance: input.accommodationAllowance,
     pf_deduction: input.pfDeduction,
     tax_deduction: input.taxDeduction,
     other_deductions: input.otherDeductions,

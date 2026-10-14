@@ -24,6 +24,8 @@ export type SalarySlipBreakdown = {
   hra: number;
   specialAllowance: number;
   otherAllowances: number;
+  foodAllowance: number;
+  accommodationAllowance: number;
   pfDeduction: number;
   taxDeduction: number;
   otherDeductions: number;
@@ -68,11 +70,18 @@ export function parseSalaryBreakdown(
     const v = raw[k];
     return typeof v === "number" ? v : Number(v) || fallback;
   };
+  const hasKey = (k: string) => Object.prototype.hasOwnProperty.call(raw, k);
+  const foodAllowance = hasKey("food_allowance") ? num("food_allowance") : num("special_allowance");
+  const accommodationAllowance = hasKey("accommodation_allowance")
+    ? num("accommodation_allowance")
+    : num("other_allowances");
   return {
     basicSalary: num("basic_salary"),
     hra: num("hra"),
     specialAllowance: num("special_allowance"),
     otherAllowances: num("other_allowances"),
+    foodAllowance,
+    accommodationAllowance,
     pfDeduction: num("pf_deduction"),
     taxDeduction: num("tax_deduction"),
     otherDeductions: num("other_deductions"),
