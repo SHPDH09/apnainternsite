@@ -3,6 +3,7 @@
  * Vercel-safe: no top-level jwt/pg/lib imports.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { handleEnsureStaffAttendanceOffices } from "./lib/staffOfficeRpcVercel.js";
 
 const LAMBDA_AUTH =
   process.env.LAMBDA_API_URL?.trim()?.replace(/\/$/, "") ||
@@ -71,7 +72,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { handleEnsureStaffAttendanceOffices } = await import("./lib/staffOfficeRpcVercel.js");
     await handleEnsureStaffAttendanceOffices(databaseUrl);
     return res.status(200).json({ ok: true, schema: "staff_attendance_offices" });
   } catch (err) {

@@ -2,6 +2,8 @@
  * POST /api/rds-apply-all — apply staff office + salary SQL to RDS (Vercel-safe, self-contained).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { refreshVercelRdsIamPassword } from "./lib/rdsIamPg.js";
+import { applyStaffOfficeBootstrap } from "../aws/server/staff-office-apply.js";
 
 const APPLY_CODE =
   process.env.RDS_APPLY_SECRET?.trim() ||
@@ -57,9 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { refreshVercelRdsIamPassword } = await import("./lib/rdsIamPg.js");
     await refreshVercelRdsIamPassword();
-    const { applyStaffOfficeBootstrap } = await import("./staffOfficeApply.js");
     const pg = await import("pg");
     const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
     try {

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-/** Regenerate api/staffOfficeSqlChunks.ts from aws/scripts office + salary SQL files. */
+/** Regenerate aws/server/staff-office-sql-chunks.ts from aws/scripts office + salary SQL files. */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const out = path.join(root, "api/staffOfficeSqlChunks.ts");
+const out = path.join(root, "aws/server/staff-office-sql-chunks.ts");
 
 function readSql(rel) {
   return fs.readFileSync(path.join(root, rel), "utf8").trim();

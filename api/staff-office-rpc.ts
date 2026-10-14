@@ -5,6 +5,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { randomUUID } from "node:crypto";
+import { applyStaffOfficeBootstrapForRpc } from "../aws/server/staff-office-apply.js";
 
 const LOGOS_BUCKET = process.env.S3_BUCKET_LOGOS || "ezyintern-staging-logos";
 
@@ -239,7 +240,6 @@ async function uploadStaffFacePhoto(sessionSub: string, imageBase64: string): Pr
 
 async function applyStaffOfficeSql(databaseUrl: string, rpcName: string): Promise<void> {
   const pg = await import("pg");
-  const { applyStaffOfficeBootstrapForRpc } = await import("./staffOfficeApply.js");
   const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
   try {
     await applyStaffOfficeBootstrapForRpc(pool, rpcName);

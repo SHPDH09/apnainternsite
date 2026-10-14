@@ -1,4 +1,5 @@
-/** Vercel-safe staff office RDS bootstrap + RPC (loaded dynamically from staff-office-rpc). */
+/** Vercel-safe staff office RDS bootstrap + RPC (bundled into staff-office / ensure handlers). */
+import { applyStaffOfficeBootstrapForRpc } from "../../aws/server/staff-office-apply.js";
 const STAFF_ATTENDANCE_RPCS: Record<string, string[]> = {
   admin_list_staff_attendance_offices: ["p_active_only"],
   admin_upsert_staff_attendance_office: [
@@ -35,7 +36,6 @@ function pgPoolConfig(databaseUrl: string) {
 
 async function applyStaffOfficeSql(databaseUrl: string, rpcName = "admin_list_staff_attendance_offices"): Promise<void> {
   const pg = await import("pg");
-  const { applyStaffOfficeBootstrapForRpc } = await import("../staffOfficeApply.js");
   const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
   try {
     await applyStaffOfficeBootstrapForRpc(pool, rpcName);

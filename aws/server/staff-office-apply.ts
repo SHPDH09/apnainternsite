@@ -15,7 +15,7 @@ import {
   staffProfileImageRpcSql,
   staffBlockEmployeeAttendanceRpcSql,
   STAFF_EMPLOYEE_ADMIN_REQUIRED_RPCS,
-} from "./staffOfficeSqlChunks.js";
+} from "./staff-office-sql-chunks.js";
 
 type Queryable = {
   query: (
