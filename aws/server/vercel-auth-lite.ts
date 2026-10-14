@@ -247,6 +247,74 @@ async function authTokenLite(req: VercelRequest, res: VercelResponse): Promise<v
   }
 }
 
+async function authSignupLite(req: VercelRequest, res: VercelResponse): Promise<void> {
+  try {
+    const body = authJsonBody(req);
+    const email = String(body.email || "")
+      .trim()
+      .toLowerCase();
+    const password = String(body.password || "");
+    const data =
+      body.data && typeof body.data === "object" && !Array.isArray(body.data)
+        ? (body.data as Record<string, unknown>)
+        : {};
+    if (!email || !password) {
+      res.status(400).json({ error: "email and password required" });
+      return;
+    }
+    const existing = await findAuthUserByEmail(email);
+    if (existing) {
+      res.status(422).json({
+        error: "user_already_exists",
+        msg: "User already registered",
+      });
+      return;
+    }
+    const hash = await bcrypt.hash(password, 10);
+    const pool = await getVercelLitePool();
+    const { rows } = await pool.query<AuthUserRow>(
+      `INSERT INTO auth.users (
+         id, instance_id, aud, role, email, encrypted_password,
+         email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+         created_at, updated_at, is_sso_user, is_anonymous
+       ) VALUES (
+         gen_random_uuid(), '00000000-0000-0000-0000-000000000000',
+         'authenticated', 'authenticated', $1, $2, now(),
+         '{"provider":"email","providers":["email"]}'::jsonb, $3::jsonb,
+         now(), now(), false, false
+       )
+       RETURNING id, email, encrypted_password, banned_until, email_confirmed_at,
+                 raw_app_meta_data, raw_user_meta_data, role, created_at, updated_at, last_sign_in_at`,
+      [email, hash, JSON.stringify(data)]
+    );
+    const row = rows[0];
+    if (!row) {
+      res.status(500).json({ error: "signup_failed" });
+      return;
+    }
+    try {
+      await pool.query(
+        `INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1::uuid, $2::jsonb, 'email', $3, now(), now(), now())
+         ON CONFLICT DO NOTHING`,
+        [row.id, JSON.stringify({ sub: row.id, email }), email]
+      );
+    } catch {
+      /* optional */
+    }
+    res.status(200).json({
+      ...tokenResponseForRow(row),
+      id: row.id,
+    });
+  } catch (err) {
+    console.error("[vercel-auth/signup]", err);
+    res.status(500).json({
+      error: "server_error",
+      msg: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 async function authUserLite(req: VercelRequest, res: VercelResponse): Promise<void> {
   const token = bearerToken(req);
   if (!token || isAnonApiBearer(req, token)) {
@@ -289,6 +357,10 @@ export async function handleVercelAuthLite(
   }
   if (pathOnly === "/auth/v1/token" && req.method === "POST") {
     await authTokenLite(req, res);
+    return true;
+  }
+  if (pathOnly === "/auth/v1/signup" && req.method === "POST") {
+    await authSignupLite(req, res);
     return true;
   }
   if (pathOnly === "/auth/v1/user" && req.method === "GET") {
