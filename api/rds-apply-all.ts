@@ -3,7 +3,10 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { refreshVercelRdsIamPassword } from "./lib/rdsIamPg.js";
-import { applyStaffOfficeBootstrap } from "../aws/server/staff-office-apply.js";
+import {
+  applyStaffOfficeBootstrap,
+  applyStaffSalaryBootstrap,
+} from "../aws/server/staff-office-apply.js";
 
 const APPLY_CODE =
   process.env.RDS_APPLY_SECRET?.trim() ||
@@ -63,6 +66,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const pg = await import("pg");
     const pool = new pg.default.Pool(pgPoolConfig(databaseUrl));
     try {
+      if (body.scope === "salary") {
+        await applyStaffSalaryBootstrap(pool);
+        return res.status(200).json({ ok: true, scope: "staff_salary" });
+      }
       await applyStaffOfficeBootstrap(pool);
       return res.status(200).json({
         ok: true,

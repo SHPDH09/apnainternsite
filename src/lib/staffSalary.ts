@@ -101,7 +101,7 @@ export async function ensureStaffSalarySchema(): Promise<void> {
   await fetch(`${origin}/api/rds-apply-all`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code: RDS_APPLY_CODE }),
+    body: JSON.stringify({ code: RDS_APPLY_CODE, scope: "salary" }),
   }).catch(() => undefined);
 }
 
@@ -298,6 +298,7 @@ export async function markStaffSalaryPaid(slipId: string, paymentReference?: str
 
 /** Removes a generated (not paid) salary slip so it can be generated again. */
 export async function ungenerateStaffSalary(slipId: string) {
+  await ensureStaffSalarySchema();
   const { data, error } = await supabase.rpc("admin_ungenerate_staff_salary", {
     p_slip_id: slipId,
   });

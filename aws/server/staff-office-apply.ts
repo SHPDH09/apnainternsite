@@ -16,6 +16,7 @@ import {
   staffBlockEmployeeAttendanceRpcSql,
   STAFF_EMPLOYEE_ADMIN_REQUIRED_RPCS,
 } from "./staff-office-sql-chunks.js";
+import { ADMIN_UNGENERATE_STAFF_SALARY_RPC_SQL } from "./staff-salary-ungenerate-rpc.generated.js";
 
 type Queryable = {
   query: (
@@ -51,6 +52,8 @@ const STAFF_EMPLOYEE_ADMIN_RPC_NAMES = new Set([
   "admin_list_employee_attendance",
   "admin_import_employee_attendance_rows",
 ]);
+
+const STAFF_SALARY_RPC_NAMES = new Set<string>(STAFF_SALARY_REQUIRED_RPCS);
 
 async function rpcExists(pool: Queryable, name: string): Promise<boolean> {
   const { rows } = await pool.query<{ ok: boolean }>(
@@ -151,6 +154,27 @@ export async function applyStaffOfficeAdminBootstrap(pool: Queryable): Promise<v
   }
 }
 
+/** Staff salary tables + RPCs (81 → 96 → 86); fast path when only ungenerate is new. */
+export async function applyStaffSalaryBootstrap(pool: Queryable): Promise<void> {
+  const exists: Record<string, boolean> = {};
+  for (const name of STAFF_SALARY_REQUIRED_RPCS) {
+    exists[name] = await rpcExists(pool, name);
+  }
+  if (STAFF_SALARY_REQUIRED_RPCS.every((name) => exists[name])) return;
+
+  const missing = STAFF_SALARY_REQUIRED_RPCS.filter((name) => !exists[name]);
+  if (missing.length === 1 && missing[0] === "admin_ungenerate_staff_salary") {
+    await pool.query(ADMIN_UNGENERATE_STAFF_SALARY_RPC_SQL);
+    await assertRpcs(pool, ["admin_ungenerate_staff_salary"]);
+    return;
+  }
+
+  await pool.query(staffSalaryBaseSql());
+  await pool.query(staffSalaryResolveSql());
+  await pool.query(staffSalaryAdvancedSql());
+  await assertRpcs(pool, [...STAFF_SALARY_REQUIRED_RPCS]);
+}
+
 /** Full bootstrap for rds-apply-all (office + salary). */
 export async function applyStaffOfficeBootstrap(pool: Queryable): Promise<void> {
   await pool.query(staffOfficeEnsureSchemaSql());
@@ -159,9 +183,7 @@ export async function applyStaffOfficeBootstrap(pool: Queryable): Promise<void> 
   await pool.query(staffOfficeSelfAttendanceRpcSql());
   await pool.query(staffFaceRegisterRpcSql());
   await applyStaffHalfDayAttendanceBootstrap(pool);
-  await pool.query(staffSalaryBaseSql());
-  await pool.query(staffSalaryResolveSql());
-  await pool.query(staffSalaryAdvancedSql());
+  await applyStaffSalaryBootstrap(pool);
   await applyStaffEmployeeAdminBootstrap(pool);
 
   await assertRpcs(pool, [
@@ -174,12 +196,13 @@ export async function applyStaffOfficeBootstrap(pool: Queryable): Promise<void> 
 
 export function staffOfficeBootstrapForRpc(
   rpcName: string
-): "self" | "face_register" | "profile_image" | "admin" | "employee_admin" | "full" {
+): "self" | "face_register" | "profile_image" | "admin" | "employee_admin" | "salary" | "full" {
   if (STAFF_FACE_REGISTER_RPC_NAMES.has(rpcName)) return "face_register";
   if (STAFF_PROFILE_IMAGE_RPC_NAMES.has(rpcName)) return "profile_image";
   if (STAFF_SELF_RPC_NAMES.has(rpcName)) return "self";
   if (STAFF_EMPLOYEE_ADMIN_RPC_NAMES.has(rpcName)) return "employee_admin";
   if (STAFF_OFFICE_ADMIN_RPC_NAMES.has(rpcName)) return "admin";
+  if (STAFF_SALARY_RPC_NAMES.has(rpcName)) return "salary";
   return "full";
 }
 
@@ -197,6 +220,8 @@ export async function applyStaffOfficeBootstrapForRpc(pool: Queryable, rpcName: 
       return applyStaffOfficeAdminBootstrap(pool);
     case "employee_admin":
       return applyStaffEmployeeAdminBootstrap(pool);
+    case "salary":
+      return applyStaffSalaryBootstrap(pool);
     default:
       return applyStaffOfficeBootstrap(pool);
   }
