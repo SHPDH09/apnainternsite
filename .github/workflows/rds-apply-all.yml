@@ -20,7 +20,7 @@ jobs:
   apply-and-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[rds-apply]') || contains(github.event.head_commit.message, '[seed-smtp]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[rds-apply]') || contains(github.event.head_commit.message, '[seed-smtp]') || contains(github.event.head_commit.message, '[bulk-salary-reset]')
     steps:
       - uses: actions/checkout@v4
 
@@ -33,6 +33,7 @@ jobs:
         run: npm ci
 
       - name: Apply all RDS SQL (when DATABASE_URL secret set)
+        if: contains(github.event.head_commit.message, '[rds-apply]') || github.event_name == 'workflow_dispatch'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           AWS_RDS_DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -41,6 +42,18 @@ jobs:
             npm run aws:rds:apply-all
           else
             echo "::warning::DATABASE_URL GitHub secret is empty — skipping direct RDS apply"
+          fi
+
+      - name: Bulk ungenerate staff salary (Jun–Sep default)
+        if: contains(github.event.head_commit.message, '[bulk-salary-reset]')
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MONTHS: ${{ vars.BULK_SALARY_RESET_MONTHS || '2026-06,2026-07,2026-08,2026-09' }}
+        run: |
+          if [ -n "${DATABASE_URL:-}" ]; then
+            npm run aws:rds:bulk-ungenerate-salary
+          else
+            echo "::warning::DATABASE_URL missing — skipped bulk salary reset"
           fi
 
       - name: Seed site SMTP config for Vercel/Lambda mail

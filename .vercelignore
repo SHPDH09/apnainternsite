@@ -19,6 +19,7 @@ api/**
 !api/ensure-staff-attendance-offices.ts
 !api/staff-office-rpc.ts
 !api/rds-apply-all.ts
+!api/staff-salary-bulk-ungenerate.ts
 !api/.bundled/**
 # Do not whitelist api/lib/** — each api/*.ts becomes a serverless function (Hobby max 12).
 # Mail handlers bundle lib/* at build time via imports.
