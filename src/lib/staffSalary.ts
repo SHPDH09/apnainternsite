@@ -296,6 +296,15 @@ export async function markStaffSalaryPaid(slipId: string, paymentReference?: str
   return data;
 }
 
+/** Removes a generated (not paid) salary slip so it can be generated again. */
+export async function ungenerateStaffSalary(slipId: string) {
+  const { data, error } = await supabase.rpc("admin_ungenerate_staff_salary", {
+    p_slip_id: slipId,
+  });
+  if (error) throw new Error(rpcError(error));
+  return data;
+}
+
 export async function listStaffSalaryHolidays(salaryMonth?: string): Promise<StaffSalaryHoliday[]> {
   const { data, error } = await supabase.rpc("admin_list_staff_salary_holidays", {
     p_salary_month: salaryMonth ? monthStartIso(salaryMonth) : null,

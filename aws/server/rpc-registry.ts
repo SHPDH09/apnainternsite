@@ -400,6 +400,10 @@ export const RPC_REGISTRY: Record<string, RpcDef> = {
     args: ["p_slip_id", "p_payment_reference"],
     auth: "admin",
   },
+  admin_ungenerate_staff_salary: {
+    args: ["p_slip_id"],
+    auth: "admin",
+  },
   admin_student_data_upload_save_history: {
     args: [
       "p_upload_id",

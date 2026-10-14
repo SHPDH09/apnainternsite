@@ -16,6 +16,7 @@ const SALARY_RPCS = [
   "admin_upsert_staff_paid_leave_grant",
   "admin_generate_staff_salary",
   "admin_mark_staff_salary_paid",
+  "admin_ungenerate_staff_salary",
   "staff_list_my_paid_salary_slips",
 ] as const;
 
@@ -62,6 +63,7 @@ export function isStaffSalaryRpc(name: string): boolean {
     name === "admin_upsert_staff_paid_leave_grant" ||
     name === "admin_generate_staff_salary" ||
     name === "admin_mark_staff_salary_paid" ||
+    name === "admin_ungenerate_staff_salary" ||
     name === "staff_list_my_paid_salary_slips"
   );
 }
@@ -77,6 +79,7 @@ export function isStaffSalaryRpcMissingError(err: unknown): boolean {
     /admin_(list|upsert)_staff_paid_leave_grant does not exist/i.test(msg) ||
     /admin_generate_staff_salary does not exist/i.test(msg) ||
     /admin_mark_staff_salary_paid does not exist/i.test(msg) ||
+    /admin_ungenerate_staff_salary does not exist/i.test(msg) ||
     /relation .*staff_salary_holidays.* does not exist/i.test(msg) ||
     /relation .*staff_paid_leave_grants.* does not exist/i.test(msg)
   );

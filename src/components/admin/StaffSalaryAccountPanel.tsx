@@ -10,6 +10,7 @@ import {
   Plus,
   Settings2,
   Trash2,
+  Undo2,
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -58,6 +59,7 @@ import {
   listStaffSalarySetups,
   listStaffSalarySlips,
   markStaffSalaryPaid,
+  ungenerateStaffSalary,
   resolveStaffSalaryEmployeeId,
   staffSalaryEmployeeIdSet,
   PAYMENT_MODE_LABELS,
@@ -105,6 +107,8 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
   const [setupTarget, setSetupTarget] = useState<AdminStaffProfile | null>(null);
   const [payRefOpen, setPayRefOpen] = useState(false);
   const [payRefSlip, setPayRefSlip] = useState<StaffSalarySlipRow | null>(null);
+  const [ungenerateOpen, setUngenerateOpen] = useState(false);
+  const [ungenerateSlip, setUngenerateSlip] = useState<StaffSalarySlipRow | null>(null);
   const [paymentReference, setPaymentReference] = useState("");
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -326,6 +330,30 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
     }
   };
 
+  const openUngenerate = (slip: StaffSalarySlipRow) => {
+    setUngenerateSlip(slip);
+    setUngenerateOpen(true);
+  };
+
+  const confirmUngenerate = async () => {
+    if (!ungenerateSlip) return;
+    setBusy(true);
+    try {
+      await ungenerateStaffSalary(ungenerateSlip.id);
+      toast.success("Salary ungenerated — you can generate again");
+      setUngenerateOpen(false);
+      setUngenerateSlip(null);
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Could not ungenerate");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canUngenerateSlip = (slip: StaffSalarySlipRow) =>
+    slip.status === "generated" || slip.status === "draft";
+
   const previewGross = calcGrossFromSetup({
     basic_salary: Number(form.basic_salary || 0),
     hra: Number(form.hra || 0),
@@ -483,6 +511,19 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                         )}
                       </TableCell>
                       <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                        {slip && canUngenerateSlip(slip) ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-amber-700 border-amber-200"
+                            disabled={busy}
+                            onClick={() => openUngenerate(slip)}
+                          >
+                            <Undo2 className="size-3.5" />
+                            Ungenerate
+                          </Button>
+                        ) : null}
                         <Button
                           size="sm"
                           disabled={!canGenerate || generatingId === member.id}
@@ -494,6 +535,7 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                             "Generate"
                           )}
                         </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -789,6 +831,18 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                           <Button size="sm" variant="ghost" onClick={() => setBreakdownSlip(slip)}>
                             View slip
                           </Button>
+                          {canUngenerateSlip(slip) ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 text-amber-700 border-amber-200"
+                              disabled={busy}
+                              onClick={() => openUngenerate(slip)}
+                            >
+                              <Undo2 className="size-3.5" />
+                              Ungenerate
+                            </Button>
+                          ) : null}
                           {slip.status === "generated" ? (
                             <Button
                               size="sm"
@@ -1003,6 +1057,32 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
         slip={breakdownSlip}
         employee={breakdownEmployee}
       />
+
+      <Dialog open={ungenerateOpen} onOpenChange={setUngenerateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ungenerate salary?</DialogTitle>
+            <DialogDescription>
+              {ungenerateSlip
+                ? `Remove the generated slip for ${staffNameById.get(ungenerateSlip.employee_id)} (${formatSalaryMonth(ungenerateSlip.salary_month)}). Paid slips cannot be removed.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUngenerateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void confirmUngenerate()}
+            >
+              {busy && <Loader2 className="size-4 animate-spin mr-2" />}
+              Ungenerate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={payRefOpen} onOpenChange={setPayRefOpen}>
         <DialogContent>

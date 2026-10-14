@@ -51,6 +51,7 @@ export const STAFF_SALARY_REQUIRED_RPCS = [
   "admin_upsert_staff_paid_leave_grant",
   "admin_generate_staff_salary",
   "admin_mark_staff_salary_paid",
+  "admin_ungenerate_staff_salary",
   "staff_list_my_paid_salary_slips",
 ];
 `;

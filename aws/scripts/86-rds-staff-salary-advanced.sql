@@ -564,8 +564,39 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.admin_ungenerate_staff_salary(p_slip_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_row public.staff_salary_slips%ROWTYPE;
+BEGIN
+  PERFORM public._admin_assert_salary_access();
+
+  DELETE FROM public.staff_salary_slips
+  WHERE id = p_slip_id
+    AND status IN ('generated', 'draft')
+  RETURNING * INTO v_row;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Salary slip not found, already paid, or cannot be removed';
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'slip_id', p_slip_id,
+    'employee_id', v_row.employee_id,
+    'salary_month', v_row.salary_month
+  );
+END;
+$$;
+
 GRANT EXECUTE ON FUNCTION public.admin_list_staff_salary_holidays(date) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_upsert_staff_salary_holiday(date, text, boolean, uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_delete_staff_salary_holiday(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_upsert_staff_paid_leave_grant(uuid, date, numeric, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_list_staff_paid_leave_grants(date) TO authenticated;
+REVOKE ALL ON FUNCTION public.admin_ungenerate_staff_salary(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.admin_ungenerate_staff_salary(uuid) TO authenticated;
