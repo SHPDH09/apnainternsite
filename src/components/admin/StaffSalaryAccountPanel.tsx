@@ -58,6 +58,7 @@ import {
   listStaffSalaryHolidays,
   listStaffSalarySetups,
   listStaffSalarySlips,
+  bulkUngenerateStaffSalaryMonths,
   markStaffSalaryPaid,
   ungenerateStaffSalary,
   resolveStaffSalaryEmployeeId,
@@ -770,6 +771,39 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
             </div>
             <Button variant="outline" disabled={loading} onClick={() => void load()}>
               Refresh
+            </Button>
+            <Button
+              variant="outline"
+              className="text-amber-800 border-amber-200"
+              disabled={busy || loading}
+              onClick={() => {
+                void (async () => {
+                  if (
+                    !window.confirm(
+                      "Ungenerate ALL generated/draft salary slips for Jun, Jul, Aug, Sep 2026? Paid slips are kept."
+                    )
+                  ) {
+                    return;
+                  }
+                  setBusy(true);
+                  try {
+                    const { deleted } = await bulkUngenerateStaffSalaryMonths([
+                      "2026-06",
+                      "2026-07",
+                      "2026-08",
+                      "2026-09",
+                    ]);
+                    toast.success(`Ungenerated ${deleted} salary slip(s) for Jun–Sep 2026`);
+                    await load();
+                  } catch (e: unknown) {
+                    toast.error(e instanceof Error ? e.message : "Bulk reset failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              Reset Jun–Sep 2026
             </Button>
           </Card>
 

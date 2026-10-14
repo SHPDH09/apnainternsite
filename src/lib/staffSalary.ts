@@ -306,6 +306,24 @@ export async function ungenerateStaffSalary(slipId: string) {
   return data;
 }
 
+/** Remove all generated/draft slips for the given YYYY-MM months (not paid). */
+export async function bulkUngenerateStaffSalaryMonths(months: string[]): Promise<{ deleted: number }> {
+  await ensureStaffSalarySchema();
+  const monthKeys = new Set(months.map((m) => monthStartIso(m)));
+  const slips = await listStaffSalarySlips();
+  const targets = slips.filter(
+    (s) =>
+      monthKeys.has(s.salary_month.slice(0, 10)) &&
+      (s.status === "generated" || s.status === "draft")
+  );
+  let deleted = 0;
+  for (const slip of targets) {
+    await ungenerateStaffSalary(slip.id);
+    deleted += 1;
+  }
+  return { deleted };
+}
+
 export async function listStaffSalaryHolidays(salaryMonth?: string): Promise<StaffSalaryHoliday[]> {
   const { data, error } = await supabase.rpc("admin_list_staff_salary_holidays", {
     p_salary_month: salaryMonth ? monthStartIso(salaryMonth) : null,
