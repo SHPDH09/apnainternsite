@@ -353,7 +353,7 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
   };
 
   const canUngenerateSlip = (slip: StaffSalarySlipRow) =>
-    slip.status === "generated" || slip.status === "draft";
+    slip.status === "generated" || slip.status === "draft" || slip.status === "paid";
 
   const previewGross = calcGrossFromSetup({
     basic_salary: Number(form.basic_salary || 0),
@@ -525,17 +525,19 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
                             Ungenerate
                           </Button>
                         ) : null}
-                        <Button
-                          size="sm"
-                          disabled={!canGenerate || generatingId === member.id}
-                          onClick={() => void runGenerate(resolveStaffSalaryEmployeeId(member))}
-                        >
-                          {generatingId === member.id ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            "Generate"
-                          )}
-                        </Button>
+                        {canGenerate ? (
+                          <Button
+                            size="sm"
+                            disabled={generatingId === member.id}
+                            onClick={() => void runGenerate(resolveStaffSalaryEmployeeId(member))}
+                          >
+                            {generatingId === member.id ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              "Generate"
+                            )}
+                          </Button>
+                        ) : null}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1098,7 +1100,9 @@ export function StaffSalaryAccountPanel({ staff, currentUserId, isActive = true 
             <DialogTitle>Ungenerate salary?</DialogTitle>
             <DialogDescription>
               {ungenerateSlip
-                ? `Remove the generated slip for ${staffNameById.get(ungenerateSlip.employee_id)} (${formatSalaryMonth(ungenerateSlip.salary_month)}). Paid slips cannot be removed.`
+                ? ungenerateSlip.status === "paid"
+                  ? `Remove the paid salary record for ${staffNameById.get(ungenerateSlip.employee_id)} (${formatSalaryMonth(ungenerateSlip.salary_month)}, ${money(ungenerateSlip.net_amount)}). You can generate again after this.`
+                  : `Remove the salary slip for ${staffNameById.get(ungenerateSlip.employee_id)} (${formatSalaryMonth(ungenerateSlip.salary_month)}).`
                 : ""}
             </DialogDescription>
           </DialogHeader>

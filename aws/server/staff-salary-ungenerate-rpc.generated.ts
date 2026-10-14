@@ -13,11 +13,11 @@ BEGIN
 
   DELETE FROM public.staff_salary_slips
   WHERE id = p_slip_id
-    AND status IN ('generated', 'draft')
+    AND status IN ('generated', 'draft', 'paid')
   RETURNING * INTO v_row;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Salary slip not found, already paid, or cannot be removed';
+    RAISE EXCEPTION 'Salary slip not found or cannot be removed';
   END IF;
 
   RETURN jsonb_build_object(
