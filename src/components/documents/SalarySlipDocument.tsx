@@ -294,9 +294,7 @@ export const SalarySlipDocument = forwardRef<HTMLDivElement, Props>(function Sal
                   ["PF", bd.pfDeduction],
                   ["Tax (TDS)", bd.taxDeduction],
                   ["Other deductions", bd.otherDeductions],
-                  ["Absent (deduction)", bd.absentDeduction],
-                  ["Unpaid leave (deduction)", bd.unpaidLeaveDeduction],
-                  ["Half-day (deduction)", bd.halfDayDeduction],
+                  ...attendanceDeductionRows,
                 ] as [string, number][]
               )
                 .filter(([, amount]) => amount > 0)
