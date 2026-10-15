@@ -135,6 +135,7 @@ export function StudentProjectReportPdfPreview({
         domain={generateInput.domain}
         mode={generateInput.mode}
         issueDate={issueDate}
+        student={generateInput.student}
       />
     );
   }

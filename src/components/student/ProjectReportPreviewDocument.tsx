@@ -10,6 +10,7 @@ import {
   type ProjectReportMode,
 } from "@/lib/projectReportDomainContent";
 import { resolveStorageUrl } from "@/lib/storageUrl";
+import type { ProjectReportStudentSnapshot } from "@/lib/projectReportStudentSnapshot";
 
 export type ProjectReportPreviewProps = {
   universityName: string;
@@ -17,11 +18,12 @@ export type ProjectReportPreviewProps = {
   domain: string;
   mode: ProjectReportMode;
   issueDate?: string;
+  student?: ProjectReportStudentSnapshot | null;
 };
 
 export const ProjectReportPreviewDocument = forwardRef<HTMLDivElement, ProjectReportPreviewProps>(
   function ProjectReportPreviewDocument(
-    { universityName, universityLogoUrl, domain, mode, issueDate },
+    { universityName, universityLogoUrl, domain, mode, issueDate, student },
     ref
   ) {
     const section = resolveProjectReportDomainContent(domain);
@@ -34,13 +36,28 @@ export const ProjectReportPreviewDocument = forwardRef<HTMLDivElement, ProjectRe
         year: "numeric",
       });
 
-    const coverRows: [string, string][] = [
-      ["University", universityName],
-      ["Domain", domain],
-      ["Project Title", section.projectTitle],
-      ["Internship Mode", mode],
-      ["Report Date", today],
-    ];
+    const coverRows: [string, string][] = student
+      ? [
+          ["Student Name", student.studentName],
+          ["University Reg. No.", student.universityRegistrationNumber],
+          ["Roll No.", student.universityRollNumber],
+          ["University", universityName],
+          ["College", student.collegeName],
+          ["Programme", student.programmeCourse],
+          ["Domain", domain],
+          ["Semester", student.semester],
+          ["Session", student.sessionDisplay || student.academicSession],
+          ["Project Title", section.projectTitle],
+          ["Internship Mode", mode],
+          ["Report Date", student.submissionDate || today],
+        ]
+      : [
+          ["University", universityName],
+          ["Domain", domain],
+          ["Project Title", section.projectTitle],
+          ["Internship Mode", mode],
+          ["Report Date", today],
+        ];
 
     return (
       <DocumentPages ref={ref}>
@@ -97,7 +114,7 @@ export const ProjectReportPreviewDocument = forwardRef<HTMLDivElement, ProjectRe
           documentLabel="Project Report"
           variant="continuation"
           continuationHeader={{
-            studentName: universityName,
+            studentName: student?.studentName || universityName,
             pageLabel: "Page 2 of 2",
           }}
           issueDate={today}

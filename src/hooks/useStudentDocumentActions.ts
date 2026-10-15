@@ -387,6 +387,7 @@ export function useStudentDocumentActions({
           universityLogoUrl: projectGenerateInput.universityLogoUrl,
           domain: projectGenerateInput.domain,
           mode: projectGenerateInput.mode,
+          student: projectGenerateInput.student,
         })
       : null,
     createElement("input", {

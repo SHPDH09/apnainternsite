@@ -428,8 +428,8 @@ export async function saveProjectReportDomainTemplate(
     });
   }
 
-  const verifyBytes = await resolveTemplatePdfBytes(saved).catch(() => null);
-  if (!verifyBytes || verifyBytes.byteLength < 100) {
+  const verifyBytes = await resolveTemplatePdfBytes(saved, { timeoutMs: 12_000 }).catch(() => null);
+  if (verifyBytes && verifyBytes.byteLength < 100) {
     throw new Error("Uploaded PDF could not be verified. Please try uploading again.");
   }
 
@@ -437,7 +437,8 @@ export async function saveProjectReportDomainTemplate(
 }
 
 export async function resolveTemplatePdfBytes(
-  template: Pick<ProjectReportDomainTemplate, "template_pdf_url">
+  template: Pick<ProjectReportDomainTemplate, "template_pdf_url">,
+  options?: { timeoutMs?: number }
 ): Promise<ArrayBuffer | null> {
   const rawUrl = template.template_pdf_url?.trim();
   if (!rawUrl) return null;
@@ -445,9 +446,16 @@ export async function resolveTemplatePdfBytes(
     rawUrl.startsWith("/") && typeof window !== "undefined"
       ? `${window.location.origin.replace(/\/$/, "")}${rawUrl}`
       : rawUrl;
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Could not load template PDF (${res.status}).`);
-  return res.arrayBuffer();
+  const timeoutMs = options?.timeoutMs ?? 60_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+    if (!res.ok) throw new Error(`Could not load template PDF (${res.status}).`);
+    return res.arrayBuffer();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function resolveUniversityLogoBytes(logoUrl: string | null | undefined): Promise<Uint8Array | null> {

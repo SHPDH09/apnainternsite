@@ -26,6 +26,7 @@ import publicBlogMedia from "../../api/public/blog-media";
 import ensureDashboardServiceKeys from "../../api/ensure-dashboard-service-keys";
 import ensureProjectReportTemplates from "../../api/ensure-project-report-templates";
 import projectReportDocxToPdf from "../../api/project-report-docx-to-pdf";
+import storagePresign from "../../api/storage-presign";
 import ensurePartnerApplications from "../../api/ensure-partner-applications";
 import ensureStaffAttendanceOffices from "../../api/ensure-staff-attendance-offices";
 import staffOfficeRpc from "../../api/staff-office-rpc";
@@ -320,6 +321,7 @@ async function buildApp(): Promise<Express> {
     { method: "post", path: "/api/ensure-dashboard-service-keys", handler: ensureDashboardServiceKeys },
     { method: "post", path: "/api/ensure-project-report-templates", handler: ensureProjectReportTemplates },
     { method: "post", path: "/api/project-report-docx-to-pdf", handler: projectReportDocxToPdf },
+    { method: "post", path: "/api/storage-presign", handler: storagePresign },
     { method: "post", path: "/api/ensure-partner-applications", handler: ensurePartnerApplications },
     { method: "post", path: "/api/ensure-staff-attendance-offices", handler: ensureStaffAttendanceOffices },
     { method: "post", path: "/api/staff-office-rpc", handler: staffOfficeRpc },

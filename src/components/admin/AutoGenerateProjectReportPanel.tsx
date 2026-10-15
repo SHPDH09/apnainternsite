@@ -47,7 +47,10 @@ import {
   saveProjectReportDomainTemplate,
   type ProjectReportDomainTemplate,
 } from "@/lib/projectReportSettings";
-import { validateProjectReportTemplateFile } from "@/lib/projectReportDocxUpload";
+import {
+  isProjectReportPdfFile,
+  validateProjectReportTemplateFile,
+} from "@/lib/projectReportDocxUpload";
 import {
   PROJECT_REPORT_MODES,
   type ProjectReportMode,
@@ -194,6 +197,11 @@ export function AutoGenerateProjectReportPanel({
       return;
     }
     setUploadingTemplate(true);
+    const progress = toast.loading(
+      isProjectReportPdfFile(file)
+        ? "Uploading PDF template…"
+        : "Converting Word to PDF, then uploading…"
+    );
     try {
       await validateProjectReportTemplateFile(file);
       const saved = await saveProjectReportDomainTemplate(supabase, {
@@ -205,9 +213,9 @@ export function AutoGenerateProjectReportPanel({
         const next = prev.filter((r) => r.domain_key !== saved.domain_key);
         return [...next, saved].sort((a, b) => a.domain_name.localeCompare(b.domain_name));
       });
-      toast.success("Project report template uploaded successfully.");
+      toast.success("Project report template uploaded successfully.", { id: progress });
     } catch (err) {
-      toast.error(formatProjectReportUploadError(err));
+      toast.error(formatProjectReportUploadError(err), { id: progress });
     } finally {
       setUploadingTemplate(false);
       if (templateInputRef.current) templateInputRef.current.value = "";

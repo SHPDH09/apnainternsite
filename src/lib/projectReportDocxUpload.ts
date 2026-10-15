@@ -2,6 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensureAdminAuthSession } from "@/lib/adminAuthSession";
 
 const MAX_DOCX_BYTES = 20 * 1024 * 1024;
+const CONVERT_TIMEOUT_MS = 55_000;
+/** Vercel JSON body limit — avoid base64 send-mail for larger Word files. */
+const SEND_MAIL_DOCX_MAX_BYTES = 3 * 1024 * 1024;
 
 export function isProjectReportDocxFile(file: File): boolean {
   const name = file.name.toLowerCase();
@@ -62,22 +65,47 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Word conversion timed out. Save as PDF from Word and upload the PDF file.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function convertViaSendMail(client: SupabaseClient, file: File): Promise<File | null> {
   if (typeof window === "undefined") return null;
+  if (file.size > SEND_MAIL_DOCX_MAX_BYTES) return null;
+
   const headers = await adminAuthHeaders(client);
   const docx_base64 = await fileToBase64(file);
   const origin = window.location.origin.replace(/\/$/, "");
-  const res = await fetch(`${origin}/api/send-mail`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      action: "convert_project_report_docx",
-      payload: {
-        docx_base64,
-        file_name: file.name,
-      },
-    }),
-  });
+  const res = await fetchWithTimeout(
+    `${origin}/api/send-mail`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        action: "convert_project_report_docx",
+        payload: {
+          docx_base64,
+          file_name: file.name,
+        },
+      }),
+    },
+    CONVERT_TIMEOUT_MS
+  );
   const json = (await res.json().catch(() => ({}))) as {
     success?: boolean;
     pdf_base64?: string;
@@ -101,29 +129,35 @@ async function convertViaMultipartApi(client: SupabaseClient, file: File): Promi
   form.append("file", file, file.name);
   const origin =
     typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
-  const res = await fetch(`${origin}/api/project-report-docx-to-pdf`, {
-    method: "POST",
-    headers: { Authorization: headers.Authorization },
-    body: form,
-  });
+  const res = await fetchWithTimeout(
+    `${origin}/api/project-report-docx-to-pdf`,
+    {
+      method: "POST",
+      headers: { Authorization: headers.Authorization },
+      body: form,
+    },
+    CONVERT_TIMEOUT_MS
+  );
   if (!res.ok) return null;
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) return null;
   const pdfBlob = await res.blob();
   if (!pdfBlob.size) return null;
   return new File([pdfBlob], file.name.replace(/\.docx?$/i, ".pdf"), { type: "application/pdf" });
 }
 
-/** Convert admin Word upload to PDF (send-mail first, then direct API). */
+/** Convert admin Word upload to PDF (multipart first, then send-mail for small files). */
 export async function convertProjectReportDocxToPdfFile(
   client: SupabaseClient,
   file: File
 ): Promise<File> {
   if (!isProjectReportDocxFile(file)) return file;
 
-  const viaMail = await convertViaSendMail(client, file).catch(() => null);
-  if (viaMail?.size) return viaMail;
-
   const viaApi = await convertViaMultipartApi(client, file).catch(() => null);
   if (viaApi?.size) return viaApi;
+
+  const viaMail = await convertViaSendMail(client, file).catch(() => null);
+  if (viaMail?.size) return viaMail;
 
   throw new Error(
     "Word could not be converted to PDF on the server. Save the document as PDF from Microsoft Word (File → Save as PDF) and upload the PDF file instead."

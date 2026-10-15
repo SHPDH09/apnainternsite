@@ -136,6 +136,11 @@ export function enrichStudentProfileForDisplay<T extends Record<string, unknown>
     str(profile.university_roll_number) ||
     str(m.university_roll_number) ||
     str(m.universityRollNumber);
+  const university_registration_number =
+    str(profile.university_registration_number) ||
+    str(m.university_registration_number) ||
+    str(m.universityRegistrationNumber) ||
+    str(m.registrationNo);
   const internship_domain =
     str(profile.internship_domain) ||
     str(m.internship_domain) ||
@@ -184,6 +189,7 @@ export function enrichStudentProfileForDisplay<T extends Record<string, unknown>
     class_semester,
     roll_number,
     university_roll_number,
+    university_registration_number,
     course,
     internship_domain,
     subject,
@@ -212,6 +218,13 @@ export function enrichStudentProfileForDisplay<T extends Record<string, unknown>
       ...(roll_number ? { rollNo: roll_number, roll_number } : {}),
       ...(university_roll_number
         ? { university_roll_number, universityRollNumber: university_roll_number }
+        : {}),
+      ...(university_registration_number
+        ? {
+            university_registration_number,
+            universityRegistrationNumber: university_registration_number,
+            registrationNo: university_registration_number,
+          }
         : {}),
       ...(course ? { course } : {}),
       ...(internship_duration ? { internship_duration } : {}),

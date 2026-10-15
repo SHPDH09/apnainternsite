@@ -19,18 +19,26 @@ export async function uploadFileViaPresignedPut(
   if (!token) throw new Error("Sign in again to upload files.");
 
   const origin = window.location.origin.replace(/\/$/, "");
-  const presignRes = await fetch(`${origin}/api/storage-presign`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      bucket: input.bucket,
-      objectKey: input.objectKey,
-      contentType: input.file.type || "application/octet-stream",
-    }),
-  });
+  const presignController = new AbortController();
+  const presignTimer = setTimeout(() => presignController.abort(), 25_000);
+  let presignRes: Response;
+  try {
+    presignRes = await fetch(`${origin}/api/storage-presign`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        bucket: input.bucket,
+        objectKey: input.objectKey,
+        contentType: input.file.type || "application/octet-stream",
+      }),
+      signal: presignController.signal,
+    });
+  } finally {
+    clearTimeout(presignTimer);
+  }
 
   const presignJson = (await presignRes.json().catch(() => ({}))) as {
     uploadUrl?: string;

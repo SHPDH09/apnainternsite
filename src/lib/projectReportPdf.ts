@@ -19,6 +19,7 @@ import {
   drawAiEthicsCoverLogo,
   overlayAiEthicsStudentFields,
 } from "@/lib/projectReportAiEthicsOverlay";
+import { overlayGenericStudentFields } from "@/lib/projectReportGenericStudentOverlay";
 import { resolveProjectReportBundledOverlayKind } from "@/lib/projectReportBundledTemplates";
 import type { ProjectReportStudentSnapshot } from "@/lib/projectReportStudentSnapshot";
 
@@ -179,6 +180,12 @@ async function overlayDynamicFields(
       overlayAiEthicsStudentFields(pages, font, fontBold, input.student, {
         collegeName: input.student.collegeName,
         universityName: input.universityName,
+      });
+      drawLogoOnCover();
+    } else if (input.student) {
+      overlayGenericStudentFields(pages, font, fontBold, input.student, {
+        universityName: input.universityName,
+        mode: input.mode,
       });
       drawLogoOnCover();
     }
