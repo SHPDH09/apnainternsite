@@ -111,6 +111,7 @@ export function StaffManagementPanel({
         id: s.id,
         email: s.email,
         full_name: s.full_name,
+        user_id: s.user_id,
       })),
     [staff]
   );

@@ -41,6 +41,78 @@ export const ATTENDANCE_STATUS_LABELS: Record<EmployeeAttendanceStatus, string> 
   overtime: "Overtime",
 };
 
+export type EmployeeAttendanceStatusCounts = {
+  present: number;
+  absent: number;
+  half_day: number;
+  leave: number;
+  holiday: number;
+  overtime: number;
+  total: number;
+};
+
+export function emptyEmployeeAttendanceStatusCounts(): EmployeeAttendanceStatusCounts {
+  return {
+    present: 0,
+    absent: 0,
+    half_day: 0,
+    leave: 0,
+    holiday: 0,
+    overtime: 0,
+    total: 0,
+  };
+}
+
+/** Group attendance rows by admin_staff.id (matches auth user_id on rows when linked). */
+export function aggregateAttendanceByEmployee(
+  rows: EmployeeAttendanceRow[],
+  employees: { id: string; user_id?: string | null }[]
+): Map<string, EmployeeAttendanceStatusCounts> {
+  const canonical = new Map<string, string>();
+  for (const e of employees) {
+    canonical.set(e.id, e.id);
+    if (e.user_id) canonical.set(String(e.user_id), e.id);
+  }
+
+  const totals = new Map<string, EmployeeAttendanceStatusCounts>();
+  for (const e of employees) {
+    totals.set(e.id, emptyEmployeeAttendanceStatusCounts());
+  }
+
+  for (const row of rows) {
+    const key = canonical.get(row.employee_id) ?? row.employee_id;
+    if (!totals.has(key)) {
+      totals.set(key, emptyEmployeeAttendanceStatusCounts());
+    }
+    const bucket = totals.get(key)!;
+    switch (row.status) {
+      case "present":
+        bucket.present += 1;
+        break;
+      case "absent":
+        bucket.absent += 1;
+        break;
+      case "half_day":
+        bucket.half_day += 1;
+        break;
+      case "leave":
+        bucket.leave += 1;
+        break;
+      case "holiday":
+        bucket.holiday += 1;
+        break;
+      case "overtime":
+        bucket.overtime += 1;
+        break;
+      default:
+        break;
+    }
+    bucket.total += 1;
+  }
+
+  return totals;
+}
+
 /** DB CHECK originally allowed only present/absent/half_day/leave. */
 const LEGACY_SAFE_STATUSES = new Set<EmployeeAttendanceStatus>([
   "present",

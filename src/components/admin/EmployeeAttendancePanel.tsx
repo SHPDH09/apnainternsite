@@ -48,9 +48,11 @@ import {
 } from "@/components/ui/dialog";
 import {
   ATTENDANCE_STATUS_LABELS,
+  aggregateAttendanceByEmployee,
   calcWorkingHours,
   combineDateAndTime,
   deleteEmployeeAttendance,
+  emptyEmployeeAttendanceStatusCounts,
   formatAttendanceTime,
   formatHours,
   listEmployeeAttendance,
@@ -70,6 +72,7 @@ export type StaffEmployeeOption = {
   id: string;
   email: string;
   full_name?: string | null;
+  user_id?: string | null;
 };
 
 type Props = {
@@ -366,6 +369,35 @@ export function EmployeeAttendancePanel({
     return calcWorkingHours(ci, co);
   }, [editState]);
 
+  const summaryByEmployee = useMemo(
+    () => aggregateAttendanceByEmployee(rows, employees),
+    [rows, employees]
+  );
+
+  const summaryTableRows = useMemo(() => {
+    const list = employees
+      .filter((e) => filterEmployee === "all" || e.id === filterEmployee)
+      .map((e) => ({
+        employee: e,
+        counts: summaryByEmployee.get(e.id) ?? emptyEmployeeAttendanceStatusCounts(),
+      }))
+      .sort((a, b) =>
+        (a.employee.full_name || a.employee.email).localeCompare(
+          b.employee.full_name || b.employee.email,
+          undefined,
+          { sensitivity: "base" }
+        )
+      );
+    return list;
+  }, [employees, filterEmployee, summaryByEmployee]);
+
+  const summaryPeriodLabel = useMemo(() => {
+    if (fromDate && toDate) return `${fromDate} → ${toDate}`;
+    if (fromDate) return `From ${fromDate}`;
+    if (toDate) return `Until ${toDate}`;
+    return "All loaded records";
+  }, [fromDate, toDate]);
+
   const handleCsvImport = (file: File) => {
     setImportingCsv(true);
     Papa.parse<Record<string, string>>(file, {
@@ -572,6 +604,79 @@ export function EmployeeAttendancePanel({
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             {loading ? <Loader2 className="size-4 animate-spin" /> : "Refresh"}
           </Button>
+        </div>
+
+        <div className="rounded-xl border overflow-hidden bg-slate-50/50">
+          <div className="px-4 py-3 border-b bg-white flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="font-semibold text-sm text-slate-800">Employee totals</p>
+              <p className="text-xs text-muted-foreground">
+                {summaryPeriodLabel}
+                {filterStatus !== "all" ? ` · status: ${ATTENDANCE_STATUS_LABELS[filterStatus]}` : ""}
+              </p>
+            </div>
+            <Badge variant="outline" className="text-xs font-normal">
+              {summaryTableRows.length} employee{summaryTableRows.length === 1 ? "" : "s"}
+            </Badge>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead className="text-center">Present</TableHead>
+                <TableHead className="text-center">Absent</TableHead>
+                <TableHead className="text-center">Half day</TableHead>
+                <TableHead className="text-center">Leave</TableHead>
+                <TableHead className="text-center">Holiday</TableHead>
+                <TableHead className="text-center">Overtime</TableHead>
+                <TableHead className="text-center font-semibold">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin inline mr-2" />
+                    Loading totals…
+                  </TableCell>
+                </TableRow>
+              )}
+              {!loading && summaryTableRows.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                    No employees to summarize.
+                  </TableCell>
+                </TableRow>
+              )}
+              {!loading &&
+                summaryTableRows.map(({ employee, counts }) => (
+                  <TableRow key={employee.id}>
+                    <TableCell className="font-medium text-sm">
+                      {employee.full_name || employee.email}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="inline-flex min-w-[2rem] justify-center font-semibold text-emerald-700">
+                        {counts.present}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="inline-flex min-w-[2rem] justify-center font-semibold text-red-700">
+                        {counts.absent}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="inline-flex min-w-[2rem] justify-center font-semibold text-amber-700">
+                        {counts.half_day}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">{counts.leave}</TableCell>
+                    <TableCell className="text-center">{counts.holiday}</TableCell>
+                    <TableCell className="text-center">{counts.overtime}</TableCell>
+                    <TableCell className="text-center font-bold text-slate-800">{counts.total}</TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
         </div>
 
         {/* Table */}

@@ -486,7 +486,7 @@ export function StaffEmployeeAttendanceStandalonePanel({
       try {
         const { data } = await supabase
           .from("admin_staff")
-          .select("id,email,full_name")
+          .select("id,email,full_name,user_id")
           .order("full_name");
         setEmployees((data || []) as typeof employees);
       } catch {
