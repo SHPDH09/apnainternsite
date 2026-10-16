@@ -108,7 +108,6 @@ async function tryHandleVercelSendMailActions(
     "blog_check_device",
     "blog_get_media",
     "blog_admin_list_leads",
-    "ensure_learning_materials",
   ]);
   if (!vercelSendMailActions.has(action)) return null;
 
@@ -197,12 +196,12 @@ export default {
 
     if (shouldProxy(url.pathname)) {
       const apiPath = upstreamPath(url.pathname);
-      if (
-        apiPath.startsWith("/rest/") ||
-        apiPath.startsWith("/auth/") ||
-        apiPath.startsWith("/storage/")
-      ) {
+      if (apiPath.startsWith("/auth/") || apiPath.startsWith("/rest/")) {
         return proxyRequestToVercel(request, env);
+      }
+      // Large uploads (learning materials, consent) — Lambda S3 shim; Vercel often 504.
+      if (apiPath.startsWith("/storage/")) {
+        return proxyToLambda(request, env);
       }
       const ensureResponse = await tryProxyEnsureApiToVercel(request, env);
       if (ensureResponse) return ensureResponse;

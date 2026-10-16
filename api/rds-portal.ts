@@ -49,6 +49,10 @@ import {
   isStaffSalaryRpc,
   isStaffSalaryRpcMissingError,
 } from "../aws/server/staff-salary-vercel-bootstrap.js";
+import {
+  ensureLearningMaterialsSchema,
+  isLearningMaterialsTable,
+} from "../aws/server/learning-materials-bootstrap.js";
 
 function portalPathFromRequest(req: VercelRequest): string {
   const segment = String(req.query.segment || "").trim();
@@ -479,6 +483,7 @@ async function tryRestLite(req: VercelRequest, res: VercelResponse, pathOnly: st
         if (isCmsTable(table)) await ensureCmsTable(table);
         else if (isSiteVisitsTable(table)) await ensureSiteVisitsTable();
         else if (isCompanyProfilesTable(table)) await ensureCompanyProfilesTable();
+        else if (isLearningMaterialsTable(table)) await ensureLearningMaterialsSchema();
         else throw err;
         const retry = await runSelect();
         if (req.method === "HEAD") {
