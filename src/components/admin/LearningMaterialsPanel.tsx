@@ -174,6 +174,9 @@ export function LearningMaterialsPanel({
     if (!title.trim() || !file || !currentUserId) return;
     setConfirmOpen(false);
     setUploading(true);
+    const progress = toast.loading(
+      materialType === "project_report" ? "Uploading project report…" : "Uploading file…"
+    );
     try {
       await insertLearningMaterial(supabase, {
         title,
@@ -183,14 +186,14 @@ export function LearningMaterialsPanel({
         filters,
         createdBy: currentUserId,
       });
-      toast.success(`Upload published to ${recipientCount} matching student(s)`);
+      toast.success(`Upload published to ${recipientCount} matching student(s)`, { id: progress });
       setTitle("");
       setDescription("");
       setFile(null);
       setFilters(emptyClassTargetFilters());
       await load();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Upload failed");
+      toast.error(e instanceof Error ? e.message : "Upload failed", { id: progress });
     } finally {
       setUploading(false);
     }
