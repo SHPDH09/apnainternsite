@@ -7,6 +7,8 @@ on:
     branches: [main]
     paths:
       - "api/**"
+      - "package.json"
+      - "package-lock.json"
       - "vercel.json"
       - ".vercelignore"
       - ".github/workflows/vercel-mail-deploy.yml"
