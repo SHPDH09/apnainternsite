@@ -2,6 +2,7 @@
  * Lightweight Supabase-compatible storage for Vercel (no Express / RDS bootstraps).
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { pipeline } from "node:stream/promises";
 import Busboy from "busboy";
 import {
   DeleteObjectCommand,
@@ -183,9 +184,8 @@ async function streamS3ObjectOnce(
     return;
   }
 
-  const bytes = await body.transformToByteArray();
   res.statusCode = 200;
-  res.end(Buffer.from(bytes));
+  await pipeline(body as NodeJS.ReadableStream, res);
 }
 
 export async function handleVercelStorageRequest(
@@ -327,6 +327,10 @@ export async function handleVercelStorageRequest(
     res.end(JSON.stringify({ error: "not_found", message: `Storage route not implemented: ${sub}` }));
   } catch (err) {
     console.error("[vercel-storage]", err);
+    if (res.headersSent) {
+      res.destroy(err instanceof Error ? err : undefined);
+      return;
+    }
     res.statusCode = 500;
     res.end(
       JSON.stringify({

@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -125,6 +126,9 @@ export function SitePopupsHost() {
               <DialogTitle className="text-xl font-black text-white leading-tight">
                 {current.title || "Notice"}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                {current.message || current.title || "Apna Intern site announcement"}
+              </DialogDescription>
             </DialogHeader>
           </div>
           <button

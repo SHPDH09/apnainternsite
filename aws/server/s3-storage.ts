@@ -2,6 +2,7 @@
  * Supabase Storage-compatible API → AWS S3 (local RDS mode).
  */
 import type { Request, Response, NextFunction } from "express";
+import { pipeline } from "node:stream/promises";
 import Busboy from "busboy";
 import {
   DeleteObjectCommand,
@@ -144,8 +145,8 @@ async function streamS3Object(
       return;
     }
 
-    const bytes = await body.transformToByteArray();
-    res.status(200).send(Buffer.from(bytes));
+    res.status(200);
+    await pipeline(body as NodeJS.ReadableStream, res);
   } catch (err: unknown) {
     const code =
       err && typeof err === "object"
@@ -287,6 +288,10 @@ export async function handleStorageRequest(req: Request, res: Response) {
     res.status(404).json({ error: "not_found", message: `Storage route not implemented: ${sub}` });
   } catch (err) {
     console.error("[s3/storage]", err);
+    if (res.headersSent) {
+      res.destroy(err instanceof Error ? err : undefined);
+      return;
+    }
     res.status(500).json({
       statusCode: "500",
       error: "storage_error",

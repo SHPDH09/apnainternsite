@@ -20,7 +20,6 @@ type OtpSendResult = {
 const DEFAULT_MAIL_FROM = 'info@apnaintern.in';
 const HOSTINGER_SMTP_HOST = 'smtp.hostinger.com';
 const HOSTINGER_SMTP_USER = 'info@apnaintern.in';
-const DEFAULT_SMTP_PASS = 'Raunak@12583';
 
 const RDS_REST =
   process.env.RDS_REST_URL?.trim() ||
@@ -81,7 +80,7 @@ function resolveOtpSmtpHost(user: string): string {
 }
 
 function hostingerSmtpCreds(): SmtpCreds {
-  const pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
+  const pass = readSmtpPassFromEnv();
   return {
     user: HOSTINGER_SMTP_USER,
     pass,
@@ -92,7 +91,7 @@ function hostingerSmtpCreds(): SmtpCreds {
 }
 
 function resolveSmtpFromEnv(): SmtpCreds {
-  const pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
+  const pass = readSmtpPassFromEnv();
   const user = (process.env.SMTP_USER || HOSTINGER_SMTP_USER).trim();
   const host = resolveOtpSmtpHost(user);
   const portRaw = process.env.SMTP_PORT || '587';
@@ -174,7 +173,7 @@ function defaultSmtpHostForUser(user: string): string {
 
 function appMailboxSmtpCreds(): SmtpCreds | null {
   const user = (process.env.SMTP_USER || HOSTINGER_SMTP_USER).trim();
-  const pass = readSmtpPassFromEnv() || DEFAULT_SMTP_PASS;
+  const pass = readSmtpPassFromEnv();
   if (!user || !pass || !isMailboxSmtpUser(user)) return null;
 
   const host = resolveOtpSmtpHost(user);
@@ -429,10 +428,11 @@ async function collectSmtpCandidatesForOtp(): Promise<SmtpCreds[]> {
     smtpCandidates.push(creds);
   };
 
-  push(hostingerSmtpCreds());
+  // Prefer database-managed mailbox credentials over potentially stale env values.
+  push(await loadHostingerSmtpFromDatabase());
   push(appMailboxSmtpCreds());
   push(resolveSmtpFromEnv());
-  push(await loadHostingerSmtpFromDatabase());
+  push(hostingerSmtpCreds());
   return smtpCandidates;
 }
 
@@ -448,7 +448,6 @@ async function trySmtpCandidates(
       return { messageId, channel: 'smtp' };
     } catch (smtpErr) {
       errors.push(`SMTP(${creds.host}): ${smtpErr instanceof Error ? smtpErr.message : String(smtpErr)}`);
-      if (isSmtpAuthError(smtpErr)) break;
     }
   }
   return null;

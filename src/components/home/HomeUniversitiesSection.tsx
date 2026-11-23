@@ -1,4 +1,4 @@
-import { RefObject } from "react";
+import { RefObject, useState } from "react";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { resolveStorageUrl } from "@/lib/storageUrl";
 import { HomeSectionHeader } from "./HomeSectionHeader";
@@ -15,6 +15,33 @@ type HomeUniversitiesSectionProps = {
   paused: boolean;
   onPauseChange: (paused: boolean) => void;
 };
+
+function UniversityMark({ name, logoUrl }: { name: string; logoUrl?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const abbr = name.match(/\((.*?)\)/)?.[1] || name.split(" ")[0].substring(0, 4).toUpperCase();
+  const src = logoUrl ? resolveStorageUrl(logoUrl) || logoUrl : "";
+
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt={`${name} logo`}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="size-16 rounded-2xl border border-slate-100 bg-white object-contain p-2"
+      />
+    );
+  }
+
+  return (
+    <div
+      aria-label={`${name} logo placeholder`}
+      className="flex size-16 items-center justify-center rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 to-blue-100 text-sm font-black tracking-wide text-sky-800"
+    >
+      {abbr}
+    </div>
+  );
+}
 
 export function HomeUniversitiesSection({
   universities,
@@ -40,26 +67,13 @@ export function HomeUniversitiesSection({
           >
             {universities.length > 0 ? (
               universities.map((u) => {
-                const abbr =
-                  u.name.match(/\((.*?)\)/)?.[1] ||
-                  u.name.split(" ")[0].substring(0, 4).toUpperCase();
                 return (
                   <article
                     key={u.id}
                     className="w-[min(300px,85vw)] shrink-0 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-soft transition hover:-translate-y-0.5 hover:shadow-elegant"
                   >
                     <div className="mb-4">
-                      {u.logo_url ? (
-                        <img
-                          src={resolveStorageUrl(u.logo_url) || u.logo_url}
-                          alt={u.name}
-                          className="size-14 rounded-2xl bg-slate-50 object-contain p-1.5"
-                        />
-                      ) : (
-                        <div className="flex size-14 items-center justify-center rounded-2xl bg-sky-50 text-lg font-black text-sky-700">
-                          {abbr}
-                        </div>
-                      )}
+                      <UniversityMark name={u.name} logoUrl={u.logo_url} />
                     </div>
                     <p className="line-clamp-2 min-h-[3rem] text-base font-bold leading-snug text-slate-800">
                       {u.name}

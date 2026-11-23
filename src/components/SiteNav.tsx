@@ -20,16 +20,8 @@ type NavItem = { to: string; label: string };
 const PRIMARY_LINKS: NavItem[] = [
   { to: "/", label: "Home" },
   { to: "/#about", label: "About" },
-  { to: "/blog", label: "Blog" },
-  { to: "/benefits", label: "Benefits" },
   { to: "/courses", label: "Courses" },
-  { to: "/#universities", label: "Universities" },
-  { to: "/#gallery", label: "Gallery" },
-  { to: "/#expert-team", label: "Team" },
-  { to: "/#mous", label: "MOUs" },
   { to: "/verify", label: "Verify" },
-  { to: "/contact", label: "Contact" },
-  { to: "/company/register", label: "Company Partner" },
 ];
 
 export const SiteNav = () => {

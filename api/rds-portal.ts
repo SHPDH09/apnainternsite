@@ -37,6 +37,7 @@ import {
 } from "../aws/server/cms-bootstrap.js";
 import {
   ensureCompanyProfilesTable,
+  ensurePublicCompanyPartnersRpc,
   isCompanyProfilesTable,
 } from "../aws/server/company-profiles-bootstrap.js";
 import { tryVercelLiteRestMutate } from "../aws/server/vercel-lite-rest-mutate.js";
@@ -358,6 +359,20 @@ async function tryRpcLite(req: VercelRequest, res: VercelResponse, pathOnly: str
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (name === "list_public_company_partners" && /does not exist/i.test(msg)) {
+      try {
+        await ensurePublicCompanyPartnersRpc();
+        const data = await callRpcLite(name, def.args, rpcBody(req), jwtClaims);
+        res.status(200).json(data);
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        res.status(503).json({
+          message: retryMsg,
+          code: (retryErr as { code?: string }).code,
+        });
+      }
+      return true;
+    }
     if (
       (isRegistrationRpc(name) && isRegistrationRpcMismatchError(err)) ||
       (isClassLinkRpc(name) && isClassLinkRpcMissingError(err)) ||

@@ -83,7 +83,7 @@ export const SiteFooter = () => {
   return (
     <footer id="footer" className="border-t border-slate-800 bg-slate-950 text-slate-400">
       <div className="mx-auto max-w-[1200px] px-8 py-16">
-        <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-5">
           <div className="space-y-6">
             <div className="flex flex-col gap-4">
               <Link to="/" className="inline-flex w-fit rounded-xl bg-white px-3 py-2">
@@ -107,29 +107,39 @@ export const SiteFooter = () => {
           </div>
 
           <div>
-            <h4 className="font-display font-bold text-sm uppercase tracking-widest text-white mb-6">Quick Links</h4>
+            <h4 className="font-display font-bold text-sm uppercase tracking-widest text-white mb-6">Explore</h4>
             <ul className="space-y-3.5 text-sm">
               <li><Link to="/" className="hover:text-white transition-colors">Home</Link></li>
-              <li><a href="/#about" className="hover:text-white transition-colors">About</a></li>
-              <li><a href="/#gallery" className="hover:text-white transition-colors">Gallery</a></li>
-              <li><a href="/#consent-form" className="hover:text-white transition-colors">Consent Form</a></li>
-              <li><a href="/#faq" className="hover:text-white transition-colors">FAQ</a></li>
+              <li><Link to="/#about" className="hover:text-white transition-colors">About Apna Intern</Link></li>
+              <li><Link to="/courses" className="hover:text-white transition-colors">Courses</Link></li>
+              <li><Link to="/benefits" className="hover:text-white transition-colors">Programme Benefits</Link></li>
+              <li><Link to="/#universities" className="hover:text-white transition-colors">Partner Universities</Link></li>
               <li><Link to="/verify" className="hover:text-white transition-colors">Verify Certificate</Link></li>
-              <li><Link to="/cybercafe" className="hover:text-white transition-colors font-semibold text-[#5ea4e8]">Cyber Cafe Partner</Link></li>
-              <li><Link to="/company/register" className="hover:text-white transition-colors font-semibold text-violet-300">Company Registration</Link></li>
-              <li><Link to="/#company-partners" className="hover:text-white transition-colors">Company Partners</Link></li>
-              <li><Link to="/company/login" className="hover:text-white transition-colors">Company Login</Link></li>
             </ul>
           </div>
 
           <div>
-            <h4 className="font-display font-bold text-sm uppercase tracking-widest text-white mb-6">For Students</h4>
+            <h4 className="font-display font-bold text-sm uppercase tracking-widest text-white mb-6">Resources</h4>
             <ul className="space-y-3.5 text-sm">
-              <li><Link to="/register" className="hover:text-white transition-colors font-bold text-primary">Register Now</Link></li>
+              <li><Link to="/blog" className="hover:text-white transition-colors">Blog</Link></li>
+              <li><Link to="/#gallery" className="hover:text-white transition-colors">Gallery</Link></li>
+              <li><Link to="/#expert-team" className="hover:text-white transition-colors">Our Team</Link></li>
+              <li><Link to="/#mous" className="hover:text-white transition-colors">University MOUs</Link></li>
+              <li><Link to="/#consent-form" className="hover:text-white transition-colors">Consent Form</Link></li>
+              <li><Link to="/#faq" className="hover:text-white transition-colors">Frequently Asked Questions</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-display font-bold text-sm uppercase tracking-widest text-white mb-6">Portals & Partners</h4>
+            <ul className="space-y-3.5 text-sm">
+              <li><Link to="/register" className="font-bold text-sky-300 transition-colors hover:text-white">Student Registration</Link></li>
               <li><Link to="/login" className="hover:text-white transition-colors">Student Login</Link></li>
               <li><Link to="/contact" className="hover:text-white transition-colors">Help & Support</Link></li>
-              <li><Link to="/blog" className="hover:text-white transition-colors">Blog</Link></li>
-              <li><Link to="/benefits" className="hover:text-white transition-colors">Program Benefits</Link></li>
+              <li><Link to="/cybercafe" className="hover:text-white transition-colors">Cyber Cafe Partner</Link></li>
+              <li><Link to="/company/register" className="hover:text-white transition-colors">Company Registration</Link></li>
+              <li><Link to="/company/login" className="hover:text-white transition-colors">Company Login</Link></li>
+              <li><Link to="/#company-partners" className="hover:text-white transition-colors">Company Partners</Link></li>
             </ul>
           </div>
 

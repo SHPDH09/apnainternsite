@@ -6,7 +6,11 @@
 import { tryHandleOtpDeliver } from "./otpDeliver";
 import { resolveOtpPurpose } from "./otpMail";
 import { tryProxyEnsureApiToVercel } from "./ensureVercelProxy";
-import { proxyOtpDeliverToVercel, proxyRequestToVercel } from "./otpVercelFallback";
+import {
+  proxyOtpDeliverToVercel,
+  proxyRequestToVercel,
+  vercelMailOrigin,
+} from "./otpVercelFallback";
 
 export interface Env {
   ASSETS: Fetcher;
@@ -186,6 +190,29 @@ async function proxyToLambda(request: Request, env: Env): Promise<Response> {
   return fetch(target.toString(), init);
 }
 
+/** Stream public image reads through Vercel so S3 bodies are not buffered at the edge. */
+async function proxyStorageReadToVercel(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const target = `${vercelMailOrigin(env)}${url.pathname}${url.search}`;
+  const headers = new Headers();
+  for (const name of ["Authorization", "Accept", "Range", "If-None-Match", "If-Modified-Since"]) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  const upstream = await fetch(target, {
+    method: request.method,
+    headers,
+    redirect: "manual",
+  });
+  const responseHeaders = new Headers(upstream.headers);
+  responseHeaders.set("X-Apna-Proxy", "vercel-storage-stream");
+  return new Response(request.method === "HEAD" ? null : upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: responseHeaders,
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -201,6 +228,9 @@ export default {
       }
       // Large uploads (learning materials, consent) — Lambda S3 shim; Vercel often 504.
       if (apiPath.startsWith("/storage/")) {
+        if (request.method === "GET" || request.method === "HEAD") {
+          return proxyStorageReadToVercel(request, env);
+        }
         return proxyToLambda(request, env);
       }
       const ensureResponse = await tryProxyEnsureApiToVercel(request, env);
