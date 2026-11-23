@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { uploadFileViaPresignedPut } from "@/lib/directStorageUpload";
 import { publicStorageObjectUrl, resolveStorageUrl, storageObjectUrlCandidates } from "@/lib/storageUrl";
 
 const GALLERY_BUCKET = "logos";
@@ -80,18 +81,13 @@ export async function uploadGalleryImage(
   if (file.size > MAX_IMAGE_BYTES) {
     throw new Error("Image must be 8 MB or smaller.");
   }
-  const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+  const safeName = file.name.replace(/[^\w.-]+|\.{2,}/g, "_");
   const path = `gallery/${createdBy}/${Date.now()}-${safeName}`;
-  const { error: upErr } = await client.storage.from(GALLERY_BUCKET).upload(path, file, {
-    upsert: false,
-    contentType: file.type || undefined,
+  await uploadFileViaPresignedPut(client, {
+    bucket: GALLERY_BUCKET,
+    objectKey: path,
+    file,
   });
-  if (upErr) {
-    if (/bucket not found/i.test(upErr.message)) {
-      throw new Error('Storage bucket "logos" is missing. Run npm run aws:s3:provision.');
-    }
-    throw upErr;
-  }
   const { data: pub } = client.storage.from(GALLERY_BUCKET).getPublicUrl(path);
   const imageUrl =
     publicStorageObjectUrl(GALLERY_BUCKET, path) ||

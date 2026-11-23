@@ -33,7 +33,7 @@ function resolveS3Bucket(appBucket: string): string | null {
   return BUCKET_MAP[appBucket] || null;
 }
 
-function scopeForAppBucket(appBucket: string): "logos" | "consent" | "learning" | undefined {
+export function scopeForAppBucket(appBucket: string): "logos" | "consent" | "learning" | undefined {
   if (appBucket === "logos") return "logos";
   if (appBucket === "consent-forms") return "consent";
   if (appBucket === "learning-materials" || appBucket === "assignment-uploads") return "learning";

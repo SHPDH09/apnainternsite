@@ -5,7 +5,8 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import jwt from "jsonwebtoken";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { appBucketToS3Bucket, REGION } from "../aws/server/vercel-storage-request.js";
+import { resolveS3Region } from "../aws/server/s3-region.js";
+import { appBucketToS3Bucket, scopeForAppBucket } from "../aws/server/vercel-storage-request.js";
 
 const ALLOWED_BUCKETS = new Set([
   "learning-materials",
@@ -93,9 +94,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
+  const region = resolveS3Region(scopeForAppBucket(bucket));
   const s3 = new S3Client({
-    region: REGION,
-    credentials: { accessKeyId, secretAccessKey },
+    region,
+    credentials: { accessKeyId, secretAccessKey, sessionToken: process.env.AWS_SESSION_TOKEN?.trim() },
+    // The browser sends the file after signing. There is no body to checksum here.
+    requestChecksumCalculation: "WHEN_REQUIRED",
   });
 
   const command = new PutObjectCommand({
@@ -104,13 +108,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     ContentType: contentType,
   });
 
-  const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 900 });
+  let uploadUrl: string;
+  try {
+    uploadUrl = await getSignedUrl(s3, command, { expiresIn: 900 });
+  } catch (err) {
+    console.error("[storage-presign] Could not sign upload", err);
+    res.status(503).json({ error: "Could not prepare the storage upload. Please retry." });
+    return;
+  }
 
   res.status(200).json({
     uploadUrl,
     bucket,
     objectKey,
-    publicUrl: `https://${s3Bucket}.s3.${REGION}.amazonaws.com/${objectKey
+    publicUrl: `https://${s3Bucket}.s3.${region}.amazonaws.com/${objectKey
       .split("/")
       .map(encodeURIComponent)
       .join("/")}`,

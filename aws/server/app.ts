@@ -68,7 +68,7 @@ loadRootEnv();
 
 type ApiHandler = (req: VercelRequest, res: VercelResponse) => Promise<unknown> | unknown;
 
-function asVercelHandler(handler: ApiHandler) {
+export function asVercelHandler(handler: ApiHandler) {
   return async (req: Request, res: Response) => {
     await handler(req as unknown as VercelRequest, res as unknown as VercelResponse);
   };
