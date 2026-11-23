@@ -667,7 +667,7 @@ const Login = () => {
                     htmlFor="email"
                     className={
                       isPartnerPortalLogin || isStudentLoginRoute
-                        ? "text-sm font-medium text-slate-700 ml-0.5"
+                        ? "text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 ml-0.5"
                         : "text-xs font-black uppercase tracking-widest text-slate-500 ml-1"
                     }
                   >
@@ -687,7 +687,7 @@ const Login = () => {
                           ? "Email, mobile, API/INT/2026/… or roll no."
                           : "Email or 10-digit phone"
                     }
-                    className="h-12 bg-slate-50 border-none shadow-inner rounded-xl pl-4"
+                    className="h-12 bg-slate-50/90 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 rounded-2xl pl-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:border-primary transition-all shadow-sm"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -700,7 +700,7 @@ const Login = () => {
                       htmlFor="pass"
                       className={
                         isPartnerPortalLogin || isStudentLoginRoute
-                          ? "text-sm font-medium text-slate-700"
+                          ? "text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
                           : "text-xs font-black uppercase tracking-widest text-slate-500"
                       }
                     >
@@ -711,14 +711,20 @@ const Login = () => {
                         : "Password"}
                     </Label>
                     {!isCollegeLoginRoute && !isPartnerPortalLogin ? (
-                      <button type="button" onClick={openResetDialog} className="text-[10px] font-black uppercase text-primary hover:underline">Forgot?</button>
+                      <button 
+                        type="button" 
+                        onClick={openResetDialog} 
+                        className="text-xs font-bold text-primary hover:text-primary/80 transition-colors"
+                      >
+                        Forgot Password?
+                      </button>
                     ) : null}
                   </div>
                   <div className="relative">
                     <Input
                       id="pass"
                       type={showPw ? "text" : "password"}
-                      className="h-12 bg-slate-50 border-none shadow-inner rounded-xl pl-4 pr-12"
+                      className="h-12 bg-slate-50/90 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 rounded-2xl pl-4 pr-12 text-sm font-medium focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:border-primary transition-all shadow-sm"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
@@ -726,7 +732,8 @@ const Login = () => {
                     <button
                       type="button"
                       onClick={() => setShowPw(!showPw)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors p-1"
+                      aria-label={showPw ? "Hide password" : "Show password"}
                     >
                       {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -743,11 +750,11 @@ const Login = () => {
 
                 <Button 
                   type="submit" 
-                  className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-xl shadow-glow transition-all disabled:opacity-50"
+                  className="w-full h-12 bg-gradient-to-r from-blue-600 via-primary to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-black rounded-2xl shadow-[0_10px_25px_-5px_rgba(37,99,235,0.4)] hover:shadow-[0_15px_30px_-5px_rgba(37,99,235,0.5)] active:scale-[0.98] transition-all disabled:opacity-50 text-sm tracking-wide"
                   disabled={loginLoading || (!isPartnerPortalLogin && !captchaVerified)}
                 >
                   {loginLoading ? <Loader2 className="size-5 animate-spin mr-2" /> : null}
-                  {isPartnerPortalLogin ? "Sign in" : "Login"}
+                  {isPartnerPortalLogin ? "Sign in to Dashboard" : "Sign In with Secure Access"}
                 </Button>
               </form>
 
